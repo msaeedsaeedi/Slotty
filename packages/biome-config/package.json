@@ -6,6 +6,7 @@
 	"exports": {
 		"./base": "./base.json",
 		"./next-js": "./next.json",
+		"./nestjs": "./nestjs.json",
 		"./react-internal": "./react-internal.json"
 	}
 }

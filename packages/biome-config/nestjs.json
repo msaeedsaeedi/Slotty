@@ -1,0 +1,77 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.4.13/schema.json",
+	"root": false,
+
+	"files": {
+		"ignoreUnknown": true,
+		"includes": ["**", "!node_modules", "!dist", "!coverage"]
+	},
+
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"recommended": true,
+
+			"style": {
+				"noDefaultExport": "error",
+				"useNodejsImportProtocol": "error"
+			},
+
+			"suspicious": {
+				"noConsole": "warn"
+			}
+		},
+
+		"includes": ["**", "!dist/**", "!coverage/**"]
+	},
+
+	"javascript": {
+		"formatter": {
+			"quoteStyle": "double"
+		},
+		"globals": ["process", "__dirname", "__filename", "Buffer", "global"]
+	},
+
+	"overrides": [
+		{
+			"includes": ["**/*.ts"],
+			"linter": {
+				"rules": {
+					"complexity": {
+						"noArguments": "error"
+					},
+
+					"style": {
+						"useConst": "error"
+					},
+
+					"suspicious": {
+						"noExplicitAny": "warn"
+					}
+				}
+			}
+		},
+		{
+			"includes": ["**/*.spec.ts", "**/*.test.ts"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noExplicitAny": "off"
+					},
+					"style": {
+						"noDefaultExport": "off"
+					}
+				}
+			}
+		}
+	],
+
+	"assist": {
+		"enabled": true,
+		"actions": {
+			"source": {
+				"organizeImports": "on"
+			}
+		}
+	}
+}
