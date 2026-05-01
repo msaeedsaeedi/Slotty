@@ -77,5 +77,38 @@ export class CoursesController {
 		return { enrollment };
 	}
 
-	// TODO: add endpoint for bulk enrollment via CSV upload
+	// TODO: Implement CSV streaming for large files instead of loading entire file into memory
+	@Post(":courseId/enrollments/bulk")
+	@Roles("admin")
+	@UseInterceptors(FileInterceptor("file"))
+	async bulkEnroll(
+		@Param("courseId", ParseUUIDPipe) courseId: string,
+		@UploadedFile(
+			new ParseFilePipe({
+				validators: [
+					new MaxFileSizeValidator({ maxSize: 1024 * 1024 }),
+					new FileTypeValidator({
+						fileType: /text\/csv|application\/vnd\.ms-excel/,
+					}),
+				],
+			}),
+		)
+		file: { buffer: Buffer },
+		@Req() req: Request,
+	) {
+		const user = (req as { user?: User }).user;
+		if (!user) {
+			throw new UnauthorizedException();
+		}
+
+		const csvData = file.buffer.toString("utf-8");
+
+		const result = await this.coursesService.bulkEnroll(
+			courseId,
+			csvData,
+			user,
+		);
+
+		return { results: result.results, meta: { total: result.results.length } };
+	}
 }
