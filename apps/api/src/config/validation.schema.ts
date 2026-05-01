@@ -8,12 +8,18 @@ export const validationSchema = Joi.object({
 
 	GOOGLE_CLIENT_ID: Joi.string().required(),
 	GOOGLE_CLIENT_SECRET: Joi.string().required(),
+	GOOGLE_CALLBACK_URL: Joi.string().uri().required(),
 
-	INTERNAL_JWT_SECRET: Joi.string().min(32).required(),
+	SESSION_NAME: Joi.string().default("slotty.sid"),
+	SESSION_TTL_HOURS: Joi.number().default(24),
+	SESSION_SECRET: Joi.string().min(32).required(),
 
 	REDIS_URL: Joi.string().uri().default("redis://localhost:6379"),
 
 	DATABASE_URL: Joi.string().required(),
 
 	CORS_ORIGIN: Joi.string().uri().default("http://localhost:3000"),
+	AUTH_REDIRECT_URL: Joi.string()
+		.uri()
+		.default("http://localhost:3000/auth/callback"),
 });

@@ -5,10 +5,13 @@ export const configuration = () => ({
 	google: {
 		clientId: process.env.GOOGLE_CLIENT_ID,
 		clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+		callbackURL: process.env.GOOGLE_CALLBACK_URL,
 	},
 
-	jwt: {
-		secret: process.env.INTERNAL_JWT_SECRET,
+	session: {
+		name: process.env.SESSION_NAME || "slotty.sid",
+		ttlHours: parseInt(process.env.SESSION_TTL_HOURS || "24", 10),
+		secret: process.env.SESSION_SECRET,
 	},
 
 	redis: {
@@ -19,7 +22,9 @@ export const configuration = () => ({
 		url: process.env.DATABASE_URL,
 	},
 
-	cors: {
+	webapp: {
 		origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+		authRedirectURL:
+			process.env.AUTH_REDIRECT_URL || "http://localhost:3000/auth/callback",
 	},
 });
