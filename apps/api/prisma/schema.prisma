@@ -1,0 +1,195 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+//
+// ENUMS
+//
+
+enum UserRole {
+  student
+  ta
+  instructor
+  admin
+}
+
+enum UserStatus {
+  active
+  pending_verification
+  disabled
+}
+
+enum SlotStatus {
+  draft
+  published
+  booked
+  completed
+  cancelled
+}
+
+enum BookingStatus {
+  booked
+  completed
+  no_show
+  cancelled_by_student
+  cancelled_by_ta
+}
+
+enum CourseRole {
+  student
+  ta
+}
+
+enum AllowedListType {
+  domain
+  email
+}
+
+//
+// MODELS
+//
+
+model User {
+  id         String     @id @default(uuid())
+  name       String
+  email      String     @unique
+  rollNumber String?    @map("roll_number")
+  role       UserRole
+  status     UserStatus @default(active)
+  googleId   String?    @unique @map("google_id")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  // Relations
+  coursesOwned Course[]     @relation("CourseOwner")
+  enrollments  Enrollment[]
+  demoSlots    DemoSlot[]   @relation("TA_DemoSlots")
+  bookings     Booking[]    @relation("StudentBookings")
+
+  @@map("users")
+}
+
+model Course {
+  id    String @id @default(uuid())
+  code  String
+  title String
+  term  String
+
+  ownerId String @map("owner_id")
+  owner   User   @relation("CourseOwner", fields: [ownerId], references: [id])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  assignments Assignment[]
+  enrollments Enrollment[]
+
+  @@unique([code, term])
+  @@map("courses")
+}
+
+model Assignment {
+  id       String @id @default(uuid())
+  courseId String @map("course_id")
+  course   Course @relation(fields: [courseId], references: [id])
+
+  title           String
+  demoWindowStart DateTime @map("demo_window_start")
+  demoWindowEnd   DateTime @map("demo_window_end")
+  slotDurationMin Int      @map("slot_duration_min")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  demoSlots DemoSlot[]
+  bookings  Booking[]
+
+  @@map("assignments")
+}
+
+model DemoSlot {
+  id           String     @id @default(uuid())
+  assignmentId String     @map("assignment_id")
+  assignment   Assignment @relation(fields: [assignmentId], references: [id])
+
+  taId String @map("ta_id")
+  ta   User   @relation("TA_DemoSlots", fields: [taId], references: [id])
+
+  startTime DateTime   @map("start_time")
+  endTime   DateTime   @map("end_time")
+  status    SlotStatus
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  bookings Booking[]
+
+  @@map("demo_slots")
+}
+
+model Booking {
+  id     String   @id @default(uuid())
+  slotId String   @map("slot_id")
+  slot   DemoSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+
+  studentId String @map("student_id")
+  student   User   @relation("StudentBookings", fields: [studentId], references: [id])
+
+  assignmentId String     @map("assignment_id")
+  assignment   Assignment @relation(fields: [assignmentId], references: [id])
+
+  status BookingStatus
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("bookings")
+}
+
+model Enrollment {
+  id       String @id @default(uuid())
+  courseId String @map("course_id")
+  course   Course @relation(fields: [courseId], references: [id])
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id])
+
+  roleInCourse CourseRole @map("role_in_course")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([courseId, userId])
+  @@map("enrollments")
+}
+
+model AllowedList {
+  id    String          @id @default(uuid())
+  type  AllowedListType
+  value String          @unique
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("allowed_list")
+}
+
+model AuditEvent {
+  id      BigInt  @id @default(autoincrement())
+  actorId String? @map("actor_id")
+
+  entityType String @map("entity_type")
+  entityId   String @map("entity_id")
+  eventType  String @map("event_type")
+
+  payload Json @default("{}")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("audit_events")
+}
