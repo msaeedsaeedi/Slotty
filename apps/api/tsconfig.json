@@ -3,7 +3,10 @@
 	"compilerOptions": {
 		"baseUrl": "./",
 		"outDir": "./dist",
-		"strictNullChecks": true
+		"strictNullChecks": true,
+		"paths": {
+			"@/*": ["src/*"]
+		}
 	},
 	"exclude": ["node_modules", "dist"]
 }

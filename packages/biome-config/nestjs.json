@@ -14,7 +14,8 @@
 
 			"style": {
 				"noDefaultExport": "error",
-				"useNodejsImportProtocol": "error"
+				"useNodejsImportProtocol": "error",
+				"useImportType": "off"
 			},
 
 			"suspicious": {
@@ -26,6 +27,9 @@
 	},
 
 	"javascript": {
+		"parser": {
+			"unsafeParameterDecoratorsEnabled": true
+		},
 		"formatter": {
 			"quoteStyle": "double"
 		},

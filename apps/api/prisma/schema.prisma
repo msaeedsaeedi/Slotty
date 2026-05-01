@@ -54,142 +54,174 @@ enum AllowedListType {
 //
 
 model User {
-  id         String     @id @default(uuid())
-  name       String
-  email      String     @unique
-  rollNumber String?    @map("roll_number")
+  id         String     @id @default(uuid()) @db.Uuid
+  name       String     @db.VarChar(255)
+  email      String     @unique @db.VarChar(320)
+  rollNumber String?    @map("roll_number") @db.VarChar(50)
   role       UserRole
   status     UserStatus @default(active)
-  googleId   String?    @unique @map("google_id")
+  googleId   String?    @unique @map("google_id") @db.VarChar(128)
 
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz()
 
   // Relations
   coursesOwned Course[]     @relation("CourseOwner")
   enrollments  Enrollment[]
   demoSlots    DemoSlot[]   @relation("TA_DemoSlots")
   bookings     Booking[]    @relation("StudentBookings")
+  auditEvents  AuditEvent[] @relation("AuditActor")
 
+  @@index([email], map: "idx_users_email")
+  @@index([role], map: "idx_users_role")
   @@map("users")
 }
 
 model Course {
-  id    String @id @default(uuid())
-  code  String
-  title String
-  term  String
+  id    String @id @default(uuid()) @db.Uuid
+  code  String @db.VarChar(20)
+  title String @db.VarChar(255)
+  term  String @db.VarChar(50)
 
-  ownerId String @map("owner_id")
+  ownerId String @map("owner_id") @db.Uuid
   owner   User   @relation("CourseOwner", fields: [ownerId], references: [id])
 
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz()
 
   assignments Assignment[]
   enrollments Enrollment[]
 
   @@unique([code, term])
+  @@index([ownerId], map: "idx_courses_owner")
   @@map("courses")
 }
 
 model Assignment {
-  id       String @id @default(uuid())
-  courseId String @map("course_id")
-  course   Course @relation(fields: [courseId], references: [id])
+  id       String @id @default(uuid()) @db.Uuid
+  courseId String @map("course_id") @db.Uuid
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
-  title           String
-  demoWindowStart DateTime @map("demo_window_start")
-  demoWindowEnd   DateTime @map("demo_window_end")
-  slotDurationMin Int      @map("slot_duration_min")
+  title           String   @db.VarChar(255)
+  demoWindowStart DateTime @map("demo_window_start") @db.Timestamptz()
+  demoWindowEnd   DateTime @map("demo_window_end") @db.Timestamptz()
+  slotDurationMin Int      @map("slot_duration_min") @db.SmallInt
+  slotCapacity    Int      @default(1) @db.SmallInt
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  freezeBeforeMin  Int     @default(60) @map("freeze_before_min")
+  maxCancellations Int     @default(1) @map("max_cancellations") @db.SmallInt
+  defaultVenue     String? @map("default_venue") @db.VarChar(512)
+  isPublished      Boolean @default(false) @map("is_published")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
   demoSlots DemoSlot[]
   bookings  Booking[]
 
+  @@index([courseId], map: "idx_assignments_course")
   @@map("assignments")
 }
 
 model DemoSlot {
-  id           String     @id @default(uuid())
-  assignmentId String     @map("assignment_id")
-  assignment   Assignment @relation(fields: [assignmentId], references: [id])
+  id           String     @id @default(uuid()) @db.Uuid
+  assignmentId String     @map("assignment_id") @db.Uuid
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
 
-  taId String @map("ta_id")
+  taId String @map("ta_id") @db.Uuid
   ta   User   @relation("TA_DemoSlots", fields: [taId], references: [id])
 
-  startTime DateTime   @map("start_time")
-  endTime   DateTime   @map("end_time")
-  status    SlotStatus
+  startsAt DateTime @map("starts_at") @db.Timestamptz()
+  endsAt   DateTime @map("ends_at") @db.Timestamptz()
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  venue    String?    @db.VarChar(512)
+  capacity Int        @default(1) @db.SmallInt
+  version  Int        @default(1)
+  status   SlotStatus @default(draft)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
   bookings Booking[]
 
+  @@index([assignmentId], map: "idx_demo_slots_assignment")
+  @@index([taId], map: "idx_demo_slots_ta")
+  @@index([status, startsAt], map: "idx_demo_slots_status")
   @@map("demo_slots")
 }
 
 model Booking {
-  id     String   @id @default(uuid())
-  slotId String   @map("slot_id")
+  id     String   @id @default(uuid()) @db.Uuid
+  slotId String   @map("slot_id") @db.Uuid
   slot   DemoSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
 
-  studentId String @map("student_id")
-  student   User   @relation("StudentBookings", fields: [studentId], references: [id])
+  studentId String @map("student_id") @db.Uuid
+  student   User   @relation("StudentBookings", fields: [studentId], references: [id], onDelete: Cascade)
 
-  assignmentId String     @map("assignment_id")
-  assignment   Assignment @relation(fields: [assignmentId], references: [id])
+  assignmentId String     @map("assignment_id") @db.Uuid
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
 
-  status BookingStatus
+  status       BookingStatus @default(booked)
+  bookedAt     DateTime      @default(now()) @map("booked_at") @db.Timestamptz()
+  cancelledAt  DateTime?     @map("cancelled_at") @db.Timestamptz()
+  cancelReason String?       @map("cancel_reason") @db.VarChar(50)
+  cancelNote   String?       @map("cancel_note") @db.Text
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
+  @@index([slotId], map: "idx_bookings_slot")
+  @@index([studentId], map: "idx_bookings_student")
+  @@index([assignmentId], map: "idx_bookings_assignment")
+  @@index([status], map: "idx_bookings_status")
   @@map("bookings")
 }
 
 model Enrollment {
-  id       String @id @default(uuid())
-  courseId String @map("course_id")
-  course   Course @relation(fields: [courseId], references: [id])
+  id       String @id @default(uuid()) @db.Uuid
+  courseId String @map("course_id") @db.Uuid
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
-  userId String @map("user_id")
-  user   User   @relation(fields: [userId], references: [id])
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   roleInCourse CourseRole @map("role_in_course")
 
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   @@unique([courseId, userId])
+  @@index([courseId], map: "idx_enrollments_course")
+  @@index([userId], map: "idx_enrollments_user")
   @@map("enrollments")
 }
 
 model AllowedList {
-  id    String          @id @default(uuid())
+  id    String          @id @default(uuid()) @db.Uuid
   type  AllowedListType
-  value String          @unique
+  value String          @unique @db.VarChar(320)
 
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   @@map("allowed_list")
 }
 
 model AuditEvent {
   id      BigInt  @id @default(autoincrement())
-  actorId String? @map("actor_id")
+  actorId String? @map("actor_id") @db.Uuid
+  actor   User?   @relation("AuditActor", fields: [actorId], references: [id])
 
-  entityType String @map("entity_type")
-  entityId   String @map("entity_id")
-  eventType  String @map("event_type")
+  entityType String @map("entity_type") @db.VarChar(50)
+  entityId   String @map("entity_id") @db.Uuid
+  eventType  String @map("event_type") @db.VarChar(50)
 
   payload Json @default("{}")
 
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
+  @@index([entityType, entityId], map: "idx_audit_entity")
+  @@index([actorId], map: "idx_audit_actor")
+  @@index([createdAt(sort: Desc)], map: "idx_audit_created")
   @@map("audit_events")
 }
