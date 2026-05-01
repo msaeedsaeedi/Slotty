@@ -5,6 +5,7 @@ import { AppConfigModule } from "./config/config.module";
 import { CoursesModule } from "./courses/courses.module";
 import { UsersModule } from "./users/users.module";
 import { BookingsModule } from './bookings/bookings.module';
+import { SlotsModule } from './slots/slots.module';
 
 @Module({
 	imports: [
@@ -14,6 +15,7 @@ import { BookingsModule } from './bookings/bookings.module';
 		AssignmentModule,
 		CoursesModule,
 		BookingsModule,
+		SlotsModule,
 	],
 	controllers: [],
 	providers: [],

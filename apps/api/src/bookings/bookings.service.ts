@@ -186,6 +186,24 @@ export class BookingsService {
 		return booking;
 	}
 
+	async getSlotBookings(slotId: string, actor: User): Promise<Booking[]> {
+		const slot = await this.prisma.demoSlot.findUnique({
+			where: { id: slotId },
+		});
+		if (!slot) {
+			throw new NotFoundException("Slot not found.");
+		}
+		if (actor.role === "ta" && slot.taId !== actor.id) {
+			throw new ForbiddenException();
+		}
+
+		return this.prisma.booking.findMany({
+			where: { slotId },
+			include: { student: true, assignment: true },
+			orderBy: { bookedAt: "asc" },
+		});
+	}
+
 	async rescheduleBooking(
 		bookingId: string,
 		actor: User,

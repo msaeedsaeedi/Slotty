@@ -1,0 +1,231 @@
+import {
+	BadRequestException,
+	ForbiddenException,
+	Injectable,
+	NotFoundException,
+} from "@nestjs/common";
+import { Assignment, Prisma, SlotStatus, User } from "@prisma/client";
+import { PrismaService } from "prisma/prisma.service";
+import { GenerateSlotsDto } from "./dto/generate-slots.dto.js";
+import { ListSlotsQueryDto } from "./dto/list-slots-query.dto.js";
+import { UpdateSlotDto } from "./dto/update-slot.dto.js";
+
+@Injectable()
+export class SlotsService {
+	constructor(private readonly prisma: PrismaService) {}
+
+	async generateSlots(
+		assignmentId: string,
+		dto: GenerateSlotsDto,
+		actor: User,
+	) {
+		const assignment = await this.prisma.assignment.findUnique({
+			where: { id: assignmentId },
+		});
+		if (!assignment) {
+			throw new NotFoundException("Assignment not found.");
+		}
+
+		await this.assertAssignmentAccess(assignment, actor);
+
+		const ta = await this.prisma.user.findUnique({
+			where: { id: dto.ta_id },
+		});
+		if (!ta) {
+			throw new NotFoundException("TA user not found.");
+		}
+		if (ta.role !== "ta") {
+			throw new BadRequestException("Slot owner must be a TA.");
+		}
+		if (actor.role === "ta" && ta.id !== actor.id) {
+			throw new ForbiddenException("TAs can only create their own slots.");
+		}
+		await this.assertTaEnrollment(ta.id, assignment.courseId);
+
+		if (assignment.demoWindowEnd <= assignment.demoWindowStart) {
+			throw new BadRequestException("Demo window end must be after start.");
+		}
+
+		const durationMs = assignment.slotDurationMin * 60 * 1000;
+		if (durationMs <= 0) {
+			throw new BadRequestException("Slot duration must be greater than zero.");
+		}
+
+		const slotsData: Prisma.DemoSlotCreateManyInput[] = [];
+		let cursor = new Date(assignment.demoWindowStart);
+		const windowEnd = new Date(assignment.demoWindowEnd);
+
+		while (cursor.getTime() + durationMs <= windowEnd.getTime()) {
+			const endsAt = new Date(cursor.getTime() + durationMs);
+			slotsData.push({
+				assignmentId: assignment.id,
+				taId: ta.id,
+				startsAt: new Date(cursor),
+				endsAt,
+				venue: assignment.defaultVenue ?? null,
+				capacity: assignment.slotCapacity,
+				status: SlotStatus.draft,
+				version: 1,
+			});
+			cursor = endsAt;
+		}
+
+		if (slotsData.length === 0) {
+			return { slots: [], count: 0 };
+		}
+
+		const saved = await this.prisma.demoSlot.createManyAndReturn({
+			data: slotsData,
+		});
+
+		return { slots: saved, count: saved.length };
+	}
+
+	async listSlots(assignmentId: string, query: ListSlotsQueryDto, actor: User) {
+		const assignment = await this.prisma.assignment.findUnique({
+			where: { id: assignmentId },
+		});
+		if (!assignment) {
+			throw new NotFoundException("Assignment not found.");
+		}
+
+		await this.assertAssignmentAccess(assignment, actor);
+
+		const where: Prisma.DemoSlotWhereInput = { assignmentId };
+
+		if (actor.role === "student") {
+			where.status = SlotStatus.published;
+		} else if (actor.role === "ta") {
+			where.taId = actor.id;
+			if (query.status) {
+				where.status = query.status as SlotStatus;
+			}
+		} else if (query.status) {
+			where.status = query.status as SlotStatus;
+		}
+
+		if (query.date) {
+			const dayStart = new Date(`${query.date}T00:00:00Z`);
+			if (Number.isNaN(dayStart.getTime())) {
+				throw new BadRequestException("Invalid date format. Use YYYY-MM-DD.");
+			}
+			where.startsAt = {
+				gte: dayStart,
+				lte: new Date(`${query.date}T23:59:59.999Z`),
+			};
+		}
+
+		const slots = await this.prisma.demoSlot.findMany({
+			where,
+			orderBy: { startsAt: "asc" },
+		});
+
+		return { slots, meta: { total: slots.length } };
+	}
+
+	async updateSlot(slotId: string, dto: UpdateSlotDto, actor: User) {
+		if (dto.status === undefined && dto.venue === undefined) {
+			throw new BadRequestException("Nothing to update.");
+		}
+
+		const slot = await this.prisma.demoSlot.findUnique({
+			where: { id: slotId },
+		});
+		if (!slot) {
+			throw new NotFoundException("Slot not found.");
+		}
+
+		if (actor.role === "ta" && slot.taId !== actor.id) {
+			throw new ForbiddenException(
+				"You do not have permission to update this slot.",
+			);
+		}
+
+		const data: Prisma.DemoSlotUpdateInput = {};
+
+		if (dto.status !== undefined) {
+			data.status = dto.status as SlotStatus;
+		}
+
+		if (dto.venue !== undefined) {
+			const nextVenue = dto.venue.trim();
+			if (nextVenue.length === 0) {
+				throw new BadRequestException("Venue cannot be empty.");
+			}
+			if (slot.venue !== nextVenue) {
+				data.venue = nextVenue;
+				// Prisma's atomic increment avoids a stale-read race on version.
+				data.version = { increment: 1 };
+			}
+		}
+
+		const updated = await this.prisma.demoSlot.update({
+			where: { id: slotId },
+			data,
+		});
+
+		return { slot: updated };
+	}
+
+	private async assertAssignmentAccess(
+		assignment: Assignment,
+		actor: User,
+	): Promise<void> {
+		if (actor.role === "admin") return;
+
+		if (actor.role === "instructor") {
+			if (!(await this.isCourseOwner(assignment.courseId, actor.id))) {
+				throw new ForbiddenException("Forbidden.");
+			}
+			return;
+		}
+
+		if (actor.role === "ta") {
+			await this.assertTaEnrollment(actor.id, assignment.courseId);
+			return;
+		}
+
+		if (actor.role === "student") {
+			await this.assertStudentEnrollment(actor.id, assignment.courseId);
+			return;
+		}
+
+		throw new ForbiddenException("Forbidden.");
+	}
+
+	private async assertStudentEnrollment(
+		userId: string,
+		courseId: string,
+	): Promise<void> {
+		const enrollment = await this.prisma.enrollment.findFirst({
+			where: { userId, courseId, roleInCourse: "student" },
+		});
+		if (!enrollment) {
+			throw new ForbiddenException("You are not enrolled in this course.");
+		}
+	}
+
+	private async assertTaEnrollment(
+		userId: string,
+		courseId: string,
+	): Promise<void> {
+		const enrollment = await this.prisma.enrollment.findFirst({
+			where: { userId, courseId, roleInCourse: "ta" },
+		});
+		if (!enrollment) {
+			throw new ForbiddenException(
+				"You are not assigned as a TA in this course.",
+			);
+		}
+	}
+
+	private async isCourseOwner(
+		courseId: string,
+		userId: string,
+	): Promise<boolean> {
+		const course = await this.prisma.course.findFirst({
+			where: { id: courseId, ownerId: userId },
+		});
+		return Boolean(course);
+	}
+}
