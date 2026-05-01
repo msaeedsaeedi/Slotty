@@ -67,11 +67,12 @@ model User {
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz()
 
   // Relations
-  coursesOwned Course[]     @relation("CourseOwner")
-  enrollments  Enrollment[]
-  demoSlots    DemoSlot[]   @relation("TA_DemoSlots")
-  bookings     Booking[]    @relation("StudentBookings")
-  auditEvents  AuditEvent[] @relation("AuditActor")
+  coursesOwned     Course[]     @relation("CourseOwner")
+  enrollments      Enrollment[]
+  demoSlots        DemoSlot[]   @relation("TA_DemoSlots")
+  bookings         Booking[]    @relation("StudentBookings")
+  auditEvents      AuditEvent[] @relation("AuditActor")
+  evaluationsGiven Evaluation[] @relation("TA_Evaluations")
 
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
@@ -172,6 +173,8 @@ model Booking {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
+  evaluation Evaluation?
+
   @@index([slotId], map: "idx_bookings_slot")
   @@index([studentId], map: "idx_bookings_student")
   @@index([assignmentId], map: "idx_bookings_assignment")
@@ -205,6 +208,30 @@ model AllowedList {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   @@map("allowed_list")
+}
+
+model Evaluation {
+  id String @id @default(uuid()) @db.Uuid
+
+  bookingId String  @unique @map("booking_id") @db.Uuid
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  taId String @map("ta_id") @db.Uuid
+  ta   User   @relation("TA_Evaluations", fields: [taId], references: [id])
+
+  rubricScores        Json      @default("{}") @map("rubric_scores")
+  totalScore          Decimal?  @map("total_score") @db.Decimal(5, 2)
+  privateNote         String?   @map("private_note") @db.Text
+  submittedAt         DateTime? @map("submitted_at") @db.Timestamptz()
+  visibleToInstructor Boolean   @default(false) @map("visible_to_instructor")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@index([bookingId], map: "idx_evaluations_booking")
+  @@index([taId], map: "idx_evaluations_ta")
+  @@index([visibleToInstructor], map: "idx_evaluations_visible")
+  @@map("evaluations")
 }
 
 model AuditEvent {

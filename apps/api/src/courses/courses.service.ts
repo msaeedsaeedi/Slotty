@@ -7,7 +7,7 @@ import {
 import { Course, Enrollment, User } from "@prisma/client";
 import { PrismaService } from "prisma/prisma.service";
 import { isUniqueViolation } from "@/common/prisma-errors";
-import { attempt } from "@/common/try-catch.helper";
+import { attempt } from "@/utils/attempt.util";
 import { CreateCourseDto } from "./dto/create-course.dto";
 import { CreateEnrollmentDto } from "./dto/create-enrollment.dto";
 

@@ -6,9 +6,10 @@ import { BookingsModule } from "./bookings/bookings.module";
 import { RedisModule } from "./common/redis/redis.module";
 import { AppConfigModule } from "./config/config.module";
 import { CoursesModule } from "./courses/courses.module";
+import { EvaluationsModule } from "./evaluations/evaluations.module";
+import { HealthModule } from "./health/health.module";
 import { SlotsModule } from "./slots/slots.module";
 import { UsersModule } from "./users/users.module";
-import { HealthModule } from './health/health.module';
 
 @Module({
 	imports: [
@@ -22,6 +23,7 @@ import { HealthModule } from './health/health.module';
 		AuthModule,
 		RedisModule,
 		HealthModule,
+		EvaluationsModule,
 	],
 	controllers: [],
 	providers: [],

@@ -2,8 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { AllowedList } from "@prisma/client";
 import { PrismaService } from "prisma/prisma.service";
 import { isUniqueViolation } from "@/common/prisma-errors";
-import { attempt } from "@/common/try-catch.helper";
-import { UsersService } from "@/users/users.service";
+import { attempt } from "@/utils/attempt.util";
 import { CreateAllowlistEntryDto } from "./dto/create-allowlist-entry.dto";
 
 @Injectable()

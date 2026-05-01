@@ -13,7 +13,7 @@ import { ConfigService } from "@nestjs/config";
 import { AuthGuard } from "@nestjs/passport";
 import { Request, Response } from "express";
 import { Profile } from "passport-google-oauth20";
-import { attempt } from "@/common/try-catch.helper";
+import { attempt } from "@/utils/attempt.util";
 import { AuthService } from "./auth.service";
 import { Public } from "./decorators/public.decorator";
 
