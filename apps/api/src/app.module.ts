@@ -4,6 +4,7 @@ import { AssignmentModule } from "./assignments/assignments.module";
 import { AppConfigModule } from "./config/config.module";
 import { CoursesModule } from "./courses/courses.module";
 import { UsersModule } from "./users/users.module";
+import { BookingsModule } from './bookings/bookings.module';
 
 @Module({
 	imports: [
@@ -12,6 +13,7 @@ import { UsersModule } from "./users/users.module";
 		PrismaModule,
 		AssignmentModule,
 		CoursesModule,
+		BookingsModule,
 	],
 	controllers: [],
 	providers: [],

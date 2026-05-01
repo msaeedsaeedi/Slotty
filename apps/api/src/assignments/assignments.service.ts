@@ -56,13 +56,17 @@ export class AssignmentsService {
 		}
 		if (actor.role === "instructor") {
 			if (course.ownerId !== actor.id) {
-				throw new ForbiddenException("Forbidden.");
+				throw new ForbiddenException(
+					"You do not have permission to access this course.",
+				);
 			}
 			return;
 		}
 		if (actor.role === "ta") {
 			if (requiredRole && requiredRole !== "ta") {
-				throw new ForbiddenException("Forbidden.");
+				throw new ForbiddenException(
+					"You do not have permission to access this course.",
+				);
 			}
 			await this.assertEnrollment(course.id, actor.id, "ta");
 			return;
@@ -71,7 +75,9 @@ export class AssignmentsService {
 			await this.assertEnrollment(course.id, actor.id, "student");
 			return;
 		}
-		throw new ForbiddenException("Forbidden.");
+		throw new ForbiddenException(
+			"You do not have permission to access this course.",
+		);
 	}
 
 	private async assertEnrollment(
@@ -83,7 +89,9 @@ export class AssignmentsService {
 			where: { courseId, userId, roleInCourse: { equals: roleInCourse } },
 		});
 		if (!enrollment) {
-			throw new ForbiddenException("Forbidden.");
+			throw new ForbiddenException(
+				"You do not have permission to access this course.",
+			);
 		}
 	}
 }
