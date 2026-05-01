@@ -2,6 +2,7 @@ import {
 	BadRequestException,
 	ForbiddenException,
 	Injectable,
+	NotFoundException,
 } from "@nestjs/common";
 import { Assignment, Course, Enrollment, User } from "@prisma/client";
 import { PrismaService } from "prisma/prisma.service";
@@ -21,7 +22,7 @@ export class AssignmentsService {
 		});
 
 		if (!course) {
-			throw new Error("Course not found.");
+			throw new NotFoundException("Course not found.");
 		}
 
 		await this.assertCourseAccess(course, actor, "ta");
