@@ -15,7 +15,7 @@ import { CreateAllowlistEntryDto } from "./dto/create-allowlist-entry.dto";
 	path: "auth/allowlist",
 	version: "1",
 })
-// @Roles("admin")
+@Roles("admin")
 export class AllowlistController {
 	constructor(private readonly allowlistService: AllowlistService) {}
 
