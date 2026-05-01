@@ -8,6 +8,7 @@ import { AppConfigModule } from "./config/config.module";
 import { CoursesModule } from "./courses/courses.module";
 import { SlotsModule } from "./slots/slots.module";
 import { UsersModule } from "./users/users.module";
+import { HealthModule } from './health/health.module';
 
 @Module({
 	imports: [
@@ -20,6 +21,7 @@ import { UsersModule } from "./users/users.module";
 		SlotsModule,
 		AuthModule,
 		RedisModule,
+		HealthModule,
 	],
 	controllers: [],
 	providers: [],
