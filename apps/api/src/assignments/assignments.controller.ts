@@ -28,7 +28,7 @@ export class AssignmentController {
 	) {
 		const user = (req as { user?: User }).user;
 		if (!user) {
-			throw new UnauthorizedException("Unauthorized.");
+			throw new UnauthorizedException();
 		}
 		const assignment = await this.assignmentsService.createAssignment(
 			courseId,

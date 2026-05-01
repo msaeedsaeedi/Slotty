@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { PrismaModule } from "prisma/prisma.module";
 import { AssignmentModule } from "./assignments/assignments.module";
+import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
 import { BookingsModule } from "./bookings/bookings.module";
 import { RedisModule } from "./common/redis/redis.module";
@@ -24,6 +25,7 @@ import { UsersModule } from "./users/users.module";
 		RedisModule,
 		HealthModule,
 		EvaluationsModule,
+		AuditModule,
 	],
 	controllers: [],
 	providers: [],

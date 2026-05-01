@@ -31,7 +31,7 @@ export class BookingsController {
 	async createBooking(@Body() dto: CreateBookingDto, @Req() req: Request) {
 		const user = (req as { user?: User }).user;
 		if (!user) {
-			throw new UnauthorizedException("Unauthorized.");
+			throw new UnauthorizedException();
 		}
 
 		const booking = await this.bookingsService.createBooking(user, dto);
@@ -44,7 +44,7 @@ export class BookingsController {
 	async listBookings(@Req() req: Request) {
 		const user = (req as { user?: User }).user;
 		if (!user) {
-			throw new UnauthorizedException("Unauthorized.");
+			throw new UnauthorizedException();
 		}
 
 		const bookings = await this.bookingsService.listBookingsForStudent(user.id);
@@ -59,7 +59,7 @@ export class BookingsController {
 	) {
 		const user = (req as { user?: User }).user;
 		if (!user) {
-			throw new UnauthorizedException("Unauthorized.");
+			throw new UnauthorizedException();
 		}
 		const booking = await this.bookingsService.getBooking(bookingId, user);
 		return { booking };
@@ -74,7 +74,7 @@ export class BookingsController {
 	) {
 		const user = (req as { user?: User }).user;
 		if (!user) {
-			throw new UnauthorizedException("Unauthorized.");
+			throw new UnauthorizedException();
 		}
 
 		const booking = await this.bookingsService.rescheduleBooking(
@@ -96,7 +96,7 @@ export class BookingsController {
 	) {
 		const user = (req as { user?: User }).user;
 		if (!user) {
-			throw new UnauthorizedException("Unauthorized.");
+			throw new UnauthorizedException();
 		}
 
 		await this.bookingsService.cancelBooking(bookingId, user, dto);
@@ -111,7 +111,7 @@ export class BookingsController {
 	) {
 		const user = (req as { user?: User }).user;
 		if (!user) {
-			throw new UnauthorizedException("Unauthorized.");
+			throw new UnauthorizedException();
 		}
 
 		const booking = await this.bookingsService.updateBookingStatus(

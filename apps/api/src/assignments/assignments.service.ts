@@ -6,11 +6,15 @@ import {
 } from "@nestjs/common";
 import { Assignment, Course, Enrollment, User } from "@prisma/client";
 import { PrismaService } from "prisma/prisma.service";
+import { AuditService } from "@/audit/audit.service";
 import { CreateAssignmentDto } from "./dto/create-assignment.dto";
 
 @Injectable()
 export class AssignmentsService {
-	constructor(private readonly prisma: PrismaService) {}
+	constructor(
+		private readonly prisma: PrismaService,
+		private readonly auditService: AuditService,
+	) {}
 
 	async createAssignment(
 		courseId: string,
@@ -31,7 +35,7 @@ export class AssignmentsService {
 			throw new BadRequestException("Demo window end must be after start.");
 		}
 
-		return this.prisma.assignment.create({
+		const created = await this.prisma.assignment.create({
 			data: {
 				courseId: course.id,
 				title: dto.title.trim(),
@@ -45,6 +49,21 @@ export class AssignmentsService {
 				isPublished: dto.is_published ?? false,
 			},
 		});
+
+		await this.auditService.append({
+			actorId: actor.id,
+			entityType: "assignment",
+			entityId: created.id,
+			eventType: "created",
+			payload: {
+				courseId: course.id,
+				title: created.title,
+				demoWindowStart: created.demoWindowStart.toISOString(),
+				demoWindowEnd: created.demoWindowEnd.toISOString(),
+			},
+		});
+
+		return created;
 	}
 
 	private async assertCourseAccess(

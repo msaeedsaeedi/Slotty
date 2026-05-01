@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { BookingStatus, Evaluation, Prisma, UserRole } from "@prisma/client";
 import { PrismaService } from "prisma/prisma.service";
+import { AuditService } from "@/audit/audit.service";
 import { isUniqueViolation } from "@/common/prisma-errors";
 import { attempt } from "@/utils/attempt.util";
 import { CreateEvaluationDto } from "./dto/create-evaluation.dto";
@@ -39,7 +40,10 @@ type EvaluationWithIncludes = Prisma.EvaluationGetPayload<{
 
 @Injectable()
 export class EvaluationsService {
-	constructor(private readonly prisma: PrismaService) {}
+	constructor(
+		private readonly prisma: PrismaService,
+		private readonly auditService: AuditService,
+	) {}
 
 	// ─── Create ───────────────────────────────────────────────────────────────
 
@@ -92,6 +96,17 @@ export class EvaluationsService {
 			}
 			throw new InternalServerErrorException("Failed to create evaluation");
 		}
+
+		await this.auditService.append({
+			actorId: taId,
+			entityType: "evaluation",
+			entityId: evaluation!.id,
+			eventType: "created",
+			payload: {
+				bookingId: dto.bookingId,
+				totalScore: dto.totalScore,
+			},
+		});
 
 		return evaluation!;
 	}
@@ -162,6 +177,17 @@ export class EvaluationsService {
 		);
 		if (updateErr)
 			throw new InternalServerErrorException("Failed to update evaluation");
+
+		await this.auditService.append({
+			actorId,
+			entityType: "evaluation",
+			entityId: id,
+			eventType: "updated",
+			payload: {
+				fieldsUpdated: Object.keys(dto),
+				bookingId: updated!.bookingId,
+			},
+		});
 
 		return updated!;
 	}

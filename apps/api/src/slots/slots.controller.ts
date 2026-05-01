@@ -77,7 +77,7 @@ export class SlotsController {
 	) {
 		const user = (req as { user?: User }).user;
 		if (!user) {
-			throw new UnauthorizedException("Unauthorized.");
+			throw new UnauthorizedException();
 		}
 		const bookings = await this.bookingsService.getSlotBookings(slotId, user);
 		return { bookings };

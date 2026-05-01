@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { Assignment, Booking, DemoSlot, Prisma, User } from "@prisma/client";
 import { PrismaService } from "prisma/prisma.service";
+import { AuditService } from "@/audit/audit.service";
 import { CancelBookingDto } from "./dto/cancel-booking.dto";
 import { CreateBookingDto } from "./dto/create-booking.dto";
 import { RescheduleBookingDto } from "./dto/reschedule-booking.dto";
@@ -15,13 +16,16 @@ import { UpdateBookingStatusDto } from "./dto/update-booking-status";
 
 @Injectable()
 export class BookingsService {
-	constructor(private readonly prisma: PrismaService) {}
+	constructor(
+		private readonly prisma: PrismaService,
+		private readonly auditService: AuditService,
+	) {}
 
 	async createBooking(
 		actor: User,
 		dto: CreateBookingDto,
 	): Promise<Booking & { slot: DemoSlot; assignment: Assignment }> {
-		return this.prisma.$transaction(async (tx) => {
+		const result = await this.prisma.$transaction(async (tx) => {
 			// Step 1: Fetch slot (with Row-Level Lock) and associated assignment
 			const slots = await tx.$queryRaw<
 				(DemoSlot & { assignment: Assignment })[]
@@ -137,6 +141,20 @@ export class BookingsService {
 
 			return fullBooking;
 		});
+
+		await this.auditService.append({
+			actorId: actor.id,
+			entityType: "booking",
+			entityId: result.id,
+			eventType: "created",
+			payload: {
+				slotId: result.slotId,
+				assignmentId: result.assignmentId,
+				studentId: result.studentId,
+			},
+		});
+
+		return result;
 	}
 
 	async listBookingsForStudent(studentId: string): Promise<Booking[]> {
@@ -209,7 +227,7 @@ export class BookingsService {
 		actor: User,
 		dto: RescheduleBookingDto,
 	): Promise<Booking & { slot: DemoSlot; assignment: Assignment }> {
-		return this.prisma.$transaction(async (tx) => {
+		const result = await this.prisma.$transaction(async (tx) => {
 			// Step 1: Lock current booking row + its slot row atomically.
 			const locked = await tx.$queryRaw<{ id: string }[]>`
 				SELECT b.id
@@ -345,6 +363,33 @@ export class BookingsService {
 
 			return fullNewBooking;
 		});
+
+		await Promise.all([
+			this.auditService.append({
+				actorId: actor.id,
+				entityType: "booking",
+				entityId: bookingId,
+				eventType: "cancelled",
+				payload: {
+					reason: "reschedule",
+					newSlotId: dto.new_slot_id,
+				},
+			}),
+			this.auditService.append({
+				actorId: actor.id,
+				entityType: "booking",
+				entityId: result.id,
+				eventType: "created",
+				payload: {
+					slotId: result.slotId,
+					assignmentId: result.assignmentId,
+					studentId: result.studentId,
+					rescheduledFrom: bookingId,
+				},
+			}),
+		]);
+
+		return result;
 	}
 
 	async cancelBooking(
@@ -352,7 +397,7 @@ export class BookingsService {
 		actor: User,
 		dto: CancelBookingDto,
 	): Promise<Booking> {
-		return this.prisma.$transaction(async (tx) => {
+		const result = await this.prisma.$transaction(async (tx) => {
 			// Lock the booking row and its slot row atomically.
 			// Prevents a concurrent reschedule or double-cancel racing this request.
 			const locked = await tx.$queryRaw<{ id: string }[]>`
@@ -461,6 +506,21 @@ export class BookingsService {
 
 			return updated;
 		});
+
+		await this.auditService.append({
+			actorId: actor.id,
+			entityType: "booking",
+			entityId: bookingId,
+			eventType: "cancelled",
+			payload: {
+				cancelReason: dto.cancel_reason,
+				cancelNote: dto.cancel_note,
+				assignmentId: result.assignmentId,
+				slotId: result.slotId,
+			},
+		});
+
+		return result;
 	}
 
 	async updateBookingStatus(
@@ -491,13 +551,27 @@ export class BookingsService {
 			);
 		}
 
-		return this.prisma.booking.update({
+		const updated = await this.prisma.booking.update({
 			where: { id: bookingId },
 			data: {
 				status: dto.status,
 				updatedAt: new Date(),
 			},
 		});
+
+		await this.auditService.append({
+			actorId: actor.id,
+			entityType: "booking",
+			entityId: bookingId,
+			eventType: "updated",
+			payload: {
+				previousStatus: booking.status,
+				newStatus: dto.status,
+				slotId: booking.slotId,
+			},
+		});
+
+		return updated;
 	}
 
 	private async assertStudentEnrollment(

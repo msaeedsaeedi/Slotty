@@ -6,13 +6,17 @@ import {
 } from "@nestjs/common";
 import { Assignment, Prisma, SlotStatus, User } from "@prisma/client";
 import { PrismaService } from "prisma/prisma.service";
+import { AuditService } from "@/audit/audit.service";
 import { GenerateSlotsDto } from "./dto/generate-slots.dto.js";
 import { ListSlotsQueryDto } from "./dto/list-slots-query.dto.js";
 import { UpdateSlotDto } from "./dto/update-slot.dto.js";
 
 @Injectable()
 export class SlotsService {
-	constructor(private readonly prisma: PrismaService) {}
+	constructor(
+		private readonly prisma: PrismaService,
+		private readonly auditService: AuditService,
+	) {}
 
 	async generateSlots(
 		assignmentId: string,
@@ -78,6 +82,25 @@ export class SlotsService {
 			data: slotsData,
 		});
 
+		await Promise.all(
+			saved.map((slot) =>
+				this.auditService.append({
+					actorId: actor.id,
+					entityType: "slot",
+					entityId: slot.id,
+					eventType: "created",
+					payload: {
+						assignmentId: assignment.id,
+						taId: ta.id,
+						startsAt: slot.startsAt.toISOString(),
+						endsAt: slot.endsAt.toISOString(),
+						venue: slot.venue,
+						capacity: slot.capacity,
+					},
+				}),
+			),
+		);
+
 		return { slots: saved, count: saved.length };
 	}
 
@@ -142,9 +165,20 @@ export class SlotsService {
 		}
 
 		const data: Prisma.DemoSlotUpdateInput = {};
+		const auditPayloads: Array<{
+			eventType: string;
+			payload: Record<string, unknown>;
+		}> = [];
 
 		if (dto.status !== undefined) {
 			data.status = dto.status as SlotStatus;
+			auditPayloads.push({
+				eventType: "updated",
+				payload: {
+					previousStatus: slot.status,
+					newStatus: dto.status,
+				},
+			});
 		}
 
 		if (dto.venue !== undefined) {
@@ -154,8 +188,15 @@ export class SlotsService {
 			}
 			if (slot.venue !== nextVenue) {
 				data.venue = nextVenue;
-				// Prisma's atomic increment avoids a stale-read race on version.
 				data.version = { increment: 1 };
+				auditPayloads.push({
+					eventType: "venue_changed",
+					payload: {
+						oldVenue: slot.venue,
+						newVenue: nextVenue,
+						previousVersion: slot.version,
+					},
+				});
 			}
 		}
 
@@ -163,6 +204,18 @@ export class SlotsService {
 			where: { id: slotId },
 			data,
 		});
+
+		await Promise.all(
+			auditPayloads.map(({ eventType, payload }) =>
+				this.auditService.append({
+					actorId: actor.id,
+					entityType: "slot",
+					entityId: slotId,
+					eventType,
+					payload,
+				}),
+			),
+		);
 
 		return { slot: updated };
 	}
