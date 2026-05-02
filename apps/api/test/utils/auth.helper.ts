@@ -1,7 +1,7 @@
 import { UserRole, UserStatus } from "@prisma/client";
 import { createMockUser } from "./factories";
 
-export function createMockSession(userOverrides?: Partial<any>) {
+export function createMockSession(userOverrides?: Partial<unknown>) {
 	const user = createMockUser(userOverrides);
 	return {
 		user,
@@ -10,6 +10,7 @@ export function createMockSession(userOverrides?: Partial<any>) {
 	};
 }
 
+// biome-ignore lint/suspicious/noExplicitAny: <Session data can be flexible for testing purposes>
 export function mockRequestWithSession(sessionData?: any) {
 	return {
 		session: sessionData || createMockSession(),
