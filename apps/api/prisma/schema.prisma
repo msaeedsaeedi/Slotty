@@ -49,6 +49,14 @@ enum AllowedListType {
   email
 }
 
+enum NotificationType {
+  booking_confirmed
+  booking_cancelled
+  venue_changed
+  time_changed
+  reminder
+}
+
 //
 // MODELS
 //
@@ -67,12 +75,14 @@ model User {
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz()
 
   // Relations
-  coursesOwned     Course[]     @relation("CourseOwner")
-  enrollments      Enrollment[]
-  demoSlots        DemoSlot[]   @relation("TA_DemoSlots")
-  bookings         Booking[]    @relation("StudentBookings")
-  auditEvents      AuditEvent[] @relation("AuditActor")
-  evaluationsGiven Evaluation[] @relation("TA_Evaluations")
+  coursesOwned      Course[]           @relation("CourseOwner")
+  enrollments       Enrollment[]
+  demoSlots         DemoSlot[]         @relation("TA_DemoSlots")
+  bookings          Booking[]          @relation("StudentBookings")
+  auditEvents       AuditEvent[]       @relation("AuditActor")
+  evaluationsGiven  Evaluation[]       @relation("TA_Evaluations")
+  notifications     Notification[]     @relation("UserNotifications")
+  pushSubscriptions PushSubscription[] @relation("UserPushSubscriptions")
 
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
@@ -251,4 +261,36 @@ model AuditEvent {
   @@index([actorId], map: "idx_audit_actor")
   @@index([createdAt(sort: Desc)], map: "idx_audit_created")
   @@map("audit_events")
+}
+
+model Notification {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  type  NotificationType
+  title String           @db.VarChar(255)
+  body  String           @db.Text
+  data  Json             @default("{}") @map("data")
+
+  readAt    DateTime? @map("read_at") @db.Timestamptz()
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([userId, createdAt(sort: Desc)], map: "idx_notifications_user")
+  @@index([userId, readAt], map: "idx_notifications_unread")
+  @@map("notifications")
+}
+
+model PushSubscription {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+  user   User   @relation("UserPushSubscriptions", fields: [userId], references: [id], onDelete: Cascade)
+
+  endpoint String @unique
+  p256dh   String
+  auth     String
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@map("push_subscriptions")
 }

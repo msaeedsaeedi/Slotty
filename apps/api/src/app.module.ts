@@ -9,6 +9,7 @@ import { AuthModule } from "@/modules/auth/auth.module";
 import { BookingsModule } from "@/modules/bookings/bookings.module";
 import { CoursesModule } from "@/modules/courses/courses.module";
 import { EvaluationsModule } from "@/modules/evaluations/evaluations.module";
+import { NotificationsModule } from "@/modules/notifications/notifications.module";
 import { SlotsModule } from "@/modules/slots/slots.module";
 import { UsersModule } from "@/modules/users/users.module";
 
@@ -26,6 +27,7 @@ import { UsersModule } from "@/modules/users/users.module";
 		HealthModule,
 		EvaluationsModule,
 		AuditModule,
+		NotificationsModule,
 	],
 	controllers: [],
 	providers: [],
