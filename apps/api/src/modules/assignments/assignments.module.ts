@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import { AuditModule } from "@/audit/audit.module";
+import { AuditModule } from "@/modules/audit/audit.module";
 import { AssignmentController } from "./assignments.controller";
 import { AssignmentsService } from "./assignments.service";
 

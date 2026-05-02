@@ -11,8 +11,8 @@ import {
 	UnauthorizedException,
 } from "@nestjs/common";
 import { User } from "@prisma/client";
-import { Roles } from "@/auth/decorators/roles.decorator";
-import { BookingsService } from "@/bookings/bookings.service";
+import { Roles } from "@/modules/auth/decorators/roles.decorator";
+import { BookingsService } from "@/modules/bookings/bookings.service";
 import { GenerateSlotsDto } from "./dto/generate-slots.dto";
 import { ListSlotsQueryDto } from "./dto/list-slots-query.dto";
 import { UpdateSlotDto } from "./dto/update-slot.dto";

@@ -2,8 +2,8 @@
 
 import { Module } from "@nestjs/common";
 import { PrismaModule } from "prisma/prisma.module";
-import { AuditModule } from "@/audit/audit.module";
 import { RedisModule } from "@/common/redis/redis.module";
+import { AuditModule } from "@/modules/audit/audit.module";
 import { EvaluationsController } from "./evaluations.controller";
 import { EvaluationsService } from "./evaluations.service";
 

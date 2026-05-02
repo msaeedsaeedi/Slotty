@@ -8,7 +8,6 @@ import { ConfigService } from "@nestjs/config";
 import { User } from "@prisma/client";
 import { Profile } from "passport-google-oauth20";
 import { PrismaService } from "prisma/prisma.service";
-import { UsersService } from "@/users/users.service";
 import { AllowlistService } from "./allowlist/allowlist.service";
 
 @Injectable()

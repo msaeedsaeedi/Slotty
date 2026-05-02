@@ -6,7 +6,7 @@ import {
 } from "@nestjs/common";
 import { Assignment, Prisma, SlotStatus, User } from "@prisma/client";
 import { PrismaService } from "prisma/prisma.service";
-import { AuditService } from "@/audit/audit.service";
+import { AuditService } from "@/modules/audit/audit.service";
 import { GenerateSlotsDto } from "./dto/generate-slots.dto.js";
 import { ListSlotsQueryDto } from "./dto/list-slots-query.dto.js";
 import { UpdateSlotDto } from "./dto/update-slot.dto.js";

@@ -8,7 +8,7 @@ import {
 } from "@nestjs/common";
 import { Assignment, Booking, DemoSlot, Prisma, User } from "@prisma/client";
 import { PrismaService } from "prisma/prisma.service";
-import { AuditService } from "@/audit/audit.service";
+import { AuditService } from "@/modules/audit/audit.service";
 import { CancelBookingDto } from "./dto/cancel-booking.dto";
 import { CreateBookingDto } from "./dto/create-booking.dto";
 import { RescheduleBookingDto } from "./dto/reschedule-booking.dto";

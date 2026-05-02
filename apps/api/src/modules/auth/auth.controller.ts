@@ -3,13 +3,11 @@ import {
 	ForbiddenException,
 	Get,
 	HttpCode,
-	InternalServerErrorException,
 	Post,
 	Req,
 	Res,
 	UseGuards,
 } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { AuthGuard } from "@nestjs/passport";
 import { Request, Response } from "express";
 import { Profile } from "passport-google-oauth20";

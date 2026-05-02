@@ -7,7 +7,7 @@ import {
 	Post,
 	Query,
 } from "@nestjs/common";
-import { Roles } from "@/auth/decorators/roles.decorator";
+import { Roles } from "@/modules/auth/decorators/roles.decorator";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UsersService } from "./users.service";
 

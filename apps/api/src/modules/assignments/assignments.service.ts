@@ -6,7 +6,7 @@ import {
 } from "@nestjs/common";
 import { Assignment, Course, Enrollment, User } from "@prisma/client";
 import { PrismaService } from "prisma/prisma.service";
-import { AuditService } from "@/audit/audit.service";
+import { AuditService } from "@/modules/audit/audit.service";
 import { CreateAssignmentDto } from "./dto/create-assignment.dto";
 
 @Injectable()

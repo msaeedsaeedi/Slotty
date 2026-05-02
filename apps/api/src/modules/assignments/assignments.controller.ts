@@ -8,7 +8,7 @@ import {
 	UnauthorizedException,
 } from "@nestjs/common";
 import { User } from "@prisma/client";
-import { Roles } from "@/auth/decorators/roles.decorator";
+import { Roles } from "@/modules/auth/decorators/roles.decorator";
 import { AssignmentsService } from "./assignments.service";
 import { CreateAssignmentDto } from "./dto/create-assignment.dto";
 

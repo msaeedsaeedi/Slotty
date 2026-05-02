@@ -6,8 +6,8 @@ import {
 } from "@nestjs/common";
 import { Course, Enrollment, User } from "@prisma/client";
 import { PrismaService } from "prisma/prisma.service";
-import { AuditService } from "@/audit/audit.service";
-import { isUniqueViolation } from "@/common/prisma-errors";
+import { isUniqueViolation } from "@/common/prisma.helpers";
+import { AuditService } from "@/modules/audit/audit.service";
 import { attempt } from "@/utils/attempt.util";
 import { CreateCourseDto } from "./dto/create-course.dto";
 import { CreateEnrollmentDto } from "./dto/create-enrollment.dto";

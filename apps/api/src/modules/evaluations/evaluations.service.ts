@@ -8,8 +8,8 @@ import {
 } from "@nestjs/common";
 import { BookingStatus, Evaluation, Prisma, UserRole } from "@prisma/client";
 import { PrismaService } from "prisma/prisma.service";
-import { AuditService } from "@/audit/audit.service";
-import { isUniqueViolation } from "@/common/prisma-errors";
+import { isUniqueViolation } from "@/common/prisma.helpers";
+import { AuditService } from "@/modules/audit/audit.service";
 import { attempt } from "@/utils/attempt.util";
 import { CreateEvaluationDto } from "./dto/create-evaluation.dto";
 import { QueryEvaluationsDto } from "./dto/query-evaluations.dto";

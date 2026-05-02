@@ -16,6 +16,7 @@
 				"noUselessTypeConstraint": "error"
 			},
 			"correctness": {
+				"noUnusedImports": "warn",
 				"noConstAssign": "error",
 				"noConstantCondition": "error",
 				"noEmptyCharacterClassInRegex": "error",

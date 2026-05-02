@@ -12,7 +12,7 @@ import {
 	UnauthorizedException,
 } from "@nestjs/common";
 import { User } from "@prisma/client";
-import { Roles } from "@/auth/decorators/roles.decorator";
+import { Roles } from "@/modules/auth/decorators/roles.decorator";
 import { BookingsService } from "./bookings.service";
 import { CancelBookingDto } from "./dto/cancel-booking.dto";
 import { CreateBookingDto } from "./dto/create-booking.dto";

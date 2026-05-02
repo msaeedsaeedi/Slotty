@@ -13,7 +13,7 @@ import {
 } from "@nestjs/common";
 import { User, UserRole } from "@prisma/client";
 import { Request } from "express";
-import { Roles } from "@/auth/decorators/roles.decorator";
+import { Roles } from "@/modules/auth/decorators/roles.decorator";
 import { CreateEvaluationDto } from "./dto/create-evaluation.dto";
 import { QueryEvaluationsDto } from "./dto/query-evaluations.dto";
 import { UpdateEvaluationDto } from "./dto/update-evaluation.dto";

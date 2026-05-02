@@ -16,7 +16,7 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { User } from "@prisma/client";
-import { Roles } from "@/auth/decorators/roles.decorator";
+import { Roles } from "@/modules/auth/decorators/roles.decorator";
 import { CoursesService } from "./courses.service";
 import { CreateCourseDto } from "./dto/create-course.dto";
 import { CreateEnrollmentDto } from "./dto/create-enrollment.dto";
