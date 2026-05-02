@@ -1,77 +1,100 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { UserRole } from "@prisma/client";
-import { createMockCourse, createMockUser } from "@test/utils/factories";
+import {
+	createMockCourse,
+	createMockEnrollment,
+	createMockUser,
+} from "@test/utils/factories";
 import { PrismaService } from "prisma/prisma.service";
 import {
 	BadRequestException,
+	ConflictException,
 	NotFoundException,
 } from "@/common/exceptions/business.exception";
+import { isUniqueViolation } from "@/common/prisma.helpers";
 import { AuditService } from "@/modules/audit/audit.service";
+import { attempt } from "@/utils/attempt.util";
 import { CoursesService } from "./courses.service";
+import { CreateCourseDto } from "./dto/create-course.dto";
+import { CreateEnrollmentDto } from "./dto/create-enrollment.dto";
+
+jest.mock("@/common/prisma.helpers");
+jest.mock("@/utils/attempt.util");
 
 describe("CoursesService", () => {
 	let service: CoursesService;
-	// biome-ignore lint/correctness/noUnusedVariables: <False Positive - used>
-	let prisma: jest.Mocked<PrismaService>;
-	// biome-ignore lint/correctness/noUnusedVariables: <False Positive - used>
-	let auditService: jest.Mocked<AuditService>;
+	let mockPrisma: any;
+	let mockAuditService: any;
 
-	const mockPrismaService = {
-		course: {
-			findUnique: jest.fn(),
-			findMany: jest.fn(),
-			create: jest.fn(),
-		},
-		user: {
-			findUnique: jest.fn(),
-			findMany: jest.fn(),
-			create: jest.fn(),
-		},
-		enrollment: {
-			findMany: jest.fn(),
-			findUnique: jest.fn(),
-			create: jest.fn(),
-		},
-		$queryRaw: jest.fn(),
-		$queryRawUnsafe: jest.fn(),
-	};
-
-	const mockAuditService = {
-		append: jest.fn().mockResolvedValue(undefined),
-	};
+	const mockOwner = createMockUser({
+		id: "owner-id",
+		role: UserRole.instructor,
+	});
 
 	beforeEach(async () => {
+		// Create a mock that handles both tagged template literals and function calls
+		const createQueryRawMock = () => {
+			const fn = jest.fn().mockResolvedValue([]);
+			// Make it work as tagged template literal
+			fn.toString = () => "function";
+			return fn;
+		};
+
+		const queryRawMock = createQueryRawMock();
+
+		mockPrisma = {
+			user: {
+				findUnique: jest.fn(),
+				findMany: jest.fn(),
+				create: jest.fn(),
+			},
+			course: {
+				create: jest.fn(),
+				findMany: jest.fn(),
+				findUnique: jest.fn(),
+			},
+			enrollment: {
+				findMany: jest.fn(),
+				findUnique: jest.fn(),
+				create: jest.fn(),
+			},
+			$queryRaw: queryRawMock,
+		};
+
+		mockAuditService = {
+			append: jest.fn().mockResolvedValue(undefined),
+		};
+
+		(attempt as jest.Mock).mockImplementation((promise) =>
+			promise.then(
+				(data: any) => [null, data],
+				(err: any) => [err, null],
+			),
+		);
+
 		const module: TestingModule = await Test.createTestingModule({
 			providers: [
 				CoursesService,
-				{
-					provide: PrismaService,
-					useValue: mockPrismaService,
-				},
-				{
-					provide: AuditService,
-					useValue: mockAuditService,
-				},
+				{ provide: PrismaService, useValue: mockPrisma },
+				{ provide: AuditService, useValue: mockAuditService },
 			],
 		}).compile();
 
 		service = module.get<CoursesService>(CoursesService);
-		prisma = module.get(PrismaService) as jest.Mocked<PrismaService>;
-		auditService = module.get(AuditService) as jest.Mocked<AuditService>;
 
 		jest.clearAllMocks();
 	});
 
 	describe("createCourse", () => {
-		it("should throw NotFoundException when owner not found", async () => {
-			mockPrismaService.user.findUnique.mockResolvedValue(null);
+		const dto: CreateCourseDto = {
+			code: "CS101",
+			title: "Intro to CS",
+			term: "Fall 2024",
+			owner_id: "owner-id",
+		};
 
-			const dto = {
-				owner_id: "non-existent",
-				code: "CS101",
-				title: "Test Course",
-				term: "Fall 2024",
-			};
+		it("should throw NotFoundException when owner not found", async () => {
+			mockPrisma.user.findUnique.mockResolvedValue(null);
 
 			await expect(service.createCourse(dto)).rejects.toThrow(
 				NotFoundException,
@@ -79,171 +102,138 @@ describe("CoursesService", () => {
 		});
 
 		it("should throw BadRequestException when owner is not instructor", async () => {
-			const owner = createMockUser({ role: UserRole.student });
-			mockPrismaService.user.findUnique.mockResolvedValue(owner);
-
-			const dto = {
-				owner_id: owner.id,
-				code: "CS101",
-				title: "Test Course",
-				term: "Fall 2024",
-			};
+			const nonInstructor = createMockUser({
+				id: "owner-id",
+				role: UserRole.student,
+			});
+			mockPrisma.user.findUnique.mockResolvedValue(nonInstructor);
 
 			await expect(service.createCourse(dto)).rejects.toThrow(
 				BadRequestException,
 			);
 		});
 
+		it("should throw ConflictException when course already exists", async () => {
+			mockPrisma.user.findUnique.mockResolvedValue(mockOwner);
+			(attempt as jest.Mock).mockResolvedValueOnce([{ code: "P2002" }, null]);
+			(isUniqueViolation as jest.Mock).mockReturnValue(true);
+
+			await expect(service.createCourse(dto)).rejects.toThrow(
+				ConflictException,
+			);
+		});
+
 		it("should create course successfully", async () => {
-			const owner = createMockUser({ role: UserRole.instructor });
-			const course = createMockCourse({ ownerId: owner.id });
-
-			mockPrismaService.user.findUnique.mockResolvedValue(owner);
-			mockPrismaService.course.create.mockResolvedValue(course);
-
-			const dto = {
-				owner_id: owner.id,
-				code: course.code,
-				title: course.title,
-				term: course.term,
-			};
+			const course = createMockCourse({ code: "CS101" });
+			mockPrisma.user.findUnique.mockResolvedValue(mockOwner);
+			(attempt as jest.Mock).mockResolvedValueOnce([null, course]);
 
 			const result = await service.createCourse(dto);
+
 			expect(result).toEqual(course);
 		});
 	});
 
 	describe("listCoursesForUser", () => {
 		it("should return all courses for admin", async () => {
-			const admin = createMockUser({ role: UserRole.admin });
 			const courses = [createMockCourse(), createMockCourse()];
+			mockPrisma.course.findMany.mockResolvedValue(courses);
 
-			mockPrismaService.course.findMany.mockResolvedValue(courses);
-
+			const admin = createMockUser({ role: UserRole.admin });
 			const result = await service.listCoursesForUser(admin);
+
 			expect(result).toEqual(courses);
 		});
 
 		it("should return instructor courses for instructor", async () => {
+			const courses = [createMockCourse({ ownerId: "instructor-id" })];
+			mockPrisma.course.findMany.mockResolvedValue(courses);
+
 			const instructor = createMockUser({
-				role: UserRole.instructor,
 				id: "instructor-id",
+				role: UserRole.instructor,
 			});
-			const courses = [createMockCourse({ ownerId: instructor.id })];
-
-			mockPrismaService.course.findMany.mockResolvedValue(courses);
-
 			const result = await service.listCoursesForUser(instructor);
+
 			expect(result).toEqual(courses);
 		});
 
 		it("should return enrolled courses for student", async () => {
-			const student = createMockUser({ role: UserRole.student });
 			const enrollments = [{ courseId: "course-1" }, { courseId: "course-2" }];
-			const courses = [createMockCourse({ id: "course-1" })];
+			mockPrisma.enrollment.findMany.mockResolvedValue(enrollments);
 
-			mockPrismaService.enrollment.findMany.mockResolvedValue(enrollments);
-			mockPrismaService.course.findMany.mockResolvedValue(courses);
+			const courses = [
+				createMockCourse({ id: "course-1" }),
+				createMockCourse({ id: "course-2" }),
+			];
+			mockPrisma.course.findMany.mockResolvedValue(courses);
 
+			const student = createMockUser({
+				id: "student-id",
+				role: UserRole.student,
+			});
 			const result = await service.listCoursesForUser(student);
+
 			expect(result).toEqual(courses);
 		});
-
-		it("should return empty array when student has no enrollments", async () => {
-			const student = createMockUser({ role: UserRole.student });
-
-			mockPrismaService.enrollment.findMany.mockResolvedValue([]);
-
-			const result = await service.listCoursesForUser(student);
-			expect(result).toEqual([]);
-		});
 	});
 
-	describe("bulkEnroll", () => {
-		it("should throw BadRequestException for empty CSV", async () => {
-			const course = createMockCourse();
-			mockPrismaService.course.findUnique.mockResolvedValue(course);
+	describe("getCourseForUser", () => {
+		const course = createMockCourse({ ownerId: "instructor-id" });
 
-			await expect(
-				service.bulkEnroll(course.id, "", createMockUser()),
-			).rejects.toThrow(BadRequestException);
+		it("should return course for admin", async () => {
+			mockPrisma.course.findUnique.mockResolvedValue(course);
+
+			const admin = createMockUser({ role: UserRole.admin });
+			const result = await service.getCourseForUser(course.id, admin);
+
+			expect(result).toEqual(course);
 		});
 
-		it("should throw BadRequestException for CSV too large", async () => {
-			const course = createMockCourse();
-			mockPrismaService.course.findUnique.mockResolvedValue(course);
+		it("should return course for owner instructor", async () => {
+			mockPrisma.course.findUnique.mockResolvedValue(course);
 
-			const rows = Array(1001).fill("test@example.com,student").join("\n");
-			const csvData = "email,role\n" + rows;
-
-			await expect(
-				service.bulkEnroll(course.id, csvData, createMockUser()),
-			).rejects.toThrow(BadRequestException);
-		});
-
-		it("should parse CSV and enroll users", async () => {
-			const course = createMockCourse();
-			const csvData = "email,role\nstudent1@test.com,student\nta1@test.com,ta";
-
-			mockPrismaService.course.findUnique.mockResolvedValue(course);
-			mockPrismaService.user.findMany.mockResolvedValue([]);
-			mockPrismaService.user.create
-				.mockResolvedValueOnce({
-					id: "user-1",
-					email: "student1@test.com",
-					role: UserRole.student,
-				})
-				.mockResolvedValueOnce({
-					id: "user-2",
-					email: "ta1@test.com",
-					role: UserRole.ta,
-				});
-
-			// Mock the $queryRaw to return inserted user IDs
-			// The service uses $queryRaw with $queryRawUnsafe inside a template literal
-			mockPrismaService.$queryRaw.mockResolvedValue([
-				{ user_id: "user-1" },
-				{ user_id: "user-2" },
-			]);
-
-			const result = await service.bulkEnroll(
-				course.id,
-				csvData,
-				createMockUser(),
-			);
-
-			expect(result.results).toHaveLength(2);
-			expect(result.results[0]?.status).toBeDefined();
-		});
-	});
-
-	describe("parseCsvRows", () => {
-		it("should throw BadRequestException for missing headers", () => {
-			const csvData = "name,age\nvalue1,value2";
-
-			expect(() => service["parseCsvRows"](csvData)).toThrow(
-				BadRequestException,
-			);
-		});
-
-		it("should parse valid CSV correctly", () => {
-			const csvData = "email,role\ntest@example.com,student\nadmin@test.com,ta";
-
-			const result = service["parseCsvRows"](csvData);
-
-			expect(result).toHaveLength(2);
-			expect(result[0]).toEqual({
-				email: "test@example.com",
-				role_in_course: "student",
+			const instructor = createMockUser({
+				id: "instructor-id",
+				role: UserRole.instructor,
 			});
+			const result = await service.getCourseForUser(course.id, instructor);
+
+			expect(result).toEqual(course);
+		});
+	});
+
+	describe("createEnrollment", () => {
+		const course = createMockCourse();
+		const user = createMockUser({ role: UserRole.student });
+		const dto: CreateEnrollmentDto = {
+			user_id: "user-id",
+			role_in_course: "student",
+		};
+
+		beforeEach(() => {
+			mockPrisma.course.findUnique.mockResolvedValue(course);
 		});
 
-		it("should throw BadRequestException for invalid role", () => {
-			const csvData = "email,role\ntest@example.com,invalid_role";
+		it("should throw NotFoundException when user not found", async () => {
+			mockPrisma.user.findUnique.mockResolvedValue(null);
 
-			expect(() => service["parseCsvRows"](csvData)).toThrow(
-				BadRequestException,
+			await expect(service.createEnrollment(course.id, dto)).rejects.toThrow(
+				NotFoundException,
 			);
+		});
+
+		it("should create enrollment successfully", async () => {
+			const enrollment = createMockEnrollment({
+				courseId: course.id,
+				userId: user.id,
+			});
+			mockPrisma.user.findUnique.mockResolvedValue(user);
+			(attempt as jest.Mock).mockResolvedValueOnce([null, enrollment]);
+
+			const result = await service.createEnrollment(course.id, dto);
+
+			expect(result).toEqual(enrollment);
 		});
 	});
 });

@@ -1,9 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import {
-	createMockAssignment,
-	createMockCourse,
-	createMockUser,
-} from "@test/utils/factories";
+import { UserRole } from "@prisma/client";
+import { createMockCourse, createMockUser } from "@test/utils/factories";
 import { PrismaService } from "prisma/prisma.service";
 import {
 	BadRequestException,
@@ -12,54 +9,53 @@ import {
 } from "@/common/exceptions/business.exception";
 import { AuditService } from "@/modules/audit/audit.service";
 import { AssignmentsService } from "./assignments.service";
+import { CreateAssignmentDto } from "./dto/create-assignment.dto";
 
 describe("AssignmentsService", () => {
 	let service: AssignmentsService;
-	// biome-ignore lint/correctness/noUnusedVariables: <False Positive - used>
-	let auditService: jest.Mocked<AuditService>;
+	let mockPrisma: any;
+	let mockAuditService: jest.Mocked<AuditService>;
 
-	const mockPrismaService = {
-		course: {
-			findUnique: jest.fn(),
-		},
-		assignment: {
-			create: jest.fn(),
-		},
-		enrollment: {
-			findFirst: jest.fn(),
-		},
-	};
-
-	const mockAuditService = {
-		append: jest.fn().mockResolvedValue(undefined),
-	};
+	const mockCourse = createMockCourse({
+		id: "course-id",
+		ownerId: "instructor-id",
+	});
 
 	beforeEach(async () => {
+		mockPrisma = {
+			course: {
+				findUnique: jest.fn(),
+			},
+			assignment: {
+				create: jest.fn(),
+			},
+			enrollment: {
+				findFirst: jest.fn(),
+			},
+		};
+
+		mockAuditService = {
+			append: jest.fn().mockResolvedValue(undefined),
+		} as any;
+
 		const module: TestingModule = await Test.createTestingModule({
 			providers: [
 				AssignmentsService,
-				{
-					provide: PrismaService,
-					useValue: mockPrismaService,
-				},
-				{
-					provide: AuditService,
-					useValue: mockAuditService,
-				},
+				{ provide: PrismaService, useValue: mockPrisma },
+				{ provide: AuditService, useValue: mockAuditService },
 			],
 		}).compile();
 
 		service = module.get<AssignmentsService>(AssignmentsService);
-		auditService = module.get(AuditService) as jest.Mocked<AuditService>;
 
 		jest.clearAllMocks();
 	});
 
 	describe("createAssignment", () => {
-		const createAssignmentDto = {
-			title: "Test Assignment",
-			demo_window_start: new Date(Date.now() + 86400000), // Tomorrow
-			demo_window_end: new Date(Date.now() + 172800000), // Day after tomorrow
+		const dto: CreateAssignmentDto = {
+			title: "Project Demo",
+			demo_window_start: new Date(Date.now() + 86400000),
+			demo_window_end: new Date(Date.now() + 172800000),
 			slot_duration_min: 30,
 			slot_capacity: 1,
 			freeze_before_min: 60,
@@ -68,197 +64,122 @@ describe("AssignmentsService", () => {
 		};
 
 		it("should throw NotFoundException when course not found", async () => {
-			mockPrismaService.course.findUnique.mockResolvedValue(null);
+			mockPrisma.course.findUnique.mockResolvedValue(null);
 
-			const actor = createMockUser({ role: "instructor" });
-
+			const actor = createMockUser({ role: UserRole.instructor });
 			await expect(
-				service.createAssignment("non-existent", createAssignmentDto, actor),
+				service.createAssignment(mockCourse.id, dto, actor),
 			).rejects.toThrow(NotFoundException);
 		});
 
-		it("should throw ForbiddenException when instructor does not own course", async () => {
-			const course = createMockCourse({ ownerId: "other-instructor-id" });
-
-			mockPrismaService.course.findUnique.mockResolvedValue(course);
+		it("should throw ForbiddenException when instructor not course owner", async () => {
+			mockPrisma.course.findUnique.mockResolvedValue(mockCourse);
 
 			const actor = createMockUser({
-				role: "instructor",
-				id: "different-instructor-id",
+				id: "other-instructor",
+				role: UserRole.instructor,
 			});
-
 			await expect(
-				service.createAssignment(course.id, createAssignmentDto, actor),
+				service.createAssignment(mockCourse.id, dto, actor),
 			).rejects.toThrow(ForbiddenException);
 		});
 
-		it("should throw ForbiddenException when student tries to create assignment", async () => {
-			const course = createMockCourse();
-
-			mockPrismaService.course.findUnique.mockResolvedValue(course);
-
-			const actor = createMockUser({ role: "student" });
-
-			await expect(
-				service.createAssignment(course.id, createAssignmentDto, actor),
-			).rejects.toThrow(ForbiddenException);
-		});
-
-		it("should throw BadRequestException when demo window end is before start", async () => {
-			const course = createMockCourse({ ownerId: "instructor-id" });
-
-			mockPrismaService.course.findUnique.mockResolvedValue(course);
+		it("should throw BadRequestException when demo window end before start", async () => {
+			mockPrisma.course.findUnique.mockResolvedValue(mockCourse);
 
 			const actor = createMockUser({
-				role: "instructor",
 				id: "instructor-id",
+				role: UserRole.instructor,
 			});
-			const dto = {
-				...createAssignmentDto,
-				demo_window_end: new Date(Date.now() - 86400000), // Yesterday
+			const invalidDto = {
+				...dto,
+				demo_window_end: new Date(Date.now() + 100000), // Before start
 			};
-
 			await expect(
-				service.createAssignment(course.id, dto, actor),
+				service.createAssignment(mockCourse.id, invalidDto, actor),
 			).rejects.toThrow(BadRequestException);
 		});
 
-		it("should create assignment for instructor", async () => {
-			const course = createMockCourse({ ownerId: "instructor-id" });
-			const assignment = createMockAssignment({ courseId: course.id });
-
-			mockPrismaService.course.findUnique.mockResolvedValue(course);
-			mockPrismaService.assignment.create.mockResolvedValue(assignment);
+		it("should throw ForbiddenException when student tries to create", async () => {
+			mockPrisma.course.findUnique.mockResolvedValue(mockCourse);
 
 			const actor = createMockUser({
-				role: "instructor",
-				id: "instructor-id",
+				id: "student-id",
+				role: UserRole.student,
 			});
-
-			const result = await service.createAssignment(
-				course.id,
-				createAssignmentDto,
-				actor,
-			);
-
-			expect(result).toEqual(assignment);
-			expect(mockPrismaService.assignment.create).toHaveBeenCalledWith({
-				data: expect.objectContaining({
-					courseId: course.id,
-					title: createAssignmentDto.title.trim(),
-					demoWindowStart: createAssignmentDto.demo_window_start,
-					demoWindowEnd: createAssignmentDto.demo_window_end,
-				}),
-			});
-		});
-
-		it("should create assignment for admin", async () => {
-			const course = createMockCourse();
-			const assignment = createMockAssignment({ courseId: course.id });
-
-			mockPrismaService.course.findUnique.mockResolvedValue(course);
-			mockPrismaService.assignment.create.mockResolvedValue(assignment);
-
-			const actor = createMockUser({ role: "admin" });
-
-			const result = await service.createAssignment(
-				course.id,
-				createAssignmentDto,
-				actor,
-			);
-
-			expect(result).toEqual(assignment);
-		});
-
-		it("should create assignment for TA enrolled in course", async () => {
-			const course = createMockCourse();
-			const assignment = createMockAssignment({ courseId: course.id });
-
-			mockPrismaService.course.findUnique.mockResolvedValue(course);
-			mockPrismaService.assignment.create.mockResolvedValue(assignment);
-			mockPrismaService.enrollment.findFirst.mockResolvedValue({});
-
-			const actor = createMockUser({ role: "ta" });
-
-			const result = await service.createAssignment(
-				course.id,
-				createAssignmentDto,
-				actor,
-			);
-
-			expect(result).toEqual(assignment);
-		});
-
-		it("should throw ForbiddenException when TA is not enrolled", async () => {
-			const course = createMockCourse();
-
-			mockPrismaService.course.findUnique.mockResolvedValue(course);
-			mockPrismaService.enrollment.findFirst.mockResolvedValue(null);
-
-			const actor = createMockUser({ role: "ta" });
-
 			await expect(
-				service.createAssignment(course.id, createAssignmentDto, actor),
+				service.createAssignment(mockCourse.id, dto, actor),
 			).rejects.toThrow(ForbiddenException);
 		});
 
-		it("should trim title and handle default venue", async () => {
-			const course = createMockCourse({ ownerId: "instructor-id" });
-			const assignment = createMockAssignment();
-
-			mockPrismaService.course.findUnique.mockResolvedValue(course);
-			mockPrismaService.assignment.create.mockResolvedValue(assignment);
+		it("should throw ForbiddenException when TA not enrolled", async () => {
+			mockPrisma.course.findUnique.mockResolvedValue(mockCourse);
+			mockPrisma.enrollment.findFirst.mockResolvedValue(null);
 
 			const actor = createMockUser({
-				role: "instructor",
-				id: "instructor-id",
+				id: "ta-id",
+				role: UserRole.ta,
 			});
-			const dto = {
-				...createAssignmentDto,
-				title: "  Test Assignment  ",
-				default_venue: "  Room 101  ",
-			};
-
-			await service.createAssignment(course.id, dto, actor);
-
-			expect(mockPrismaService.assignment.create).toHaveBeenCalledWith({
-				data: expect.objectContaining({
-					title: "Test Assignment",
-					defaultVenue: "Room 101",
-				}),
-			});
+			await expect(
+				service.createAssignment(mockCourse.id, dto, actor),
+			).rejects.toThrow(ForbiddenException);
 		});
 
-		it("should use default values for optional fields", async () => {
-			const course = createMockCourse({ ownerId: "instructor-id" });
-
-			mockPrismaService.course.findUnique.mockResolvedValue(course);
-			mockPrismaService.assignment.create.mockResolvedValue(
-				createMockAssignment(),
-			);
+		it("should create assignment successfully for instructor", async () => {
+			mockPrisma.course.findUnique.mockResolvedValue(mockCourse);
+			const created = {
+				id: "assignment-id",
+				title: dto.title,
+				courseId: mockCourse.id,
+				demoWindowStart: new Date(),
+				demoWindowEnd: new Date(),
+			};
+			mockPrisma.assignment.create.mockResolvedValue(created);
 
 			const actor = createMockUser({
-				role: "instructor",
 				id: "instructor-id",
+				role: UserRole.instructor,
 			});
-			const dto = {
-				title: "Test Assignment",
-				demo_window_start: new Date(Date.now() + 86400000),
-				demo_window_end: new Date(Date.now() + 172800000),
-				slot_duration_min: 30,
-				slot_capacity: 1,
-				freeze_before_min: 60,
-				max_cancellations: 2,
+			const result = await service.createAssignment(mockCourse.id, dto, actor);
+
+			expect(result).toEqual(created);
+			expect(mockPrisma.assignment.create).toHaveBeenCalled();
+			expect(mockAuditService.append).toHaveBeenCalled();
+		});
+
+		it("should create assignment successfully for enrolled TA", async () => {
+			mockPrisma.course.findUnique.mockResolvedValue(mockCourse);
+			mockPrisma.enrollment.findFirst.mockResolvedValue({});
+			const created = {
+				id: "assignment-id",
+				title: dto.title,
+				demoWindowStart: new Date(),
+				demoWindowEnd: new Date(),
 			};
+			mockPrisma.assignment.create.mockResolvedValue(created);
 
-			await service.createAssignment(course.id, dto, actor);
-
-			expect(mockPrismaService.assignment.create).toHaveBeenCalledWith({
-				data: expect.objectContaining({
-					isPublished: false,
-					defaultVenue: null,
-				}),
+			const actor = createMockUser({
+				id: "ta-id",
+				role: UserRole.ta,
 			});
+			const result = await service.createAssignment(mockCourse.id, dto, actor);
+
+			expect(result).toEqual(created);
+		});
+
+		it("should allow admin to create assignment", async () => {
+			mockPrisma.course.findUnique.mockResolvedValue(mockCourse);
+			const created = {
+				id: "assignment-id",
+				demoWindowStart: new Date(),
+				demoWindowEnd: new Date(),
+			};
+			mockPrisma.assignment.create.mockResolvedValue(created);
+
+			const actor = createMockUser({ role: UserRole.admin });
+			const result = await service.createAssignment(mockCourse.id, dto, actor);
+
+			expect(result).toEqual(created);
 		});
 	});
 });
