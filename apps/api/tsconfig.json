@@ -5,8 +5,10 @@
 		"outDir": "./dist",
 		"strictNullChecks": true,
 		"paths": {
-			"@/*": ["src/*"]
-		}
+			"@/*": ["src/*"],
+			"@test/*": ["test/*"]
+		},
+		"types": ["node", "jest"]
 	},
 	"exclude": ["node_modules", "dist"]
 }
