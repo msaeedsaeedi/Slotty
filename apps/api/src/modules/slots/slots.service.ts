@@ -1,11 +1,11 @@
+import { Injectable } from "@nestjs/common";
+import { Assignment, Prisma, SlotStatus, User } from "@prisma/client";
+import { PrismaService } from "prisma/prisma.service";
 import {
 	BadRequestException,
 	ForbiddenException,
-	Injectable,
 	NotFoundException,
-} from "@nestjs/common";
-import { Assignment, Prisma, SlotStatus, User } from "@prisma/client";
-import { PrismaService } from "prisma/prisma.service";
+} from "@/common/exceptions/business.exception";
 import { AuditService } from "@/modules/audit/audit.service";
 import { GenerateSlotsDto } from "./dto/generate-slots.dto.js";
 import { ListSlotsQueryDto } from "./dto/list-slots-query.dto.js";
@@ -39,20 +39,32 @@ export class SlotsService {
 			throw new NotFoundException("TA user not found.");
 		}
 		if (ta.role !== "ta") {
-			throw new BadRequestException("Slot owner must be a TA.");
+			throw new BadRequestException(
+				"INVALID_TA_ROLE",
+				"Slot owner must be a TA.",
+			);
 		}
 		if (actor.role === "ta" && ta.id !== actor.id) {
-			throw new ForbiddenException("TAs can only create their own slots.");
+			throw new ForbiddenException(
+				"SLOT_ACCESS_DENIED",
+				"TAs can only create their own slots.",
+			);
 		}
 		await this.assertTaEnrollment(ta.id, assignment.courseId);
 
 		if (assignment.demoWindowEnd <= assignment.demoWindowStart) {
-			throw new BadRequestException("Demo window end must be after start.");
+			throw new BadRequestException(
+				"INVALID_DEMO_WINDOW",
+				"Demo window end must be after start.",
+			);
 		}
 
 		const durationMs = assignment.slotDurationMin * 60 * 1000;
 		if (durationMs <= 0) {
-			throw new BadRequestException("Slot duration must be greater than zero.");
+			throw new BadRequestException(
+				"INVALID_SLOT_DURATION",
+				"Slot duration must be greater than zero.",
+			);
 		}
 
 		const slotsData: Prisma.DemoSlotCreateManyInput[] = [];
@@ -130,7 +142,10 @@ export class SlotsService {
 		if (query.date) {
 			const dayStart = new Date(`${query.date}T00:00:00Z`);
 			if (Number.isNaN(dayStart.getTime())) {
-				throw new BadRequestException("Invalid date format. Use YYYY-MM-DD.");
+				throw new BadRequestException(
+					"INVALID_DATE_FORMAT",
+					"Invalid date format. Use YYYY-MM-DD.",
+				);
 			}
 			where.startsAt = {
 				gte: dayStart,
@@ -148,7 +163,7 @@ export class SlotsService {
 
 	async updateSlot(slotId: string, dto: UpdateSlotDto, actor: User) {
 		if (dto.status === undefined && dto.venue === undefined) {
-			throw new BadRequestException("Nothing to update.");
+			throw new BadRequestException("NOTHING_TO_UPDATE", "Nothing to update.");
 		}
 
 		const slot = await this.prisma.demoSlot.findUnique({
@@ -160,6 +175,7 @@ export class SlotsService {
 
 		if (actor.role === "ta" && slot.taId !== actor.id) {
 			throw new ForbiddenException(
+				"SLOT_ACCESS_DENIED",
 				"You do not have permission to update this slot.",
 			);
 		}
@@ -184,7 +200,7 @@ export class SlotsService {
 		if (dto.venue !== undefined) {
 			const nextVenue = dto.venue.trim();
 			if (nextVenue.length === 0) {
-				throw new BadRequestException("Venue cannot be empty.");
+				throw new BadRequestException("EMPTY_VENUE", "Venue cannot be empty.");
 			}
 			if (slot.venue !== nextVenue) {
 				data.venue = nextVenue;
@@ -228,7 +244,10 @@ export class SlotsService {
 
 		if (actor.role === "instructor") {
 			if (!(await this.isCourseOwner(assignment.courseId, actor.id))) {
-				throw new ForbiddenException("Forbidden.");
+				throw new ForbiddenException(
+					"COURSE_ACCESS_DENIED",
+					"You do not have permission to access this course.",
+				);
 			}
 			return;
 		}
@@ -243,7 +262,7 @@ export class SlotsService {
 			return;
 		}
 
-		throw new ForbiddenException("Forbidden.");
+		throw new ForbiddenException("ACCESS_DENIED", "Forbidden.");
 	}
 
 	private async assertStudentEnrollment(
@@ -254,7 +273,10 @@ export class SlotsService {
 			where: { userId, courseId, roleInCourse: "student" },
 		});
 		if (!enrollment) {
-			throw new ForbiddenException("You are not enrolled in this course.");
+			throw new ForbiddenException(
+				"NOT_ENROLLED",
+				"You are not enrolled in this course.",
+			);
 		}
 	}
 
@@ -267,6 +289,7 @@ export class SlotsService {
 		});
 		if (!enrollment) {
 			throw new ForbiddenException(
+				"NOT_ASSIGNED_AS_TA",
 				"You are not assigned as a TA in this course.",
 			);
 		}

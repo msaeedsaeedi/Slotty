@@ -1,6 +1,10 @@
 import { Injectable } from "@nestjs/common";
 import { AllowedList } from "@prisma/client";
 import { PrismaService } from "prisma/prisma.service";
+import {
+	ConflictException,
+	NotFoundException,
+} from "@/common/exceptions/business.exception";
 import { isUniqueViolation } from "@/common/prisma.helpers";
 import { attempt } from "@/utils/attempt.util";
 import { CreateAllowlistEntryDto } from "./dto/create-allowlist-entry.dto";
@@ -45,7 +49,10 @@ export class AllowlistService {
 
 		if (error) {
 			if (isUniqueViolation(error)) {
-				throw new Error("Allowlist entry already exists.");
+				throw new ConflictException(
+					"ALLOWLIST_ENTRY_ALREADY_EXISTS",
+					"Allowlist entry already exists.",
+				);
 			}
 			throw error;
 		}
@@ -59,7 +66,7 @@ export class AllowlistService {
 		});
 
 		if (!entry) {
-			throw new Error("Allowlist entry not found.");
+			throw new NotFoundException("Allowlist entry not found.");
 		}
 
 		await this.prisma.allowedList.delete({

@@ -37,7 +37,10 @@ export class AuthController {
 		const [error] = await attempt(this.authService.handleGoogleLogin(profile));
 
 		if (error) {
-			throw new ForbiddenException("Google authentication failed");
+			throw new ForbiddenException(
+				"GOOGLE_AUTH_FAILED",
+				"Google authentication failed",
+			);
 		}
 
 		return res.redirect(this.authService.getWebAppUrl());

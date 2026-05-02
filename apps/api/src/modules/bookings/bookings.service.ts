@@ -1,13 +1,13 @@
+import { Injectable } from "@nestjs/common";
+import { Assignment, Booking, DemoSlot, Prisma, User } from "@prisma/client";
+import { PrismaService } from "prisma/prisma.service";
 import {
 	BadRequestException,
 	ConflictException,
 	ForbiddenException,
-	Injectable,
 	NotFoundException,
 	UnprocessableEntityException,
-} from "@nestjs/common";
-import { Assignment, Booking, DemoSlot, Prisma, User } from "@prisma/client";
-import { PrismaService } from "prisma/prisma.service";
+} from "@/common/exceptions/business.exception";
 import { AuditService } from "@/modules/audit/audit.service";
 import { CancelBookingDto } from "./dto/cancel-booking.dto";
 import { CreateBookingDto } from "./dto/create-booking.dto";
@@ -46,6 +46,7 @@ export class BookingsService {
 			// Step 2: Verify slot is published
 			if (slot.status !== "published") {
 				throw new ConflictException(
+					"SLOT_NOT_AVAILABLE",
 					`Slot is not available for booking (status: ${slot.status}).`,
 				);
 			}
@@ -62,7 +63,8 @@ export class BookingsService {
 
 			if (activeBookingCount >= slot.capacity) {
 				throw new ConflictException(
-					`Slot is at capacity (${activeBookingCount}/${slot.capacity}).`,
+					"SLOT_FULL",
+					`Slot is at capacity (${activeBookingCount}/${slot.capacity}). No available spots remaining.`,
 				);
 			}
 
@@ -77,7 +79,8 @@ export class BookingsService {
 
 			if (existingBooking) {
 				throw new ConflictException(
-					"You already have an active booking for this assignment.",
+					"DUPLICATE_BOOKING",
+					"You already have an active booking for this assignment. Only one booking per assignment is allowed.",
 				);
 			}
 
@@ -85,7 +88,8 @@ export class BookingsService {
 
 			if (now > assignment.demoWindowEnd) {
 				throw new UnprocessableEntityException(
-					"Assignment demo window has closed.",
+					"DEMO_WINDOW_CLOSED",
+					"Assignment demo window has closed. Booking is no longer permitted.",
 				);
 			}
 
@@ -101,7 +105,8 @@ export class BookingsService {
 
 			if (now > freezeStartsAt) {
 				throw new UnprocessableEntityException(
-					`Booking is not permitted within ${assignment.freezeBeforeMin} minutes of the slot start time.`,
+					"FREEZE_WINDOW_ACTIVE",
+					`Booking is not permitted within ${assignment.freezeBeforeMin} minutes of the slot start time. The freeze window started at ${freezeStartsAt.toISOString()}.`,
 				);
 			}
 
@@ -136,7 +141,9 @@ export class BookingsService {
 			});
 
 			if (!fullBooking) {
-				throw new NotFoundException("Booking not found after creation.");
+				throw new NotFoundException(
+					"Booking not found after creation. Please contact support.",
+				);
 			}
 
 			return fullBooking;
@@ -182,12 +189,14 @@ export class BookingsService {
 
 		if (actor.role === "student" && booking.studentId !== actor.id) {
 			throw new ForbiddenException(
+				"BOOKING_ACCESS_DENIED",
 				"You do not have permission to view this booking.",
 			);
 		}
 
 		if (actor.role === "ta" && booking.slot.taId !== actor.id) {
 			throw new ForbiddenException(
+				"BOOKING_ACCESS_DENIED",
 				"You do not have permission to view this booking.",
 			);
 		}
@@ -197,6 +206,7 @@ export class BookingsService {
 			booking.assignment.course.ownerId !== actor.id
 		) {
 			throw new ForbiddenException(
+				"BOOKING_ACCESS_DENIED",
 				"You do not have permission to view this booking.",
 			);
 		}
@@ -212,7 +222,10 @@ export class BookingsService {
 			throw new NotFoundException("Slot not found.");
 		}
 		if (actor.role === "ta" && slot.taId !== actor.id) {
-			throw new ForbiddenException();
+			throw new ForbiddenException(
+				"SLOT_ACCESS_DENIED",
+				"You do not have permission to view bookings for this slot.",
+			);
 		}
 
 		return this.prisma.booking.findMany({
@@ -255,6 +268,7 @@ export class BookingsService {
 			// Step 2: Validate current booking
 			if (currentBooking.status !== "booked") {
 				throw new BadRequestException(
+					"INVALID_BOOKING_STATUS",
 					`Cannot reschedule a booking with status: ${currentBooking.status}`,
 				);
 			}
@@ -268,7 +282,8 @@ export class BookingsService {
 
 			if (now > freezeStartsAt) {
 				throw new UnprocessableEntityException(
-					`Rescheduling is not permitted within ${assignment.freezeBeforeMin} minutes of the slot start time.`,
+					"FREEZE_WINDOW_ACTIVE",
+					`Rescheduling is not permitted within ${assignment.freezeBeforeMin} minutes of the slot start time. The freeze window started at ${freezeStartsAt.toISOString()}.`,
 				);
 			}
 
@@ -312,11 +327,15 @@ export class BookingsService {
 
 			// Step 6: Validate new slot
 			if (newSlot.status !== "published") {
-				throw new ConflictException("New slot is not available for booking.");
+				throw new ConflictException(
+					"SLOT_NOT_AVAILABLE",
+					"New slot is not available for booking.",
+				);
 			}
 
 			if (newSlot.assignmentId !== currentBooking.assignmentId) {
 				throw new BadRequestException(
+					"INVALID_SLOT_ASSIGNMENT",
 					"New slot must belong to the same assignment.",
 				);
 			}
@@ -328,7 +347,8 @@ export class BookingsService {
 
 			if (newSlotBookingCount >= newSlot.capacity) {
 				throw new ConflictException(
-					`New slot is at capacity (${newSlotBookingCount}/${newSlot.capacity}).`,
+					"SLOT_FULL",
+					`New slot is at capacity (${newSlotBookingCount}/${newSlot.capacity}). No available spots remaining.`,
 				);
 			}
 
@@ -358,7 +378,9 @@ export class BookingsService {
 			});
 
 			if (!fullNewBooking) {
-				throw new NotFoundException("Booking not found after rescheduling.");
+				throw new NotFoundException(
+					"Booking not found after rescheduling. Please contact support.",
+				);
 			}
 
 			return fullNewBooking;
@@ -424,6 +446,7 @@ export class BookingsService {
 
 			if (booking.status !== "booked") {
 				throw new BadRequestException(
+					"INVALID_BOOKING_STATUS",
 					`Cannot cancel a booking with status: ${booking.status}`,
 				);
 			}
@@ -440,6 +463,7 @@ export class BookingsService {
 
 			if (now > assignment.demoWindowEnd) {
 				throw new UnprocessableEntityException(
+					"DEMO_WINDOW_CLOSED",
 					"Assignment demo window has closed. Cancellation is no longer permitted.",
 				);
 			}
@@ -451,6 +475,7 @@ export class BookingsService {
 
 			if (now > freezeStartsAt) {
 				throw new UnprocessableEntityException(
+					"FREEZE_WINDOW_ACTIVE",
 					`Cancellation is not permitted within the freeze window (started at ${freezeStartsAt.toISOString()}).`,
 				);
 			}
@@ -458,12 +483,14 @@ export class BookingsService {
 			// Validate DTO before hitting the quota check so bad input fails fast.
 			if (dto.cancel_reason === "other" && !dto.cancel_note) {
 				throw new BadRequestException(
+					"MISSING_CANCEL_NOTE",
 					'cancel_note is required when cancel_reason is "other".',
 				);
 			}
 
 			if (dto.cancel_note && dto.cancel_note.length < 10) {
 				throw new BadRequestException(
+					"CANCEL_NOTE_TOO_SHORT",
 					"cancel_note must be at least 10 characters when provided.",
 				);
 			}
@@ -481,6 +508,7 @@ export class BookingsService {
 
 			if (previousCancellations >= assignment.maxCancellations) {
 				throw new UnprocessableEntityException(
+					"CANCELLATION_QUOTA_EXCEEDED",
 					`You have used all ${assignment.maxCancellations} permitted cancellation(s) for this assignment.`,
 				);
 			}
@@ -541,12 +569,14 @@ export class BookingsService {
 
 		if (booking.slot.taId !== actor.id) {
 			throw new ForbiddenException(
+				"BOOKING_ACCESS_DENIED",
 				"You do not have permission to update this booking.",
 			);
 		}
 
 		if (booking.status !== "booked") {
 			throw new BadRequestException(
+				"INVALID_BOOKING_STATUS",
 				`Cannot update a booking with status: ${booking.status}. Only 'booked' bookings can be marked as completed or no-show.`,
 			);
 		}
@@ -588,7 +618,10 @@ export class BookingsService {
 		});
 
 		if (!enrollment) {
-			throw new ForbiddenException("You are not enrolled in this course.");
+			throw new ForbiddenException(
+				"NOT_ENROLLED",
+				"You are not enrolled in this course.",
+			);
 		}
 	}
 }

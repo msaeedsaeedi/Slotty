@@ -5,9 +5,9 @@ import {
 	ParseUUIDPipe,
 	Post,
 	Req,
-	UnauthorizedException,
 } from "@nestjs/common";
 import { User } from "@prisma/client";
+import { UnauthorizedException } from "@/common/exceptions/business.exception";
 import { Roles } from "@/modules/auth/decorators/roles.decorator";
 import { AssignmentsService } from "./assignments.service";
 import { CreateAssignmentDto } from "./dto/create-assignment.dto";

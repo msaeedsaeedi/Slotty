@@ -1,11 +1,11 @@
+import { Injectable } from "@nestjs/common";
+import { Assignment, Course, Enrollment, User } from "@prisma/client";
+import { PrismaService } from "prisma/prisma.service";
 import {
 	BadRequestException,
 	ForbiddenException,
-	Injectable,
 	NotFoundException,
-} from "@nestjs/common";
-import { Assignment, Course, Enrollment, User } from "@prisma/client";
-import { PrismaService } from "prisma/prisma.service";
+} from "@/common/exceptions/business.exception";
 import { AuditService } from "@/modules/audit/audit.service";
 import { CreateAssignmentDto } from "./dto/create-assignment.dto";
 
@@ -32,7 +32,10 @@ export class AssignmentsService {
 		await this.assertCourseAccess(course, actor, "ta");
 
 		if (dto.demo_window_end <= dto.demo_window_start) {
-			throw new BadRequestException("Demo window end must be after start.");
+			throw new BadRequestException(
+				"INVALID_DEMO_WINDOW",
+				"Demo window end must be after start.",
+			);
 		}
 
 		const created = await this.prisma.assignment.create({
@@ -77,6 +80,7 @@ export class AssignmentsService {
 		if (actor.role === "instructor") {
 			if (course.ownerId !== actor.id) {
 				throw new ForbiddenException(
+					"COURSE_ACCESS_DENIED",
 					"You do not have permission to access this course.",
 				);
 			}
@@ -85,6 +89,7 @@ export class AssignmentsService {
 		if (actor.role === "ta") {
 			if (requiredRole && requiredRole !== "ta") {
 				throw new ForbiddenException(
+					"COURSE_ACCESS_DENIED",
 					"You do not have permission to access this course.",
 				);
 			}
@@ -96,6 +101,7 @@ export class AssignmentsService {
 			return;
 		}
 		throw new ForbiddenException(
+			"ACCESS_DENIED",
 			"You do not have permission to access this course.",
 		);
 	}
@@ -110,6 +116,7 @@ export class AssignmentsService {
 		});
 		if (!enrollment) {
 			throw new ForbiddenException(
+				"NOT_ENROLLED",
 				"You do not have permission to access this course.",
 			);
 		}

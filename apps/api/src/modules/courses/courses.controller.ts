@@ -10,12 +10,12 @@ import {
 	Post,
 	Query,
 	Req,
-	UnauthorizedException,
 	UploadedFile,
 	UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { User } from "@prisma/client";
+import { UnauthorizedException } from "@/common/exceptions/business.exception";
 import { Roles } from "@/modules/auth/decorators/roles.decorator";
 import { CoursesService } from "./courses.service";
 import { CreateCourseDto } from "./dto/create-course.dto";

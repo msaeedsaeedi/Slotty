@@ -1,13 +1,13 @@
-import {
-	BadRequestException,
-	ForbiddenException,
-	Injectable,
-	NotFoundException,
-} from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { User } from "@prisma/client";
 import { Profile } from "passport-google-oauth20";
 import { PrismaService } from "prisma/prisma.service";
+import {
+	BadRequestException,
+	ForbiddenException,
+	NotFoundException,
+} from "@/common/exceptions/business.exception";
 import { AllowlistService } from "./allowlist/allowlist.service";
 
 @Injectable()
@@ -22,6 +22,7 @@ export class AuthService {
 		const email = profile.emails?.[0]?.value;
 		if (!email) {
 			throw new BadRequestException(
+				"MISSING_EMAIL",
 				"Google profile does not include an email.",
 			);
 		}
@@ -29,6 +30,7 @@ export class AuthService {
 		const isAllowed = await this.allowlistService.isAllowed(email);
 		if (!isAllowed) {
 			throw new ForbiddenException(
+				"ACCESS_DENIED_ALLLOWLIST",
 				"Access denied. Your account is not on the allowlist.",
 			);
 		}
@@ -52,7 +54,10 @@ export class AuthService {
 		}
 
 		if (existing.status === "disabled") {
-			throw new ForbiddenException("User account is disabled.");
+			throw new ForbiddenException(
+				"USER_DISABLED",
+				"User account is disabled.",
+			);
 		}
 
 		return this.prisma.user.update({
@@ -66,7 +71,10 @@ export class AuthService {
 
 	async getSessionUser(userId?: string): Promise<User> {
 		if (!userId) {
-			throw new BadRequestException("Session user is missing.");
+			throw new BadRequestException(
+				"MISSING_SESSION",
+				"Session user is missing.",
+			);
 		}
 
 		const user = await this.prisma.user.findUnique({ where: { id: userId } });

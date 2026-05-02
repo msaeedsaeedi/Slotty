@@ -8,9 +8,9 @@ import {
 	Post,
 	Query,
 	Req,
-	UnauthorizedException,
 } from "@nestjs/common";
 import { User } from "@prisma/client";
+import { UnauthorizedException } from "@/common/exceptions/business.exception";
 import { Roles } from "@/modules/auth/decorators/roles.decorator";
 import { BookingsService } from "@/modules/bookings/bookings.service";
 import { GenerateSlotsDto } from "./dto/generate-slots.dto";

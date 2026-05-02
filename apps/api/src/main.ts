@@ -9,6 +9,7 @@ import session from "express-session";
 import helmet from "helmet";
 import { RedisClientType } from "redis";
 import { AppModule } from "./app.module";
+import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 
 async function bootstrap() {
 	const app = await NestFactory.create(AppModule, {
@@ -38,6 +39,9 @@ async function bootstrap() {
 			},
 		}),
 	);
+
+	// Global exception filter for standardized error responses
+	app.useGlobalFilters(new AllExceptionsFilter());
 
 	// CORS configuration
 	const corsOrigin = configService.get<string>("webapp.origin");

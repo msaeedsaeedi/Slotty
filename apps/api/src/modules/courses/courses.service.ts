@@ -1,11 +1,11 @@
+import { Injectable } from "@nestjs/common";
+import { Course, Enrollment, User } from "@prisma/client";
+import { PrismaService } from "prisma/prisma.service";
 import {
 	BadRequestException,
 	ConflictException,
-	Injectable,
 	NotFoundException,
-} from "@nestjs/common";
-import { Course, Enrollment, User } from "@prisma/client";
-import { PrismaService } from "prisma/prisma.service";
+} from "@/common/exceptions/business.exception";
 import { isUniqueViolation } from "@/common/prisma.helpers";
 import { AuditService } from "@/modules/audit/audit.service";
 import { attempt } from "@/utils/attempt.util";
@@ -27,7 +27,10 @@ export class CoursesService {
 			throw new NotFoundException("Owner not found.");
 		}
 		if (owner.role !== "instructor") {
-			throw new BadRequestException("Course owner must be an instructor.");
+			throw new BadRequestException(
+				"INVALID_OWNER_ROLE",
+				"Course owner must be an instructor.",
+			);
 		}
 
 		const [error, course] = await attempt(
@@ -44,6 +47,7 @@ export class CoursesService {
 		if (error) {
 			if (isUniqueViolation(error)) {
 				throw new ConflictException(
+					"COURSE_ALREADY_EXISTS",
 					"Course code already exists for this term.",
 				);
 			}
@@ -114,7 +118,10 @@ export class CoursesService {
 		}
 
 		if (user.role !== dto.role_in_course) {
-			throw new BadRequestException("User role does not match course role.");
+			throw new BadRequestException(
+				"ROLE_MISMATCH",
+				"User role does not match course role.",
+			);
 		}
 
 		const [error, result] = await attempt(
@@ -129,7 +136,10 @@ export class CoursesService {
 
 		if (error) {
 			if (isUniqueViolation(error)) {
-				throw new ConflictException("User is already enrolled in this course.");
+				throw new ConflictException(
+					"ALREADY_ENROLLED",
+					"User is already enrolled in this course.",
+				);
 			}
 			throw error;
 		}
@@ -150,12 +160,14 @@ export class CoursesService {
 
 		if (rows.length === 0) {
 			throw new BadRequestException(
+				"EMPTY_CSV",
 				"CSV file must contain at least one data row with headers: email,role",
 			);
 		}
 
 		if (rows.length > 1000) {
 			throw new BadRequestException(
+				"CSV_TOO_LARGE",
 				"CSV file must not contain more than 1000 rows.",
 			);
 		}
@@ -288,6 +300,7 @@ export class CoursesService {
 
 		if (lines.length < 2) {
 			throw new BadRequestException(
+				"INVALID_CSV_FORMAT",
 				"CSV must contain a header row and at least one data row.",
 			);
 		}
@@ -302,6 +315,7 @@ export class CoursesService {
 
 		if (emailIdx === -1 || roleIdx === -1) {
 			throw new BadRequestException(
+				"MISSING_CSV_HEADERS",
 				"CSV must contain 'email' and 'role' columns.",
 			);
 		}
@@ -315,12 +329,14 @@ export class CoursesService {
 
 			if (!email || !role) {
 				throw new BadRequestException(
+					"MISSING_CSV_FIELDS",
 					`Row ${i + 1} has missing email or role.`,
 				);
 			}
 
 			if (role !== "student" && role !== "ta") {
 				throw new BadRequestException(
+					"INVALID_ROLE",
 					`Row ${i + 1} has invalid role '${role}'. Must be 'student' or 'ta'.`,
 				);
 			}

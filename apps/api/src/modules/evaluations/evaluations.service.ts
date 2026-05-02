@@ -1,13 +1,13 @@
+import { Injectable } from "@nestjs/common";
+import { BookingStatus, Evaluation, Prisma, UserRole } from "@prisma/client";
+import { PrismaService } from "prisma/prisma.service";
 import {
 	ConflictException,
 	ForbiddenException,
-	Injectable,
 	InternalServerErrorException,
 	NotFoundException,
 	UnprocessableEntityException,
-} from "@nestjs/common";
-import { BookingStatus, Evaluation, Prisma, UserRole } from "@prisma/client";
-import { PrismaService } from "prisma/prisma.service";
+} from "@/common/exceptions/business.exception";
 import { isUniqueViolation } from "@/common/prisma.helpers";
 import { AuditService } from "@/modules/audit/audit.service";
 import { attempt } from "@/utils/attempt.util";
@@ -59,17 +59,23 @@ export class EvaluationsService {
 			}),
 		);
 		if (bookingErr)
-			throw new InternalServerErrorException("Failed to fetch booking");
+			throw new InternalServerErrorException(
+				"Failed to fetch booking. Please try again.",
+			);
 		if (!booking)
 			throw new NotFoundException(`Booking ${dto.bookingId} not found`);
 
 		if (booking.slot.taId !== taId) {
-			throw new ForbiddenException("You are not the TA for this booking slot");
+			throw new ForbiddenException(
+				"BOOKING_ACCESS_DENIED",
+				"You are not the TA for this booking slot",
+			);
 		}
 
 		// 2. Only completed bookings get evaluated
 		if (booking.status !== BookingStatus.completed) {
 			throw new UnprocessableEntityException(
+				"BOOKING_NOT_COMPLETED",
 				'Evaluations can only be created for bookings with status "completed"',
 			);
 		}
@@ -91,10 +97,13 @@ export class EvaluationsService {
 		if (createErr) {
 			if (isUniqueViolation(createErr)) {
 				throw new ConflictException(
+					"EVALUATION_ALREADY_EXISTS",
 					"An evaluation already exists for this booking",
 				);
 			}
-			throw new InternalServerErrorException("Failed to create evaluation");
+			throw new InternalServerErrorException(
+				"Failed to create evaluation. Please try again.",
+			);
 		}
 
 		await this.auditService.append({
@@ -146,11 +155,24 @@ export class EvaluationsService {
 			this.prisma.evaluation.findUnique({ where: { id } }),
 		);
 		if (findErr)
-			throw new InternalServerErrorException("Failed to fetch evaluation");
+			throw new InternalServerErrorException(
+				"Failed to fetch evaluation. Please try again.",
+			);
 		if (!evaluation) throw new NotFoundException(`Evaluation ${id} not found`);
 
 		if (actorRole !== UserRole.admin && evaluation.taId !== actorId) {
-			throw new ForbiddenException("You do not own this evaluation");
+			throw new ForbiddenException(
+				"EVALUATION_ACCESS_DENIED",
+				"You do not own this evaluation",
+			);
+		}
+
+		// Admins can override submitted evaluations; TAs cannot
+		if (evaluation.submittedAt && actorRole !== UserRole.admin) {
+			throw new ForbiddenException(
+				"EVALUATION_ALREADY_SUBMITTED",
+				"Submitted evaluations are locked. Contact an administrator to request an override.",
+			);
 		}
 
 		// Admins can override submitted evaluations; TAs cannot
@@ -176,7 +198,9 @@ export class EvaluationsService {
 			}),
 		);
 		if (updateErr)
-			throw new InternalServerErrorException("Failed to update evaluation");
+			throw new InternalServerErrorException(
+				"Failed to update evaluation. Please try again.",
+			);
 
 		await this.auditService.append({
 			actorId,
@@ -227,12 +251,17 @@ export class EvaluationsService {
 			}),
 		);
 		if (assignErr)
-			throw new InternalServerErrorException("Failed to fetch assignment");
+			throw new InternalServerErrorException(
+				"Failed to fetch assignment. Please try again.",
+			);
 		if (!assignment)
 			throw new NotFoundException(`Assignment ${assignmentId} not found`);
 
 		if (!isAdmin && assignment.demoSlots.length === 0) {
-			throw new ForbiddenException("You are not assigned to this assignment");
+			throw new ForbiddenException(
+				"NOT_ASSIGNED_TO_ASSIGNMENT",
+				"You are not assigned to this assignment",
+			);
 		}
 
 		const completedBookingIds = assignment.demoSlots.flatMap((s) =>
@@ -241,6 +270,7 @@ export class EvaluationsService {
 
 		if (completedBookingIds.length === 0) {
 			throw new UnprocessableEntityException(
+				"NO_COMPLETED_BOOKINGS",
 				"No completed bookings found for this assignment — nothing to submit",
 			);
 		}
@@ -256,7 +286,9 @@ export class EvaluationsService {
 			}),
 		);
 		if (evalErr)
-			throw new InternalServerErrorException("Failed to fetch evaluations");
+			throw new InternalServerErrorException(
+				"Failed to fetch evaluations. Please try again.",
+			);
 
 		const evaluatedBookingIds = new Set(existingEvals!.map((e) => e.bookingId));
 		const unevaluated = completedBookingIds.filter(
@@ -265,6 +297,7 @@ export class EvaluationsService {
 
 		if (unevaluated.length > 0) {
 			throw new UnprocessableEntityException(
+				"MISSING_EVALUATIONS",
 				`${unevaluated.length} completed booking(s) are missing evaluations. ` +
 					"All completed demos must be evaluated before submission.",
 			);
@@ -276,6 +309,7 @@ export class EvaluationsService {
 
 		if (pendingIds.length === 0) {
 			throw new ConflictException(
+				"ALREADY_SUBMITTED",
 				"All evaluations for this assignment have already been submitted",
 			);
 		}
@@ -336,7 +370,9 @@ export class EvaluationsService {
 			}),
 		);
 		if (err)
-			throw new InternalServerErrorException("Failed to fetch evaluations");
+			throw new InternalServerErrorException(
+				"Failed to fetch evaluations. Please try again.",
+			);
 
 		// privateNote is TA-only — strip before returning to instructors
 		const sanitized = evaluations!.map((e) =>
@@ -356,11 +392,15 @@ export class EvaluationsService {
 		if (actorRole === UserRole.admin) return;
 
 		if (actorRole === UserRole.ta && evaluation.taId !== actorId) {
-			throw new ForbiddenException("You do not own this evaluation");
+			throw new ForbiddenException(
+				"EVALUATION_ACCESS_DENIED",
+				"You do not own this evaluation",
+			);
 		}
 
 		if (actorRole === UserRole.instructor && !evaluation.visibleToInstructor) {
 			throw new ForbiddenException(
+				"EVALUATION_NOT_SUBMITTED",
 				"This evaluation has not been submitted yet",
 			);
 		}
