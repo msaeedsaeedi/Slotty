@@ -17,7 +17,7 @@ import { BookingsService } from "./bookings.service";
 import { CancelBookingDto } from "./dto/cancel-booking.dto";
 import { CreateBookingDto } from "./dto/create-booking.dto";
 import { RescheduleBookingDto } from "./dto/reschedule-booking.dto";
-import { UpdateBookingStatusDto } from "./dto/update-booking-status";
+import { UpdateBookingStatusDto } from "./dto/update-booking-status.dto";
 
 @Controller({
 	path: "bookings",
