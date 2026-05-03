@@ -22,4 +22,8 @@ export const validationSchema = Joi.object({
 	AUTH_REDIRECT_URL: Joi.string()
 		.uri()
 		.default("http://localhost:3000/auth/callback"),
+
+	VAPID_PUBLIC_KEY: Joi.string(),
+	VAPID_PRIVATE_KEY: Joi.string(),
+	VAPID_SUBJECT: Joi.string().uri(),
 });

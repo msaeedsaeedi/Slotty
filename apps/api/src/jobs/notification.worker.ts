@@ -25,16 +25,18 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
 	// ── Worker setup ─────────────────────────────────────────────────────────
 
 	onModuleInit() {
-		const vapidPublicKey = this.configService.get<string>("VAPID_PUBLIC_KEY");
-		const vapidPrivateKey = this.configService.get<string>("VAPID_PRIVATE_KEY");
-		const vapidSubject = this.configService.get<string>("VAPID_SUBJECT");
+		const vapid = this.configService.get<{
+			publicKey: string;
+			privateKey: string;
+			subject: string;
+		}>("vapid");
 
-		if (vapidPublicKey && vapidPrivateKey && vapidSubject) {
-			webPush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+		if (vapid?.publicKey && vapid?.privateKey && vapid?.subject) {
+			webPush.setVapidDetails(vapid.subject, vapid.publicKey, vapid.privateKey);
 			this.logger.log("Web Push VAPID details configured");
 		} else {
 			this.logger.warn(
-				"VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, or VAPID_SUBJECT not set. " +
+				"VAPID public key, private key, or subject not set. " +
 					"Web Push notifications will not be sent.",
 			);
 		}

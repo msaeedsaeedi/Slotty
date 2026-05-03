@@ -27,4 +27,10 @@ export const configuration = () => ({
 		authRedirectURL:
 			process.env.AUTH_REDIRECT_URL || "http://localhost:3000/auth/callback",
 	},
+
+	vapid: {
+		publicKey: process.env.VAPID_PUBLIC_KEY,
+		privateKey: process.env.VAPID_PRIVATE_KEY,
+		subject: process.env.VAPID_SUBJECT,
+	},
 });
