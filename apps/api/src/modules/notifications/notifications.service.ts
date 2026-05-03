@@ -7,8 +7,7 @@ import {
 	NotFoundException,
 	OnModuleDestroy,
 } from "@nestjs/common";
-import { NotificationType, Prisma } from "@prisma/client";
-import { InputJsonValue } from "@prisma/client/runtime/client";
+import { NotificationType, Prisma } from "@repo/database";
 import { Queue } from "bullmq";
 import { PrismaService } from "prisma/prisma.service";
 import { Observable, Subject } from "rxjs";
@@ -75,7 +74,7 @@ export class NotificationsService implements OnModuleDestroy {
 
 		// 1. Always persist — the DB record is the source of truth for in-app.
 		const notification = await this.prisma.notification.create({
-			data: { userId, type, title, body, data: data as InputJsonValue },
+			data: { userId, type, title, body, data: data as Prisma.InputJsonValue },
 		});
 
 		// 2. Push to SSE immediately so the browser updates without polling.

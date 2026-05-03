@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { User } from "@prisma/client";
+import { User } from "@repo/database";
 import { Profile } from "passport-google-oauth20";
 import { PrismaService } from "prisma/prisma.service";
 import {

@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { BookingStatus, Evaluation, Prisma, UserRole } from "@prisma/client";
+import { BookingStatus, Evaluation, Prisma, UserRole } from "@repo/database";
 import { PrismaService } from "prisma/prisma.service";
 import {
 	ConflictException,

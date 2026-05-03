@@ -1,5 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { BookingStatus, UserRole } from "@prisma/client";
+import { BookingStatus, UserRole } from "@repo/database";
 import { PrismaService } from "prisma/prisma.service";
 import {
 	ConflictException,

@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { Course, Enrollment, User } from "@prisma/client";
+import { Course, Enrollment, User } from "@repo/database";
 import { PrismaService } from "prisma/prisma.service";
 import {
 	BadRequestException,

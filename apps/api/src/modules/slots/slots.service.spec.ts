@@ -1,5 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { SlotStatus, UserRole } from "@prisma/client";
+import { SlotStatus, UserRole } from "@repo/database";
 import { PrismaService } from "prisma/prisma.service";
 import {
 	BadRequestException,

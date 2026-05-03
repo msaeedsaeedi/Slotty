@@ -83,10 +83,10 @@ async function bootstrap() {
 		.setTitle("Slotty API")
 		.setDescription("API documentation for Slotty slot booking system")
 		.setVersion("1.0")
-		.addCookieAuth("connect.sid", {
+		.addCookieAuth(sessionName, {
 			type: "apiKey",
 			in: "cookie",
-			name: "connect.sid",
+			name: sessionName,
 		})
 		.build();
 	const document = SwaggerModule.createDocument(app, config, {

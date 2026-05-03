@@ -1,5 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { UserRole, UserStatus } from "@prisma/client";
+import { UserRole, UserStatus } from "@repo/database";
 import { createMockUser } from "@test/utils/factories";
 import { PrismaService } from "prisma/prisma.service";
 import { ConflictException } from "@/common/exceptions/business.exception";

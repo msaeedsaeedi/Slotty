@@ -10,7 +10,7 @@ import {
 	User,
 	UserRole,
 	UserStatus,
-} from "@prisma/client";
+} from "@repo/database";
 
 export function createMockUser(overrides?: Partial<User>): User {
 	return {

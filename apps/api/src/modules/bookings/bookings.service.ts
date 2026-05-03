@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { Assignment, Booking, DemoSlot, Prisma, User } from "@prisma/client";
+import { Assignment, Booking, DemoSlot, Prisma, User } from "@repo/database";
 import { PrismaService } from "prisma/prisma.service";
 import {
 	BadRequestException,

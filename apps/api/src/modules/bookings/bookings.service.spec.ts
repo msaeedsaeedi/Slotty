@@ -1,5 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { BookingStatus } from "@prisma/client";
+import { BookingStatus } from "@repo/database";
 import {
 	createMockAssignment,
 	createMockSlot,

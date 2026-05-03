@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { NotificationType } from "@prisma/client";
+import { NotificationType } from "@repo/database";
 import {
 	IsArray,
 	IsIn,

@@ -1,5 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { User } from "@prisma/client";
+import { User } from "@repo/database";
 import { RequestWithUser } from "@/modules/auth/auth.types";
 import { AssignmentController } from "./assignments.controller";
 import { AssignmentsService } from "./assignments.service";

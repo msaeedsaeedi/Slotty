@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { AllowedList } from "@prisma/client";
+import { AllowedList } from "@repo/database";
 import { PrismaService } from "prisma/prisma.service";
 import {
 	ConflictException,

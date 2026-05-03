@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@repo/database";
 import { PrismaService } from "prisma/prisma.service";
 import { CreateAuditEventDto } from "./dto/create-audit-event.dto";
 

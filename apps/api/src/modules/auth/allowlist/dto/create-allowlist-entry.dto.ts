@@ -1,5 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { AllowedListType } from "@prisma/client";
+import { AllowedListType } from "@repo/database";
 import { IsEnum, IsString, MinLength } from "class-validator";
 
 export class CreateAllowlistEntryDto {

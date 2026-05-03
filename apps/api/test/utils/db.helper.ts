@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@repo/database";
 
 // Use test database URL
 const testPrisma = new PrismaClient({

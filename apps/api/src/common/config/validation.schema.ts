@@ -25,5 +25,5 @@ export const validationSchema = Joi.object({
 
 	VAPID_PUBLIC_KEY: Joi.string(),
 	VAPID_PRIVATE_KEY: Joi.string(),
-	VAPID_SUBJECT: Joi.string().uri(),
+	VAPID_SUBJECT: Joi.string(),
 });

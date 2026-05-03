@@ -1,4 +1,4 @@
-import { UserRole, UserStatus } from "@prisma/client";
+import { UserRole, UserStatus } from "@repo/database";
 import { createMockUser } from "./factories";
 
 export function createMockSession(userOverrides?: Partial<unknown>) {
