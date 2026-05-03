@@ -11,6 +11,14 @@ import {
 	Query,
 	Req,
 } from "@nestjs/common";
+import {
+	ApiBody,
+	ApiOperation,
+	ApiParam,
+	ApiQuery,
+	ApiResponse,
+	ApiTags,
+} from "@nestjs/swagger";
 import { User, UserRole } from "@prisma/client";
 import { Request } from "express";
 import { Roles } from "@/modules/auth/decorators/roles.decorator";
@@ -32,6 +40,7 @@ import { EvaluationsService } from "./evaluations.service";
  * GET    /courses/:courseId/evaluations                instructor, admin
  * ─────────────────────────────────────────────────────────────────────
  */
+@ApiTags("Evaluations")
 @Controller({
 	version: "1",
 })
@@ -41,6 +50,9 @@ export class EvaluationsController {
 	// ─── POST /evaluations ──────────────────────────────────────────────────
 
 	@Post("evaluations")
+	@ApiOperation({ summary: "Create a new evaluation" })
+	@ApiBody({ type: CreateEvaluationDto })
+	@ApiResponse({ status: 201, description: "Evaluation created successfully" })
 	@Roles("ta", "admin")
 	@HttpCode(HttpStatus.CREATED)
 	async create(@Req() req: Request, @Body() dto: CreateEvaluationDto) {
@@ -52,6 +64,14 @@ export class EvaluationsController {
 	// ─── GET /evaluations/:id ───────────────────────────────────────────────
 
 	@Get("evaluations/:id")
+	@ApiOperation({ summary: "Get an evaluation by ID" })
+	@ApiParam({
+		name: "id",
+		description: "UUID of the evaluation",
+		format: "uuid",
+	})
+	@ApiResponse({ status: 200, description: "Evaluation details" })
+	@ApiResponse({ status: 404, description: "Evaluation not found" })
 	@Roles("ta", "instructor", "admin")
 	async findOne(@Req() req: Request, @Param("id", ParseUUIDPipe) id: string) {
 		const user = (req as { user?: User }).user;
@@ -66,6 +86,14 @@ export class EvaluationsController {
 	// ─── PATCH /evaluations/:id ─────────────────────────────────────────────
 
 	@Patch("evaluations/:id")
+	@ApiOperation({ summary: "Update an evaluation" })
+	@ApiParam({
+		name: "id",
+		description: "UUID of the evaluation",
+		format: "uuid",
+	})
+	@ApiBody({ type: UpdateEvaluationDto })
+	@ApiResponse({ status: 200, description: "Evaluation updated successfully" })
 	@Roles("ta", "admin")
 	async update(
 		@Req() req: Request,
@@ -90,6 +118,16 @@ export class EvaluationsController {
 	 * Admins may submit evaluations across all TAs for the assignment.
 	 */
 	@Post("assignments/:assignmentId/evaluations/submit")
+	@ApiOperation({ summary: "Submit all evaluations for an assignment" })
+	@ApiParam({
+		name: "assignmentId",
+		description: "UUID of the assignment",
+		format: "uuid",
+	})
+	@ApiResponse({
+		status: 200,
+		description: "Evaluations submitted successfully",
+	})
 	@Roles("ta", "admin")
 	async submitBatch(
 		@Req() req: Request,
@@ -112,6 +150,19 @@ export class EvaluationsController {
 	 * Optionally filtered by assignmentId via query param.
 	 */
 	@Get("courses/:courseId/evaluations")
+	@ApiOperation({ summary: "Get all evaluations for a course" })
+	@ApiParam({
+		name: "courseId",
+		description: "UUID of the course",
+		format: "uuid",
+	})
+	@ApiQuery({
+		name: "assignmentId",
+		required: false,
+		description: "Filter by assignment UUID",
+		format: "uuid",
+	})
+	@ApiResponse({ status: 200, description: "List of evaluations" })
 	@Roles("instructor", "admin")
 	async findByCourse(
 		@Param("courseId", ParseUUIDPipe) courseId: string,

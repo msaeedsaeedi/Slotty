@@ -14,6 +14,14 @@ import {
 	UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import {
+	ApiBody,
+	ApiConsumes,
+	ApiOperation,
+	ApiParam,
+	ApiResponse,
+	ApiTags,
+} from "@nestjs/swagger";
 import { User } from "@prisma/client";
 import { UnauthorizedException } from "@/common/exceptions/business.exception";
 import { Roles } from "@/modules/auth/decorators/roles.decorator";
@@ -21,6 +29,7 @@ import { CoursesService } from "./courses.service";
 import { CreateCourseDto } from "./dto/create-course.dto";
 import { CreateEnrollmentDto } from "./dto/create-enrollment.dto";
 
+@ApiTags("Courses")
 @Controller({
 	path: "courses",
 	version: "1",
@@ -29,6 +38,8 @@ export class CoursesController {
 	constructor(private readonly coursesService: CoursesService) {}
 
 	@Post()
+	@ApiOperation({ summary: "Create a new course" })
+	@ApiResponse({ status: 201, description: "Course created successfully" })
 	@Roles("admin")
 	async createCourse(@Body() dto: CreateCourseDto) {
 		const course = await this.coursesService.createCourse(dto);
@@ -36,6 +47,8 @@ export class CoursesController {
 	}
 
 	@Get()
+	@ApiOperation({ summary: "List courses for the authenticated user" })
+	@ApiResponse({ status: 200, description: "List of courses" })
 	@Roles("student", "ta", "instructor", "admin")
 	async listCourses(
 		@Query("term") term: string | undefined,
@@ -51,6 +64,14 @@ export class CoursesController {
 	}
 
 	@Get(":courseId")
+	@ApiOperation({ summary: "Get a specific course by ID" })
+	@ApiParam({
+		name: "courseId",
+		description: "UUID of the course",
+		format: "uuid",
+	})
+	@ApiResponse({ status: 200, description: "Course details" })
+	@ApiResponse({ status: 404, description: "Course not found" })
 	@Roles("student", "ta", "instructor", "admin")
 	async getCourse(
 		@Param("courseId", ParseUUIDPipe) courseId: string,
@@ -65,6 +86,13 @@ export class CoursesController {
 	}
 
 	@Post(":courseId/enrollments")
+	@ApiOperation({ summary: "Enroll a user in a course" })
+	@ApiParam({
+		name: "courseId",
+		description: "UUID of the course",
+		format: "uuid",
+	})
+	@ApiResponse({ status: 201, description: "Enrollment created successfully" })
 	@Roles("admin")
 	async createEnrollment(
 		@Param("courseId", ParseUUIDPipe) courseId: string,
@@ -79,6 +107,21 @@ export class CoursesController {
 
 	// TODO: Implement CSV streaming for large files instead of loading entire file into memory
 	@Post(":courseId/enrollments/bulk")
+	@ApiOperation({ summary: "Bulk enroll students from CSV file" })
+	@ApiParam({
+		name: "courseId",
+		description: "UUID of the course",
+		format: "uuid",
+	})
+	@ApiConsumes("multipart/form-data")
+	@ApiBody({
+		description: "CSV file with columns: email, role_in_course (student/ta)",
+		schema: {
+			type: "object",
+			properties: { file: { type: "string", format: "binary" } },
+		},
+	})
+	@ApiResponse({ status: 201, description: "Bulk enrollment processed" })
 	@Roles("admin")
 	@UseInterceptors(FileInterceptor("file"))
 	async bulkEnroll(

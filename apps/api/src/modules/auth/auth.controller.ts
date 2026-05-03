@@ -9,12 +9,19 @@ import {
 	UseGuards,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
+import {
+	ApiExcludeEndpoint,
+	ApiOperation,
+	ApiResponse,
+	ApiTags,
+} from "@nestjs/swagger";
 import { Request, Response } from "express";
 import { Profile } from "passport-google-oauth20";
 import { attempt } from "@/utils/attempt.util";
 import { AuthService } from "./auth.service";
 import { Public } from "./decorators/public.decorator";
 
+@ApiTags("Auth")
 @Controller({
 	path: "auth",
 	version: "1",
@@ -24,6 +31,11 @@ export class AuthController {
 
 	@Public()
 	@Get("google")
+	@ApiOperation({ summary: "Initiate Google OAuth2 login" })
+	@ApiResponse({
+		status: 302,
+		description: "Redirects to Google for authentication",
+	})
 	@UseGuards(AuthGuard("google"))
 	async googleLogin() {
 		return;
@@ -31,6 +43,7 @@ export class AuthController {
 
 	@Public()
 	@Get("google/callback")
+	@ApiExcludeEndpoint()
 	@UseGuards(AuthGuard("google"))
 	async googleCallback(@Req() req: Request, @Res() res: Response) {
 		const profile = req.user as Profile;
@@ -48,6 +61,8 @@ export class AuthController {
 
 	@Post("logout")
 	@HttpCode(204)
+	@ApiOperation({ summary: "Logout and destroy session" })
+	@ApiResponse({ status: 204, description: "Logged out successfully" })
 	async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
 		const sessionName = this.authService.getSessionName();
 
@@ -66,6 +81,9 @@ export class AuthController {
 	}
 
 	@Get("me")
+	@ApiOperation({ summary: "Get current authenticated user" })
+	@ApiResponse({ status: 200, description: "Current user details" })
+	@ApiResponse({ status: 401, description: "Not authenticated" })
 	async me(@Req() req: Request) {
 		const session = req.session as { userId?: string };
 		const userId = session.userId;

@@ -14,6 +14,13 @@ import {
 	Req,
 	Sse,
 } from "@nestjs/common";
+import {
+	ApiBody,
+	ApiOperation,
+	ApiParam,
+	ApiResponse,
+	ApiTags,
+} from "@nestjs/swagger";
 import { User } from "@prisma/client";
 import { Observable } from "rxjs";
 import { Roles } from "@/modules/auth/decorators/roles.decorator";
@@ -26,6 +33,7 @@ interface RequestWithUser extends Request {
 	user?: User;
 }
 
+@ApiTags("Notifications")
 @Controller({
 	path: "notifications",
 	version: "1",
@@ -39,6 +47,8 @@ export class NotificationsController {
 	 * Query params: ?unread=true&limit=20&cursor=<uuid>
 	 */
 	@Get()
+	@ApiOperation({ summary: "List notifications for the current user" })
+	@ApiResponse({ status: 200, description: "List of notifications" })
 	@Roles("student", "ta")
 	async listNotifications(
 		@Query() query: QueryNotificationsDto,
@@ -58,6 +68,13 @@ export class NotificationsController {
 	 * Mark a specific notification as read.
 	 */
 	@Patch(":notificationId/read")
+	@ApiOperation({ summary: "Mark a notification as read" })
+	@ApiParam({
+		name: "notificationId",
+		description: "UUID of the notification",
+		format: "uuid",
+	})
+	@ApiResponse({ status: 200, description: "Notification marked as read" })
 	@Roles("student", "ta")
 	async markAsRead(
 		@Param("notificationId", ParseUUIDPipe) notificationId: string,
@@ -76,6 +93,8 @@ export class NotificationsController {
 	 * routing the current ordering is fine, but keep this in mind during refactors.
 	 */
 	@Patch("read-all")
+	@ApiOperation({ summary: "Mark all notifications as read" })
+	@ApiResponse({ status: 200, description: "All notifications marked as read" })
 	@Roles("student", "ta")
 	async markAllAsRead(@Req() req: RequestWithUser) {
 		const user = requireUser(req);
@@ -90,6 +109,9 @@ export class NotificationsController {
 	 */
 	@Post("push/subscribe")
 	@HttpCode(HttpStatus.NO_CONTENT)
+	@ApiOperation({ summary: "Subscribe to Web Push notifications" })
+	@ApiBody({ type: PushSubscribeDto })
+	@ApiResponse({ status: 204, description: "Push subscription registered" })
 	@Roles("student", "ta")
 	async subscribePush(
 		@Body() dto: PushSubscribeDto,
@@ -119,6 +141,8 @@ export class NotificationsController {
 	 * logic inside getUserSseStream(), which runs when the client disconnects.
 	 */
 	@Sse("sse")
+	@ApiOperation({ summary: "SSE stream for real-time notifications" })
+	@ApiResponse({ status: 200, description: "SSE stream" })
 	@Roles("student", "ta")
 	sse(@Req() req: RequestWithUser): Observable<MessageEvent> {
 		const user = requireUser(req);
@@ -131,6 +155,9 @@ export class NotificationsController {
 	 * Used for testing and manual administrative messages.
 	 */
 	@Post()
+	@ApiOperation({ summary: "Send a notification (admin only)" })
+	@ApiBody({ type: CreateNotificationDto })
+	@ApiResponse({ status: 201, description: "Notification sent" })
 	@Roles("admin")
 	async createNotification(@Body() dto: CreateNotificationDto) {
 		return this.notificationsService.notify({

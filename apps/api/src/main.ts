@@ -2,6 +2,7 @@ import "dotenv/config";
 import { Logger, ValidationPipe, VersioningType } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
+import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import compression from "compression";
 import { RedisStore } from "connect-redis";
 import cookieParser from "cookie-parser";
@@ -77,12 +78,32 @@ async function bootstrap() {
 	// Graceful shutdown
 	app.enableShutdownHooks();
 
+	// OpenAPI 3.1 documentation
+	const config = new DocumentBuilder()
+		.setTitle("Slotty API")
+		.setDescription("API documentation for Slotty slot booking system")
+		.setVersion("1.0")
+		.addCookieAuth("connect.sid", {
+			type: "apiKey",
+			in: "cookie",
+			name: "connect.sid",
+		})
+		.build();
+	const document = SwaggerModule.createDocument(app, config, {
+		extraModels: [],
+	});
+	SwaggerModule.setup("api/docs", app, document, {
+		jsonDocumentUrl: "api/docs-json",
+		yamlDocumentUrl: "api/docs-yaml",
+	});
+
 	const port = configService.getOrThrow<number>("port");
 	await app.listen(port);
 
 	logger.log(`Application running on: http://localhost:${port}`);
 	logger.log(`Environment: ${configService.get<string>("env")}`);
 	logger.log(`CORS enabled for: ${corsOrigin}`);
+	logger.log(`API docs available at: http://localhost:${port}/api/docs`);
 }
 
 void bootstrap();
