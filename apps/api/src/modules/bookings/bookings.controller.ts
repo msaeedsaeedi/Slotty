@@ -9,10 +9,9 @@ import {
 	Patch,
 	Post,
 	Req,
-	UnauthorizedException,
 } from "@nestjs/common";
 import { ApiOperation, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
-import { User } from "@prisma/client";
+import { RequestWithUser } from "@/modules/auth/auth.types";
 import { Roles } from "@/modules/auth/decorators/roles.decorator";
 import { BookingsService } from "./bookings.service";
 import { CancelBookingDto } from "./dto/cancel-booking.dto";
@@ -33,14 +32,11 @@ export class BookingsController {
 	@ApiResponse({ status: 201, description: "Booking created successfully" })
 	@ApiResponse({ status: 409, description: "Slot is full or already booked" })
 	@Roles("student", "admin")
-	async createBooking(@Body() dto: CreateBookingDto, @Req() req: Request) {
-		const user = (req as { user?: User }).user;
-		if (!user) {
-			throw new UnauthorizedException();
-		}
-
-		const booking = await this.bookingsService.createBooking(user, dto);
-
+	async createBooking(
+		@Body() dto: CreateBookingDto,
+		@Req() req: RequestWithUser,
+	) {
+		const booking = await this.bookingsService.createBooking(req.user, dto);
 		return { booking };
 	}
 
@@ -48,13 +44,10 @@ export class BookingsController {
 	@ApiOperation({ summary: "List bookings for the authenticated student" })
 	@ApiResponse({ status: 200, description: "List of bookings" })
 	@Roles("student", "admin")
-	async listBookings(@Req() req: Request) {
-		const user = (req as { user?: User }).user;
-		if (!user) {
-			throw new UnauthorizedException();
-		}
-
-		const bookings = await this.bookingsService.listBookingsForStudent(user.id);
+	async listBookings(@Req() req: RequestWithUser) {
+		const bookings = await this.bookingsService.listBookingsForStudent(
+			req.user.id,
+		);
 		return { bookings };
 	}
 
@@ -70,13 +63,9 @@ export class BookingsController {
 	@Roles("student", "ta", "instructor", "admin")
 	async getBooking(
 		@Param("bookingId", ParseUUIDPipe) bookingId: string,
-		@Req() req: Request,
+		@Req() req: RequestWithUser,
 	) {
-		const user = (req as { user?: User }).user;
-		if (!user) {
-			throw new UnauthorizedException();
-		}
-		const booking = await this.bookingsService.getBooking(bookingId, user);
+		const booking = await this.bookingsService.getBooking(bookingId, req.user);
 		return { booking };
 	}
 
@@ -93,19 +82,13 @@ export class BookingsController {
 	async rescheduleBooking(
 		@Param("bookingId", ParseUUIDPipe) bookingId: string,
 		@Body() dto: RescheduleBookingDto,
-		@Req() req: Request,
+		@Req() req: RequestWithUser,
 	) {
-		const user = (req as { user?: User }).user;
-		if (!user) {
-			throw new UnauthorizedException();
-		}
-
 		const booking = await this.bookingsService.rescheduleBooking(
 			bookingId,
-			user,
+			req.user,
 			dto,
 		);
-
 		return { booking };
 	}
 
@@ -122,14 +105,9 @@ export class BookingsController {
 	async cancelBooking(
 		@Param("bookingId", ParseUUIDPipe) bookingId: string,
 		@Body() dto: CancelBookingDto,
-		@Req() req: Request,
+		@Req() req: RequestWithUser,
 	) {
-		const user = (req as { user?: User }).user;
-		if (!user) {
-			throw new UnauthorizedException();
-		}
-
-		await this.bookingsService.cancelBooking(bookingId, user, dto);
+		await this.bookingsService.cancelBooking(bookingId, req.user, dto);
 	}
 
 	@Patch(":bookingId/status")
@@ -144,19 +122,13 @@ export class BookingsController {
 	async updateBookingStatus(
 		@Param("bookingId", ParseUUIDPipe) bookingId: string,
 		@Body() dto: UpdateBookingStatusDto,
-		@Req() req: Request,
+		@Req() req: RequestWithUser,
 	) {
-		const user = (req as { user?: User }).user;
-		if (!user) {
-			throw new UnauthorizedException();
-		}
-
 		const booking = await this.bookingsService.updateBookingStatus(
 			bookingId,
-			user,
+			req.user,
 			dto,
 		);
-
 		return { booking };
 	}
 }

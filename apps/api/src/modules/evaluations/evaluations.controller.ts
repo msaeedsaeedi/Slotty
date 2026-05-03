@@ -19,8 +19,7 @@ import {
 	ApiResponse,
 	ApiTags,
 } from "@nestjs/swagger";
-import { User, UserRole } from "@prisma/client";
-import { Request } from "express";
+import { RequestWithUser } from "@/modules/auth/auth.types";
 import { Roles } from "@/modules/auth/decorators/roles.decorator";
 import { CreateEvaluationDto } from "./dto/create-evaluation.dto";
 import { QueryEvaluationsDto } from "./dto/query-evaluations.dto";
@@ -55,9 +54,8 @@ export class EvaluationsController {
 	@ApiResponse({ status: 201, description: "Evaluation created successfully" })
 	@Roles("ta", "admin")
 	@HttpCode(HttpStatus.CREATED)
-	async create(@Req() req: Request, @Body() dto: CreateEvaluationDto) {
-		const user = (req as { user?: User }).user;
-		const evaluation = await this.evaluationsService.create(user!.id, dto);
+	async create(@Req() req: RequestWithUser, @Body() dto: CreateEvaluationDto) {
+		const evaluation = await this.evaluationsService.create(req.user.id, dto);
 		return { evaluation };
 	}
 
@@ -73,11 +71,13 @@ export class EvaluationsController {
 	@ApiResponse({ status: 200, description: "Evaluation details" })
 	@ApiResponse({ status: 404, description: "Evaluation not found" })
 	@Roles("ta", "instructor", "admin")
-	async findOne(@Req() req: Request, @Param("id", ParseUUIDPipe) id: string) {
-		const user = (req as { user?: User }).user;
+	async findOne(
+		@Req() req: RequestWithUser,
+		@Param("id", ParseUUIDPipe) id: string,
+	) {
 		const evaluation = await this.evaluationsService.findOne(
-			user!.id,
-			user!.role as UserRole,
+			req.user.id,
+			req.user.role,
 			id,
 		);
 		return { evaluation };
@@ -96,14 +96,13 @@ export class EvaluationsController {
 	@ApiResponse({ status: 200, description: "Evaluation updated successfully" })
 	@Roles("ta", "admin")
 	async update(
-		@Req() req: Request,
+		@Req() req: RequestWithUser,
 		@Param("id", ParseUUIDPipe) id: string,
 		@Body() dto: UpdateEvaluationDto,
 	) {
-		const user = (req as { user?: User }).user;
 		const evaluation = await this.evaluationsService.update(
-			user!.id,
-			user!.role as UserRole,
+			req.user.id,
+			req.user.role,
 			id,
 			dto,
 		);
@@ -130,13 +129,12 @@ export class EvaluationsController {
 	})
 	@Roles("ta", "admin")
 	async submitBatch(
-		@Req() req: Request,
+		@Req() req: RequestWithUser,
 		@Param("assignmentId", ParseUUIDPipe) assignmentId: string,
 	) {
-		const user = (req as { user?: User }).user;
 		const result = await this.evaluationsService.submitBatch(
-			user!.id,
-			user!.role as UserRole,
+			req.user.id,
+			req.user.role,
 			assignmentId,
 		);
 		return result; // { submitted: number; submittedAt: Date }

@@ -1,5 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { User } from "@prisma/client";
+import { RequestWithUser } from "@/modules/auth/auth.types";
 import { CreateEvaluationDto } from "./dto/create-evaluation.dto";
 import { UpdateEvaluationDto } from "./dto/update-evaluation.dto";
 import { EvaluationsController } from "./evaluations.controller";
@@ -23,6 +24,9 @@ describe("EvaluationsController", () => {
 		createdAt: new Date(),
 		updatedAt: new Date(),
 	};
+
+	const mockRequest = (user: User): RequestWithUser =>
+		({ user }) as RequestWithUser;
 
 	beforeEach(async () => {
 		mockEvaluationsService = {
@@ -56,7 +60,7 @@ describe("EvaluationsController", () => {
 			const evaluation = { id: "eval-id", ...dto };
 			mockEvaluationsService.create.mockResolvedValue(evaluation);
 
-			const result = await controller.create({ user: mockUser } as any, dto);
+			const result = await controller.create(mockRequest(mockUser), dto);
 
 			expect(result).toEqual({ evaluation });
 			expect(mockEvaluationsService.create).toHaveBeenCalledWith(
@@ -71,10 +75,7 @@ describe("EvaluationsController", () => {
 			const evaluation = { id: "eval-id" };
 			mockEvaluationsService.findOne.mockResolvedValue(evaluation);
 
-			const result = await controller.findOne(
-				{ user: mockUser } as any,
-				"eval-id",
-			);
+			const result = await controller.findOne(mockRequest(mockUser), "eval-id");
 
 			expect(result).toEqual({ evaluation });
 		});
@@ -88,7 +89,7 @@ describe("EvaluationsController", () => {
 			mockEvaluationsService.update.mockResolvedValue(evaluation);
 
 			const result = await controller.update(
-				{ user: mockUser } as any,
+				mockRequest(mockUser),
 				"eval-id",
 				dto,
 			);
@@ -103,7 +104,7 @@ describe("EvaluationsController", () => {
 			mockEvaluationsService.submitBatch.mockResolvedValue(result);
 
 			const response = await controller.submitBatch(
-				{ user: mockUser } as any,
+				mockRequest(mockUser),
 				"assignment-id",
 			);
 
@@ -116,9 +117,7 @@ describe("EvaluationsController", () => {
 			const evaluations = [{ id: "eval-1" }, { id: "eval-2" }];
 			mockEvaluationsService.findByCourse.mockResolvedValue(evaluations);
 
-			const response = await controller.findByCourse("course-id", {}, {
-				user: mockUser,
-			} as any);
+			const response = await controller.findByCourse("course-id", {});
 
 			expect(response).toEqual({ evaluations });
 		});

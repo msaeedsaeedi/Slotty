@@ -1,5 +1,6 @@
-import { NotFoundException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
+import { User } from "@prisma/client";
+import { RequestWithUser } from "@/modules/auth/auth.types";
 import { PushSubscribeDto } from "./dto/push-subscribe.dto";
 import { QueryNotificationsDto } from "./dto/query-notifications.dto";
 import { NotificationsController } from "./notifications.controller";
@@ -9,7 +10,21 @@ describe("NotificationsController", () => {
 	let controller: NotificationsController;
 	let mockNotificationsService: any;
 
-	const mockUser = { id: "user-1" } as any;
+	const mockUser: User = {
+		id: "user-1",
+		email: "test@example.com",
+		name: "Test User",
+		role: "student",
+		status: "active",
+		googleId: null,
+		rollNumber: null,
+		deletedAt: null,
+		createdAt: new Date(),
+		updatedAt: new Date(),
+	};
+
+	const mockRequest = (user: User): RequestWithUser =>
+		({ user }) as RequestWithUser;
 
 	beforeEach(async () => {
 		mockNotificationsService = {
@@ -37,17 +52,12 @@ describe("NotificationsController", () => {
 			notifications: [],
 		});
 
-		const result = await controller.listNotifications(query, {
-			user: mockUser,
-		} as any);
+		const result = await controller.listNotifications(
+			query,
+			mockRequest(mockUser),
+		);
 		expect(result).toEqual({ notifications: [] });
 		expect(mockNotificationsService.listNotifications).toHaveBeenCalled();
-	});
-
-	it("listNotifications should throw when user is missing", async () => {
-		await expect(
-			controller.listNotifications({} as any, { user: undefined } as any),
-		).rejects.toBeInstanceOf(NotFoundException);
 	});
 
 	it("subscribePush should call service with mapped data when user present", async () => {

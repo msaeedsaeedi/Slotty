@@ -1,5 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { User } from "@prisma/client";
+import { RequestWithUser } from "@/modules/auth/auth.types";
 import { BookingsService } from "@/modules/bookings/bookings.service";
 import { GenerateSlotsDto } from "./dto/generate-slots.dto";
 import { ListSlotsQueryDto } from "./dto/list-slots-query.dto";
@@ -24,6 +25,9 @@ describe("SlotsController", () => {
 		createdAt: new Date(),
 		updatedAt: new Date(),
 	};
+
+	const mockRequest = (user: User): RequestWithUser =>
+		({ user }) as RequestWithUser;
 
 	beforeEach(async () => {
 		mockSlotsService = {
@@ -52,21 +56,15 @@ describe("SlotsController", () => {
 	describe("generateSlots", () => {
 		const dto: GenerateSlotsDto = { ta_id: "ta-id" };
 
-		it("should throw UnauthorizedException when user not authenticated", async () => {
-			await expect(
-				controller.generateSlots("assignment-id", dto, {
-					user: undefined,
-				} as any),
-			).rejects.toThrow("Authentication required");
-		});
-
 		it("should generate slots successfully", async () => {
 			const result = { slots: [{ id: "slot-1" }], count: 1 };
 			mockSlotsService.generateSlots.mockResolvedValue(result);
 
-			const response = await controller.generateSlots("assignment-id", dto, {
-				user: mockUser,
-			} as any);
+			const response = await controller.generateSlots(
+				"assignment-id",
+				dto,
+				mockRequest(mockUser),
+			);
 
 			expect(response).toEqual(result);
 			expect(mockSlotsService.generateSlots).toHaveBeenCalledWith(
@@ -80,21 +78,15 @@ describe("SlotsController", () => {
 	describe("listSlots", () => {
 		const query: ListSlotsQueryDto = {};
 
-		it("should throw UnauthorizedException when user not authenticated", async () => {
-			await expect(
-				controller.listSlots("assignment-id", query, {
-					user: undefined,
-				} as any),
-			).rejects.toThrow("Authentication required");
-		});
-
 		it("should list slots successfully", async () => {
 			const result = { slots: [{ id: "slot-1" }], count: 1 };
 			mockSlotsService.listSlots.mockResolvedValue(result);
 
-			const response = await controller.listSlots("assignment-id", query, {
-				user: mockUser,
-			} as any);
+			const response = await controller.listSlots(
+				"assignment-id",
+				query,
+				mockRequest(mockUser),
+			);
 
 			expect(response).toEqual(result);
 			expect(mockSlotsService.listSlots).toHaveBeenCalledWith(
@@ -108,19 +100,15 @@ describe("SlotsController", () => {
 	describe("updateSlot", () => {
 		const dto: UpdateSlotDto = { venue: "New Venue" };
 
-		it("should throw UnauthorizedException when user not authenticated", async () => {
-			await expect(
-				controller.updateSlot("slot-id", dto, { user: undefined } as any),
-			).rejects.toThrow("Authentication required");
-		});
-
 		it("should update slot successfully", async () => {
 			const result = { slot: { id: "slot-id", venue: "New Venue" } };
 			mockSlotsService.updateSlot.mockResolvedValue(result);
 
-			const response = await controller.updateSlot("slot-id", dto, {
-				user: mockUser,
-			} as any);
+			const response = await controller.updateSlot(
+				"slot-id",
+				dto,
+				mockRequest(mockUser),
+			);
 
 			expect(response).toEqual(result);
 			expect(mockSlotsService.updateSlot).toHaveBeenCalledWith(
@@ -132,19 +120,14 @@ describe("SlotsController", () => {
 	});
 
 	describe("getSlotBookings", () => {
-		it("should throw UnauthorizedException when user not authenticated", async () => {
-			await expect(
-				controller.getSlotBookings("slot-id", { user: undefined } as any),
-			).rejects.toThrow("Authentication required");
-		});
-
 		it("should return slot bookings", async () => {
 			const bookings = [{ id: "booking-1" }, { id: "booking-2" }];
 			mockBookingsService.getSlotBookings.mockResolvedValue(bookings);
 
-			const response = await controller.getSlotBookings("slot-id", {
-				user: mockUser,
-			} as any);
+			const response = await controller.getSlotBookings(
+				"slot-id",
+				mockRequest(mockUser),
+			);
 
 			expect(response).toEqual({ bookings });
 			expect(mockBookingsService.getSlotBookings).toHaveBeenCalledWith(

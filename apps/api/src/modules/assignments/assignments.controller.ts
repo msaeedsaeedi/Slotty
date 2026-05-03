@@ -7,8 +7,7 @@ import {
 	Req,
 } from "@nestjs/common";
 import { ApiOperation, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
-import { User } from "@prisma/client";
-import { UnauthorizedException } from "@/common/exceptions/business.exception";
+import { RequestWithUser } from "@/modules/auth/auth.types";
 import { Roles } from "@/modules/auth/decorators/roles.decorator";
 import { AssignmentsService } from "./assignments.service";
 import { CreateAssignmentDto } from "./dto/create-assignment.dto";
@@ -33,16 +32,12 @@ export class AssignmentController {
 	async createAssignment(
 		@Param("courseId", ParseUUIDPipe) courseId: string,
 		@Body() dto: CreateAssignmentDto,
-		@Req() req: Request,
+		@Req() req: RequestWithUser,
 	) {
-		const user = (req as { user?: User }).user;
-		if (!user) {
-			throw new UnauthorizedException();
-		}
 		const assignment = await this.assignmentsService.createAssignment(
 			courseId,
 			dto,
-			user,
+			req.user,
 		);
 		return { assignment };
 	}

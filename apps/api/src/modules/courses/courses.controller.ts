@@ -22,8 +22,7 @@ import {
 	ApiResponse,
 	ApiTags,
 } from "@nestjs/swagger";
-import { User } from "@prisma/client";
-import { UnauthorizedException } from "@/common/exceptions/business.exception";
+import { RequestWithUser } from "@/modules/auth/auth.types";
 import { Roles } from "@/modules/auth/decorators/roles.decorator";
 import { CoursesService } from "./courses.service";
 import { CreateCourseDto } from "./dto/create-course.dto";
@@ -52,14 +51,12 @@ export class CoursesController {
 	@Roles("student", "ta", "instructor", "admin")
 	async listCourses(
 		@Query("term") term: string | undefined,
-		@Req() req: Request,
+		@Req() req: RequestWithUser,
 	) {
-		const user = (req as { user?: User }).user;
-		if (!user) {
-			throw new UnauthorizedException();
-		}
-
-		const courses = await this.coursesService.listCoursesForUser(user, term);
+		const courses = await this.coursesService.listCoursesForUser(
+			req.user,
+			term,
+		);
 		return { courses, meta: { total: courses.length } };
 	}
 
@@ -75,13 +72,12 @@ export class CoursesController {
 	@Roles("student", "ta", "instructor", "admin")
 	async getCourse(
 		@Param("courseId", ParseUUIDPipe) courseId: string,
-		@Req() req: Request,
+		@Req() req: RequestWithUser,
 	) {
-		const user = (req as { user?: User }).user;
-		if (!user) {
-			throw new UnauthorizedException();
-		}
-		const course = await this.coursesService.getCourseForUser(courseId, user);
+		const course = await this.coursesService.getCourseForUser(
+			courseId,
+			req.user,
+		);
 		return { course };
 	}
 
@@ -137,19 +133,14 @@ export class CoursesController {
 			}),
 		)
 		file: { buffer: Buffer },
-		@Req() req: Request,
+		@Req() req: RequestWithUser,
 	) {
-		const user = (req as { user?: User }).user;
-		if (!user) {
-			throw new UnauthorizedException();
-		}
-
 		const csvData = file.buffer.toString("utf-8");
 
 		const result = await this.coursesService.bulkEnroll(
 			courseId,
 			csvData,
-			user,
+			req.user,
 		);
 
 		return { results: result.results, meta: { total: result.results.length } };

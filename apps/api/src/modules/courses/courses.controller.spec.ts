@@ -1,6 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { User } from "@prisma/client";
-import { UnauthorizedException } from "@/common/exceptions/business.exception";
+import { RequestWithUser } from "@/modules/auth/auth.types";
 import { CoursesController } from "./courses.controller";
 import { CoursesService } from "./courses.service";
 import { CreateCourseDto } from "./dto/create-course.dto";
@@ -24,6 +24,9 @@ describe("CoursesController", () => {
 		createdAt: new Date(),
 		updatedAt: new Date(),
 	};
+
+	const mockRequest = (user: User): RequestWithUser =>
+		({ user }) as RequestWithUser;
 
 	beforeEach(async () => {
 		mockCoursesService = {
@@ -64,19 +67,14 @@ describe("CoursesController", () => {
 	});
 
 	describe("listCourses", () => {
-		it("should throw UnauthorizedException when user not authenticated", async () => {
-			await expect(
-				controller.listCourses(undefined, { user: undefined } as any),
-			).rejects.toThrow(UnauthorizedException);
-		});
-
 		it("should list courses without term filter", async () => {
 			const courses = [{ id: "course-1" }, { id: "course-2" }];
 			mockCoursesService.listCoursesForUser.mockResolvedValue(courses);
 
-			const response = await controller.listCourses(undefined, {
-				user: mockUser,
-			} as any);
+			const response = await controller.listCourses(
+				undefined,
+				mockRequest(mockUser),
+			);
 
 			expect(response).toEqual({
 				courses,
@@ -88,9 +86,7 @@ describe("CoursesController", () => {
 			const courses = [{ id: "course-1" }];
 			mockCoursesService.listCoursesForUser.mockResolvedValue(courses);
 
-			await controller.listCourses("Fall 2024", {
-				user: mockUser,
-			} as any);
+			await controller.listCourses("Fall 2024", mockRequest(mockUser));
 
 			expect(mockCoursesService.listCoursesForUser).toHaveBeenCalledWith(
 				mockUser,
@@ -100,19 +96,14 @@ describe("CoursesController", () => {
 	});
 
 	describe("getCourse", () => {
-		it("should throw UnauthorizedException when user not authenticated", async () => {
-			await expect(
-				controller.getCourse("course-id", { user: undefined } as any),
-			).rejects.toThrow(UnauthorizedException);
-		});
-
 		it("should return course successfully", async () => {
 			const course = { id: "course-id", code: "CS101" };
 			mockCoursesService.getCourseForUser.mockResolvedValue(course);
 
-			const response = await controller.getCourse("course-id", {
-				user: mockUser,
-			} as any);
+			const response = await controller.getCourse(
+				"course-id",
+				mockRequest(mockUser),
+			);
 
 			expect(response).toEqual({ course });
 		});
@@ -139,16 +130,6 @@ describe("CoursesController", () => {
 			buffer: Buffer.from("email,role\ntest@example.com,student"),
 		};
 
-		it("should throw UnauthorizedException when user not authenticated", async () => {
-			await expect(
-				controller.bulkEnroll(
-					"course-id",
-					mockFile as any,
-					{ user: undefined } as any,
-				),
-			).rejects.toThrow(UnauthorizedException);
-		});
-
 		it("should bulk enroll successfully", async () => {
 			const result = {
 				results: [{ email: "test@example.com", status: "created" }],
@@ -158,7 +139,7 @@ describe("CoursesController", () => {
 			const response = await controller.bulkEnroll(
 				"course-id",
 				mockFile as any,
-				{ user: mockUser } as any,
+				mockRequest(mockUser),
 			);
 
 			expect(response).toEqual({

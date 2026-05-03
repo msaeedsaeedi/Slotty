@@ -5,7 +5,6 @@ import {
 	HttpCode,
 	HttpStatus,
 	MessageEvent,
-	NotFoundException,
 	Param,
 	ParseUUIDPipe,
 	Patch,
@@ -21,17 +20,13 @@ import {
 	ApiResponse,
 	ApiTags,
 } from "@nestjs/swagger";
-import { User } from "@prisma/client";
 import { Observable } from "rxjs";
+import { RequestWithUser } from "@/modules/auth/auth.types";
 import { Roles } from "@/modules/auth/decorators/roles.decorator";
 import { CreateNotificationDto } from "./dto/create-notification.dto";
 import { PushSubscribeDto } from "./dto/push-subscribe.dto";
 import { QueryNotificationsDto } from "./dto/query-notifications.dto";
 import { NotificationsService } from "./notifications.service";
-
-interface RequestWithUser extends Request {
-	user?: User;
-}
 
 @ApiTags("Notifications")
 @Controller({
@@ -54,9 +49,7 @@ export class NotificationsController {
 		@Query() query: QueryNotificationsDto,
 		@Req() req: RequestWithUser,
 	) {
-		const user = requireUser(req);
-
-		return this.notificationsService.listNotifications(user.id, {
+		return this.notificationsService.listNotifications(req.user.id, {
 			unreadOnly: query.unread,
 			cursor: query.cursor,
 			limit: query.limit,
@@ -80,8 +73,7 @@ export class NotificationsController {
 		@Param("notificationId", ParseUUIDPipe) notificationId: string,
 		@Req() req: RequestWithUser,
 	) {
-		const user = requireUser(req);
-		return this.notificationsService.markAsRead(notificationId, user.id);
+		return this.notificationsService.markAsRead(notificationId, req.user.id);
 	}
 
 	/**
@@ -97,8 +89,7 @@ export class NotificationsController {
 	@ApiResponse({ status: 200, description: "All notifications marked as read" })
 	@Roles("student", "ta")
 	async markAllAsRead(@Req() req: RequestWithUser) {
-		const user = requireUser(req);
-		return this.notificationsService.markAllAsRead(user.id);
+		return this.notificationsService.markAllAsRead(req.user.id);
 	}
 
 	/**
@@ -117,10 +108,8 @@ export class NotificationsController {
 		@Body() dto: PushSubscribeDto,
 		@Req() req: RequestWithUser,
 	) {
-		const user = requireUser(req);
-
 		await this.notificationsService.storePushSubscription({
-			userId: user.id,
+			userId: req.user.id,
 			endpoint: dto.endpoint,
 			p256dh: dto.keys.p256dh,
 			auth: dto.keys.auth,
@@ -145,8 +134,7 @@ export class NotificationsController {
 	@ApiResponse({ status: 200, description: "SSE stream" })
 	@Roles("student", "ta")
 	sse(@Req() req: RequestWithUser): Observable<MessageEvent> {
-		const user = requireUser(req);
-		return this.notificationsService.getUserSseStream(user.id);
+		return this.notificationsService.getUserSseStream(req.user.id);
 	}
 
 	/**
@@ -169,15 +157,4 @@ export class NotificationsController {
 			channels: dto.channels,
 		});
 	}
-}
-
-/**
- * Extract the authenticated user from the request.
- * Throws a NotFoundException if the user is not found.
- */
-function requireUser(req: RequestWithUser): User {
-	if (!req.user) {
-		throw new NotFoundException("Authenticated user not found in request");
-	}
-	return req.user;
 }

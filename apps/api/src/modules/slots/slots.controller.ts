@@ -10,8 +10,7 @@ import {
 	Req,
 } from "@nestjs/common";
 import { ApiOperation, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
-import { User } from "@prisma/client";
-import { UnauthorizedException } from "@/common/exceptions/business.exception";
+import { RequestWithUser } from "@/modules/auth/auth.types";
 import { Roles } from "@/modules/auth/decorators/roles.decorator";
 import { BookingsService } from "@/modules/bookings/bookings.service";
 import { GenerateSlotsDto } from "./dto/generate-slots.dto";
@@ -41,13 +40,9 @@ export class SlotsController {
 	async generateSlots(
 		@Param("assignmentId", ParseUUIDPipe) assignmentId: string,
 		@Body() dto: GenerateSlotsDto,
-		@Req() req: Request,
+		@Req() req: RequestWithUser,
 	) {
-		const user = (req as { user?: User }).user;
-		if (!user) {
-			throw new UnauthorizedException();
-		}
-		return this.slotsService.generateSlots(assignmentId, dto, user);
+		return this.slotsService.generateSlots(assignmentId, dto, req.user);
 	}
 
 	@Get("assignments/:assignmentId/slots")
@@ -62,13 +57,9 @@ export class SlotsController {
 	async listSlots(
 		@Param("assignmentId", ParseUUIDPipe) assignmentId: string,
 		@Query() query: ListSlotsQueryDto,
-		@Req() req: Request,
+		@Req() req: RequestWithUser,
 	) {
-		const user = (req as { user?: User }).user;
-		if (!user) {
-			throw new UnauthorizedException();
-		}
-		return this.slotsService.listSlots(assignmentId, query, user);
+		return this.slotsService.listSlots(assignmentId, query, req.user);
 	}
 
 	@Patch("slots/:slotId")
@@ -79,13 +70,9 @@ export class SlotsController {
 	async updateSlot(
 		@Param("slotId", ParseUUIDPipe) slotId: string,
 		@Body() dto: UpdateSlotDto,
-		@Req() req: Request,
+		@Req() req: RequestWithUser,
 	) {
-		const user = (req as { user?: User }).user;
-		if (!user) {
-			throw new UnauthorizedException();
-		}
-		return this.slotsService.updateSlot(slotId, dto, user);
+		return this.slotsService.updateSlot(slotId, dto, req.user);
 	}
 
 	@Get("slots/:slotId/bookings")
@@ -95,13 +82,12 @@ export class SlotsController {
 	@Roles("ta", "admin")
 	async getSlotBookings(
 		@Param("slotId", ParseUUIDPipe) slotId: string,
-		@Req() req: Request,
+		@Req() req: RequestWithUser,
 	) {
-		const user = (req as { user?: User }).user;
-		if (!user) {
-			throw new UnauthorizedException();
-		}
-		const bookings = await this.bookingsService.getSlotBookings(slotId, user);
+		const bookings = await this.bookingsService.getSlotBookings(
+			slotId,
+			req.user,
+		);
 		return { bookings };
 	}
 }
