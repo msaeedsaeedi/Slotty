@@ -9,6 +9,7 @@ import {
 	UnprocessableEntityException,
 } from "@/common/exceptions/business.exception";
 import { AuditService } from "@/modules/audit/audit.service";
+import { NotificationsService } from "@/modules/notifications/notifications.service";
 import { CancelBookingDto } from "./dto/cancel-booking.dto";
 import { CreateBookingDto } from "./dto/create-booking.dto";
 import { RescheduleBookingDto } from "./dto/reschedule-booking.dto";
@@ -19,6 +20,7 @@ export class BookingsService {
 	constructor(
 		private readonly prisma: PrismaService,
 		private readonly auditService: AuditService,
+		private readonly notificationsService: NotificationsService,
 	) {}
 
 	async createBooking(
@@ -159,6 +161,22 @@ export class BookingsService {
 				assignmentId: result.assignmentId,
 				studentId: result.studentId,
 			},
+		});
+
+		await this.notificationsService.notify({
+			userId: actor.id,
+			type: "booking_confirmed",
+			title: "Booking Confirmed",
+			body: `Your booking for "${result.assignment.title}" has been confirmed.`,
+			data: {
+				bookingId: result.id,
+				slotId: result.slotId,
+				assignmentId: result.assignmentId,
+				startsAt: result.slot.startsAt.toISOString(),
+				endsAt: result.slot.endsAt.toISOString(),
+				venue: result.slot.venue,
+			},
+			channels: ["inapp", "email"],
 		});
 
 		return result;
@@ -409,6 +427,22 @@ export class BookingsService {
 					rescheduledFrom: bookingId,
 				},
 			}),
+			this.notificationsService.notify({
+				userId: actor.id,
+				type: "booking_confirmed",
+				title: "Booking Rescheduled",
+				body: `Your booking for "${result.assignment.title}" has been rescheduled.`,
+				data: {
+					bookingId: result.id,
+					slotId: result.slotId,
+					assignmentId: result.assignmentId,
+					startsAt: result.slot.startsAt.toISOString(),
+					endsAt: result.slot.endsAt.toISOString(),
+					venue: result.slot.venue,
+					rescheduledFrom: bookingId,
+				},
+				channels: ["inapp", "email"],
+			}),
 		]);
 
 		return result;
@@ -535,18 +569,33 @@ export class BookingsService {
 			return updated;
 		});
 
-		await this.auditService.append({
-			actorId: actor.id,
-			entityType: "booking",
-			entityId: bookingId,
-			eventType: "cancelled",
-			payload: {
-				cancelReason: dto.cancel_reason,
-				cancelNote: dto.cancel_note,
-				assignmentId: result.assignmentId,
-				slotId: result.slotId,
-			},
-		});
+		await Promise.all([
+			this.auditService.append({
+				actorId: actor.id,
+				entityType: "booking",
+				entityId: bookingId,
+				eventType: "cancelled",
+				payload: {
+					cancelReason: dto.cancel_reason,
+					cancelNote: dto.cancel_note,
+					assignmentId: result.assignmentId,
+					slotId: result.slotId,
+				},
+			}),
+			this.notificationsService.notify({
+				userId: actor.id,
+				type: "booking_cancelled",
+				title: "Booking Cancelled",
+				body: `Your booking for assignment "${result.assignmentId}" has been cancelled.`,
+				data: {
+					bookingId,
+					slotId: result.slotId,
+					assignmentId: result.assignmentId,
+					cancelReason: dto.cancel_reason,
+				},
+				channels: ["inapp", "email"],
+			}),
+		]);
 
 		return result;
 	}
@@ -560,6 +609,8 @@ export class BookingsService {
 			where: { id: bookingId },
 			include: {
 				slot: true,
+				assignment: true,
+				student: true,
 			},
 		});
 
@@ -589,17 +640,41 @@ export class BookingsService {
 			},
 		});
 
-		await this.auditService.append({
-			actorId: actor.id,
-			entityType: "booking",
-			entityId: bookingId,
-			eventType: "updated",
-			payload: {
-				previousStatus: booking.status,
-				newStatus: dto.status,
-				slotId: booking.slotId,
-			},
-		});
+		const eventType = dto.status === "completed" ? "completed" : "no_show";
+
+		await Promise.all([
+			this.auditService.append({
+				actorId: actor.id,
+				entityType: "booking",
+				entityId: bookingId,
+				eventType,
+				payload: {
+					previousStatus: booking.status,
+					newStatus: dto.status,
+					slotId: booking.slotId,
+				},
+			}),
+			this.notificationsService.notify({
+				userId: booking.studentId,
+				type:
+					dto.status === "completed"
+						? "booking_confirmed"
+						: "booking_cancelled",
+				title:
+					dto.status === "completed" ? "Demo Completed" : "No-Show Recorded",
+				body:
+					dto.status === "completed"
+						? `Your demo for "${booking.assignment.title}" has been marked as completed.`
+						: `Your demo for "${booking.assignment.title}" has been marked as no-show.`,
+				data: {
+					bookingId,
+					slotId: booking.slotId,
+					assignmentId: booking.assignmentId,
+					status: dto.status,
+				},
+				channels: ["inapp", "email"],
+			}),
+		]);
 
 		return updated;
 	}

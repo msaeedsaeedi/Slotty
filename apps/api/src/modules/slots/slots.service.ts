@@ -7,6 +7,7 @@ import {
 	NotFoundException,
 } from "@/common/exceptions/business.exception";
 import { AuditService } from "@/modules/audit/audit.service";
+import { NotificationsService } from "@/modules/notifications/notifications.service";
 import { GenerateSlotsDto } from "./dto/generate-slots.dto.js";
 import { ListSlotsQueryDto } from "./dto/list-slots-query.dto.js";
 import { UpdateSlotDto } from "./dto/update-slot.dto.js";
@@ -16,6 +17,7 @@ export class SlotsService {
 	constructor(
 		private readonly prisma: PrismaService,
 		private readonly auditService: AuditService,
+		private readonly notificationsService: NotificationsService,
 	) {}
 
 	async generateSlots(
@@ -168,6 +170,12 @@ export class SlotsService {
 
 		const slot = await this.prisma.demoSlot.findUnique({
 			where: { id: slotId },
+			include: {
+				bookings: {
+					where: { status: "booked" },
+					include: { student: true },
+				},
+			},
 		});
 		if (!slot) {
 			throw new NotFoundException("Slot not found.");
@@ -185,16 +193,60 @@ export class SlotsService {
 			eventType: string;
 			payload: Record<string, unknown>;
 		}> = [];
+		const notifications: Array<{
+			userId: string;
+			type: string;
+			title: string;
+			body: string;
+			data: Record<string, unknown>;
+		}> = [];
 
 		if (dto.status !== undefined) {
-			data.status = dto.status as SlotStatus;
-			auditPayloads.push({
-				eventType: "updated",
-				payload: {
-					previousStatus: slot.status,
-					newStatus: dto.status,
-				},
-			});
+			const newStatus = dto.status as SlotStatus;
+
+			if (newStatus === SlotStatus.published) {
+				if (!slot.venue || slot.venue.trim().length === 0) {
+					throw new BadRequestException(
+						"MISSING_VENUE",
+						"A venue must be set before publishing a slot.",
+					);
+				}
+			}
+
+			data.status = newStatus;
+
+			if (
+				newStatus === SlotStatus.published &&
+				slot.status === SlotStatus.draft
+			) {
+				auditPayloads.push({
+					eventType: "published",
+					payload: {
+						previousStatus: slot.status,
+						newStatus: newStatus,
+						venue: slot.venue,
+					},
+				});
+			} else if (
+				newStatus === SlotStatus.draft &&
+				slot.status === SlotStatus.published
+			) {
+				auditPayloads.push({
+					eventType: "unpublished",
+					payload: {
+						previousStatus: slot.status,
+						newStatus: newStatus,
+					},
+				});
+			} else {
+				auditPayloads.push({
+					eventType: "updated",
+					payload: {
+						previousStatus: slot.status,
+						newStatus: newStatus,
+					},
+				});
+			}
 		}
 
 		if (dto.venue !== undefined) {
@@ -213,6 +265,27 @@ export class SlotsService {
 						previousVersion: slot.version,
 					},
 				});
+
+				if (
+					slot.status === SlotStatus.published ||
+					slot.status === SlotStatus.booked
+				) {
+					for (const booking of slot.bookings) {
+						notifications.push({
+							userId: booking.studentId,
+							type: "venue_changed",
+							title: "Venue Changed",
+							body: `The venue for your demo slot has been changed from "${slot.venue ?? "TBD"}" to "${nextVenue}".`,
+							data: {
+								slotId: slot.id,
+								bookingId: booking.id,
+								oldVenue: slot.venue,
+								newVenue: nextVenue,
+								startsAt: slot.startsAt.toISOString(),
+							},
+						});
+					}
+				}
 			}
 		}
 
@@ -221,8 +294,8 @@ export class SlotsService {
 			data,
 		});
 
-		await Promise.all(
-			auditPayloads.map(({ eventType, payload }) =>
+		await Promise.all([
+			...auditPayloads.map(({ eventType, payload }) =>
 				this.auditService.append({
 					actorId: actor.id,
 					entityType: "slot",
@@ -231,7 +304,17 @@ export class SlotsService {
 					payload,
 				}),
 			),
-		);
+			...notifications.map((n) =>
+				this.notificationsService.notify({
+					userId: n.userId,
+					type: n.type as "venue_changed",
+					title: n.title,
+					body: n.body,
+					data: n.data,
+					channels: ["inapp", "email"],
+				}),
+			),
+		]);
 
 		return { slot: updated };
 	}

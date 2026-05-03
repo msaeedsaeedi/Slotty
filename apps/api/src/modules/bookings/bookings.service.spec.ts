@@ -14,12 +14,15 @@ import {
 	UnprocessableEntityException,
 } from "@/common/exceptions/business.exception";
 import { AuditService } from "@/modules/audit/audit.service";
+import { NotificationsService } from "@/modules/notifications/notifications.service";
 import { BookingsService } from "./bookings.service";
 
 describe("BookingsService", () => {
 	let service: BookingsService;
 	// biome-ignore lint/correctness/noUnusedVariables: <False positive - used>
 	let auditService: jest.Mocked<AuditService>;
+	// biome-ignore lint/correctness/noUnusedVariables: <False positive - used>
+	let notificationsService: jest.Mocked<NotificationsService>;
 
 	const mockTx = {
 		$queryRaw: jest.fn(),
@@ -47,6 +50,7 @@ describe("BookingsService", () => {
 		booking: {
 			findUnique: jest.fn(),
 			findMany: jest.fn(),
+			update: jest.fn(),
 		},
 		demoSlot: {
 			findUnique: jest.fn(),
@@ -55,6 +59,10 @@ describe("BookingsService", () => {
 
 	const mockAuditService = {
 		append: jest.fn().mockResolvedValue(undefined),
+	};
+
+	const mockNotificationsService = {
+		notify: jest.fn().mockResolvedValue({}),
 	};
 
 	beforeEach(async () => {
@@ -69,11 +77,18 @@ describe("BookingsService", () => {
 					provide: AuditService,
 					useValue: mockAuditService,
 				},
+				{
+					provide: NotificationsService,
+					useValue: mockNotificationsService,
+				},
 			],
 		}).compile();
 
 		service = module.get<BookingsService>(BookingsService);
 		auditService = module.get(AuditService) as jest.Mocked<AuditService>;
+		notificationsService = module.get(
+			NotificationsService,
+		) as jest.Mocked<NotificationsService>;
 
 		jest.clearAllMocks();
 	});
@@ -139,7 +154,7 @@ describe("BookingsService", () => {
 		it("should throw UnprocessableEntityException when demo window closed", async () => {
 			const slot = createMockSlot({ capacity: 2, status: "published" });
 			const assignment = createMockAssignment({
-				demoWindowEnd: new Date(Date.now() - 86400000), // Yesterday
+				demoWindowEnd: new Date(Date.now() - 86400000),
 			});
 
 			mockTx.$queryRaw.mockResolvedValue([{ ...slot, assignment }]);
@@ -163,7 +178,7 @@ describe("BookingsService", () => {
 			mockTx.$queryRaw.mockResolvedValue([{ ...slot, assignment }]);
 			mockTx.booking.count.mockResolvedValue(0);
 			mockTx.booking.findFirst.mockResolvedValue(null);
-			mockTx.enrollment.findFirst.mockResolvedValue(null); // Not enrolled
+			mockTx.enrollment.findFirst.mockResolvedValue(null);
 
 			const actor = createMockUser({ role: "student" });
 			const dto = { slot_id: slot.id };
@@ -245,7 +260,7 @@ describe("BookingsService", () => {
 				freezeBeforeMin: 60,
 				maxCancellations: 1,
 			});
-			mockTx.booking.count.mockResolvedValue(1); // Already cancelled once
+			mockTx.booking.count.mockResolvedValue(1);
 
 			const actor = createMockUser();
 			const dto = { cancel_reason: "schedule_conflict" };
@@ -367,6 +382,132 @@ describe("BookingsService", () => {
 			await expect(
 				service.updateBookingStatus(booking.id, actor, dto),
 			).rejects.toThrow(BadRequestException);
+		});
+
+		it("should notify student when booking is marked as completed", async () => {
+			const assignment = createMockAssignment({ title: "Demo Assignment" });
+			const booking = {
+				id: "booking-id",
+				studentId: "student-id",
+				status: BookingStatus.booked,
+				slot: { taId: "ta-id" },
+				assignment,
+				slotId: "slot-id",
+				assignmentId: assignment.id,
+				student: { id: "student-id" },
+			};
+
+			mockPrismaService.booking.findUnique.mockResolvedValue(booking);
+			mockPrismaService.booking.update.mockResolvedValue({
+				...booking,
+				status: BookingStatus.completed,
+			});
+
+			const actor = createMockUser({ role: "ta", id: "ta-id" });
+			const dto = { status: BookingStatus.completed };
+
+			await service.updateBookingStatus(booking.id, actor, dto);
+
+			expect(mockNotificationsService.notify).toHaveBeenCalledWith(
+				expect.objectContaining({
+					userId: "student-id",
+					title: "Demo Completed",
+				}),
+			);
+		});
+
+		it("should notify student when booking is marked as no-show", async () => {
+			const assignment = createMockAssignment({ title: "Demo Assignment" });
+			const booking = {
+				id: "booking-id",
+				studentId: "student-id",
+				status: BookingStatus.booked,
+				slot: { taId: "ta-id" },
+				assignment,
+				slotId: "slot-id",
+				assignmentId: assignment.id,
+				student: { id: "student-id" },
+			};
+
+			mockPrismaService.booking.findUnique.mockResolvedValue(booking);
+			mockPrismaService.booking.update.mockResolvedValue({
+				...booking,
+				status: BookingStatus.no_show,
+			});
+
+			const actor = createMockUser({ role: "ta", id: "ta-id" });
+			const dto = { status: BookingStatus.no_show };
+
+			await service.updateBookingStatus(booking.id, actor, dto);
+
+			expect(mockNotificationsService.notify).toHaveBeenCalledWith(
+				expect.objectContaining({
+					userId: "student-id",
+					title: "No-Show Recorded",
+				}),
+			);
+		});
+
+		it("should create completed audit event when marking as completed", async () => {
+			const assignment = createMockAssignment();
+			const booking = {
+				id: "booking-id",
+				studentId: "student-id",
+				status: BookingStatus.booked,
+				slot: { taId: "ta-id" },
+				assignment,
+				slotId: "slot-id",
+				assignmentId: assignment.id,
+				student: { id: "student-id" },
+			};
+
+			mockPrismaService.booking.findUnique.mockResolvedValue(booking);
+			mockPrismaService.booking.update.mockResolvedValue({
+				...booking,
+				status: BookingStatus.completed,
+			});
+
+			const actor = createMockUser({ role: "ta", id: "ta-id" });
+			const dto = { status: BookingStatus.completed };
+
+			await service.updateBookingStatus(booking.id, actor, dto);
+
+			expect(mockAuditService.append).toHaveBeenCalledWith(
+				expect.objectContaining({
+					eventType: "completed",
+				}),
+			);
+		});
+
+		it("should create no_show audit event when marking as no-show", async () => {
+			const assignment = createMockAssignment();
+			const booking = {
+				id: "booking-id",
+				studentId: "student-id",
+				status: BookingStatus.booked,
+				slot: { taId: "ta-id" },
+				assignment,
+				slotId: "slot-id",
+				assignmentId: assignment.id,
+				student: { id: "student-id" },
+			};
+
+			mockPrismaService.booking.findUnique.mockResolvedValue(booking);
+			mockPrismaService.booking.update.mockResolvedValue({
+				...booking,
+				status: BookingStatus.no_show,
+			});
+
+			const actor = createMockUser({ role: "ta", id: "ta-id" });
+			const dto = { status: BookingStatus.no_show };
+
+			await service.updateBookingStatus(booking.id, actor, dto);
+
+			expect(mockAuditService.append).toHaveBeenCalledWith(
+				expect.objectContaining({
+					eventType: "no_show",
+				}),
+			);
 		});
 	});
 
