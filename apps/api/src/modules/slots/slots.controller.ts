@@ -9,7 +9,13 @@ import {
 	Query,
 	Req,
 } from "@nestjs/common";
-import { ApiOperation, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
+import {
+	ApiCookieAuth,
+	ApiOperation,
+	ApiParam,
+	ApiResponse,
+	ApiTags,
+} from "@nestjs/swagger";
 import { RequestWithUser } from "@/modules/auth/auth.types";
 import { Roles } from "@/modules/auth/decorators/roles.decorator";
 import { BookingsService } from "@/modules/bookings/bookings.service";
@@ -19,6 +25,7 @@ import { UpdateSlotDto } from "./dto/update-slot.dto";
 import { SlotsService } from "./slots.service";
 
 @ApiTags("Slots")
+@ApiCookieAuth("session-cookie")
 @Controller({
 	version: "1",
 })

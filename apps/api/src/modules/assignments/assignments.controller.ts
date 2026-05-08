@@ -6,13 +6,20 @@ import {
 	Post,
 	Req,
 } from "@nestjs/common";
-import { ApiOperation, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
+import {
+	ApiCookieAuth,
+	ApiOperation,
+	ApiParam,
+	ApiResponse,
+	ApiTags,
+} from "@nestjs/swagger";
 import { RequestWithUser } from "@/modules/auth/auth.types";
 import { Roles } from "@/modules/auth/decorators/roles.decorator";
 import { AssignmentsService } from "./assignments.service";
 import { CreateAssignmentDto } from "./dto/create-assignment.dto";
 
 @ApiTags("Assignments")
+@ApiCookieAuth("session-cookie")
 @Controller({
 	path: "assignments",
 	version: "1",

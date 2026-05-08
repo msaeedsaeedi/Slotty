@@ -13,6 +13,7 @@ import {
 } from "@nestjs/common";
 import {
 	ApiBody,
+	ApiCookieAuth,
 	ApiOperation,
 	ApiParam,
 	ApiQuery,
@@ -40,6 +41,7 @@ import { EvaluationsService } from "./evaluations.service";
  * ─────────────────────────────────────────────────────────────────────
  */
 @ApiTags("Evaluations")
+@ApiCookieAuth("session-cookie")
 @Controller({
 	version: "1",
 })

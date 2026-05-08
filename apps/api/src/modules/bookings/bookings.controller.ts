@@ -10,7 +10,13 @@ import {
 	Post,
 	Req,
 } from "@nestjs/common";
-import { ApiOperation, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
+import {
+	ApiCookieAuth,
+	ApiOperation,
+	ApiParam,
+	ApiResponse,
+	ApiTags,
+} from "@nestjs/swagger";
 import { RequestWithUser } from "@/modules/auth/auth.types";
 import { Roles } from "@/modules/auth/decorators/roles.decorator";
 import { BookingsService } from "./bookings.service";
@@ -20,6 +26,7 @@ import { RescheduleBookingDto } from "./dto/reschedule-booking.dto";
 import { UpdateBookingStatusDto } from "./dto/update-booking-status.dto";
 
 @ApiTags("Bookings")
+@ApiCookieAuth("session-cookie")
 @Controller({
 	path: "bookings",
 	version: "1",

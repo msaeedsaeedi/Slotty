@@ -15,6 +15,7 @@ import {
 } from "@nestjs/common";
 import {
 	ApiBody,
+	ApiCookieAuth,
 	ApiOperation,
 	ApiParam,
 	ApiResponse,
@@ -29,6 +30,7 @@ import { QueryNotificationsDto } from "./dto/query-notifications.dto";
 import { NotificationsService } from "./notifications.service";
 
 @ApiTags("Notifications")
+@ApiCookieAuth("session-cookie")
 @Controller({
 	path: "notifications",
 	version: "1",

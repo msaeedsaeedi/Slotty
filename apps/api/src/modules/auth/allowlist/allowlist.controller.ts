@@ -7,12 +7,19 @@ import {
 	ParseUUIDPipe,
 	Post,
 } from "@nestjs/common";
-import { ApiOperation, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
+import {
+	ApiCookieAuth,
+	ApiOperation,
+	ApiParam,
+	ApiResponse,
+	ApiTags,
+} from "@nestjs/swagger";
 import { Roles } from "../decorators/roles.decorator";
 import { AllowlistService } from "./allowlist.service";
 import { CreateAllowlistEntryDto } from "./dto/create-allowlist-entry.dto";
 
 @ApiTags("Allowlist")
+@ApiCookieAuth("session-cookie")
 @Controller({
 	path: "auth/allowlist",
 	version: "1",

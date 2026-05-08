@@ -8,6 +8,7 @@ import {
 	Query,
 } from "@nestjs/common";
 import {
+	ApiCookieAuth,
 	ApiOperation,
 	ApiParam,
 	ApiQuery,
@@ -19,6 +20,7 @@ import { CreateUserDto } from "./dto/create-user.dto";
 import { UsersService } from "./users.service";
 
 @ApiTags("Users")
+@ApiCookieAuth("session-cookie")
 @Controller({
 	path: "users",
 	version: "1",

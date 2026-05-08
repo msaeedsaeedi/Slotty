@@ -89,21 +89,6 @@
         "typescript": "5.9.2",
       },
     },
-    "apps/workers": {
-      "name": "workers",
-      "version": "0.0.0",
-      "dependencies": {
-        "@repo/database": "workspace:*",
-        "bullmq": "^5.76.4",
-        "dotenv": "^17.4.2",
-        "p-limit": "^7.3.0",
-        "web-push": "^3.6.7",
-      },
-      "devDependencies": {
-        "@repo/biome-config": "workspace:*",
-        "@repo/typescript-config": "workspace:*",
-      },
-    },
     "packages/biome-config": {
       "name": "@repo/biome-config",
       "version": "0.0.0",
@@ -1832,8 +1817,6 @@
     "word-wrap": ["word-wrap@1.2.5", "", {}, "sha512-BN22B5eaMMI9UMtjrGd5g5eCYPpCPDUy0FJXbYsaT5zYxjFOckS53SQDE3pWkVoWpHXVb3BrYcEN4Twa55B5cA=="],
 
     "wordwrap": ["wordwrap@1.0.0", "", {}, "sha512-gvVzJFlPycKc5dZN4yPkP8w7Dc37BtP1yczEneOb4uq34pXZcvrtRTmWV8W+Ume+XCxKgbjM+nevkyFPMybd4Q=="],
-
-    "workers": ["workers@workspace:apps/workers"],
 
     "wrap-ansi": ["wrap-ansi@6.2.0", "", { "dependencies": { "ansi-styles": "^4.0.0", "string-width": "^4.1.0", "strip-ansi": "^6.0.0" } }, "sha512-r6lPcBGxZXlIcymEu7InxDMhdW0KDxpLgoFLcguasxCaJ/SOIZwINatK9KY/tf+ZrlywOKU0UDj3ATXUBfxJXA=="],
 

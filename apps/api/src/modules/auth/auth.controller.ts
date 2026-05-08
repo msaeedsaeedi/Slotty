@@ -10,6 +10,7 @@ import {
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import {
+	ApiCookieAuth,
 	ApiExcludeEndpoint,
 	ApiOperation,
 	ApiResponse,
@@ -47,14 +48,25 @@ export class AuthController {
 	@UseGuards(AuthGuard("google"))
 	async googleCallback(@Req() req: Request, @Res() res: Response) {
 		const profile = req.user as Profile;
-		const [error] = await attempt(this.authService.handleGoogleLogin(profile));
+		const [error, user] = await attempt(
+			this.authService.handleGoogleLogin(profile),
+		);
 
-		if (error) {
+		if (error || !user) {
 			throw new ForbiddenException(
 				"GOOGLE_AUTH_FAILED",
 				"Google authentication failed",
 			);
 		}
+
+		(req.session as { userId?: string }).userId = user.id;
+
+		await new Promise<void>((resolve, reject) => {
+			req.session.save((err) => {
+				if (err) reject(err);
+				else resolve();
+			});
+		});
 
 		return res.redirect(this.authService.getWebAppUrl());
 	}
@@ -63,6 +75,7 @@ export class AuthController {
 	@HttpCode(204)
 	@ApiOperation({ summary: "Logout and destroy session" })
 	@ApiResponse({ status: 204, description: "Logged out successfully" })
+	@ApiCookieAuth("session-cookie")
 	async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
 		const sessionName = this.authService.getSessionName();
 
@@ -84,6 +97,7 @@ export class AuthController {
 	@ApiOperation({ summary: "Get current authenticated user" })
 	@ApiResponse({ status: 200, description: "Current user details" })
 	@ApiResponse({ status: 401, description: "Not authenticated" })
+	@ApiCookieAuth("session-cookie")
 	async me(@Req() req: Request) {
 		const session = req.session as { userId?: string };
 		const userId = session.userId;

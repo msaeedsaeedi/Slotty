@@ -17,6 +17,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import {
 	ApiBody,
 	ApiConsumes,
+	ApiCookieAuth,
 	ApiOperation,
 	ApiParam,
 	ApiResponse,
@@ -29,6 +30,7 @@ import { CreateCourseDto } from "./dto/create-course.dto";
 import { CreateEnrollmentDto } from "./dto/create-enrollment.dto";
 
 @ApiTags("Courses")
+@ApiCookieAuth("session-cookie")
 @Controller({
 	path: "courses",
 	version: "1",

@@ -83,11 +83,7 @@ async function bootstrap() {
 		.setTitle("Slotty API")
 		.setDescription("API documentation for Slotty slot booking system")
 		.setVersion("1.0")
-		.addCookieAuth(sessionName, {
-			type: "apiKey",
-			in: "cookie",
-			name: sessionName,
-		})
+		.addCookieAuth(sessionName, { type: "apiKey" }, "session-cookie")
 		.build();
 	const document = SwaggerModule.createDocument(app, config, {
 		extraModels: [],
@@ -95,6 +91,9 @@ async function bootstrap() {
 	SwaggerModule.setup("api/docs", app, document, {
 		jsonDocumentUrl: "api/docs-json",
 		yamlDocumentUrl: "api/docs-yaml",
+		swaggerOptions: {
+			withCredentials: true,
+		},
 	});
 
 	const port = configService.getOrThrow<number>("port");
