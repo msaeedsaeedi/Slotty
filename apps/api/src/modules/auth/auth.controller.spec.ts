@@ -54,7 +54,13 @@ describe("AuthController", () => {
 			mockAuthService.handleGoogleLogin.mockResolvedValue(mockProfile);
 
 			const mockRes = { redirect: jest.fn() } as any;
-			await controller.googleCallback({ user: mockProfile } as any, mockRes);
+			await controller.googleCallback(
+				{
+					user: mockProfile,
+					session: { save: jest.fn((cb) => cb(null)) },
+				} as any,
+				mockRes,
+			);
 
 			expect(mockRes.redirect).toHaveBeenCalledWith("http://localhost:3000");
 		});

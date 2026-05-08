@@ -16,7 +16,7 @@ import {
 	ApiResponse,
 	ApiTags,
 } from "@nestjs/swagger";
-import { Request, Response } from "express";
+import type { Request, Response } from "express";
 import { Profile } from "passport-google-oauth20";
 import { attempt } from "@/utils/attempt.util";
 import { AuthService } from "./auth.service";
