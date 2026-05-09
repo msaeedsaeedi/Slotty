@@ -3,6 +3,8 @@
 **Status:** Draft  
 **Date:** 28 April 2026
 
+**Figma File** [Link](https://www.figma.com/design/WyggKZWGVduSA0aYPjEbUK/Slotty-Student-Flow-Neo-Brutalism-UI?node-id=0-1&t=nbrXklAqJwTxfTqn-1)
+
 ## 1. Product Summary
 DemoDesk is a student-first scheduling and evaluation platform for course assignments and projects that require a live demo, review, or viva. It replaces spreadsheet-based coordination with a controlled booking workflow so that students can find open slots quickly, reschedule within policy, and receive reliable confirmations. Teaching Assistants (TAs) can create slots, choose venues, manage capacity, conduct demos, and record marks privately. Course Instructors can review finalized evaluations and export records when needed.
 
