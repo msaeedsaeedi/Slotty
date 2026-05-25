@@ -1,5 +1,22 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.4.14/schema.json",
 	"root": false,
-	"extends": ["@repo/biome-config/base", "@repo/biome-config/next-js"]
+	"extends": ["@repo/biome-config/base", "@repo/biome-config/next-js"],
+	"css": {
+		"parser": {
+			"tailwindDirectives": true
+		}
+	},
+	"overrides": [
+		{
+			"includes": ["components/ui/**"],
+			"linter": {
+				"rules": {
+					"a11y": {
+						"noLabelWithoutControl": "off"
+					}
+				}
+			}
+		}
+	]
 }
