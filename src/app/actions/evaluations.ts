@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/server/auth/session";
 import { bool, run, str, type ActionState } from "@/server/action-utils";
-import { reviewEvaluation, saveEvaluation, submitEvaluations, unlockEvaluation } from "@/server/services/evaluations";
+import { reviewEvaluation, saveEvaluation, submitEvaluations, unlockEvaluation, finalizeMany } from "@/server/services/evaluations";
 
 export async function saveEvaluationAction(_: ActionState, fd: FormData): Promise<ActionState> {
   const intent = str(fd, "intent"); // "save" | "submit" | "save-next"
@@ -62,5 +62,14 @@ export async function unlockAction(_: ActionState, fd: FormData): Promise<Action
   return run(async () => {
     await unlockEvaluation(await requireUser(), str(fd, "evaluationId"), str(fd, "reason"));
     return "Unlocked for editing.";
+  });
+}
+
+export async function finalizeManyAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run(async () => {
+    const ids = fd.getAll("evaluationId").map(String);
+    if (ids.length === 0) return "Nothing to finalize.";
+    const n = await finalizeMany(await requireUser(), ids);
+    return `${n} finalized — marks released.`;
   });
 }

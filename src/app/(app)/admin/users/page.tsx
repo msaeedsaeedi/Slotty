@@ -36,6 +36,11 @@ export default async function AdminUsersPage({ searchParams }: PageProps<"/admin
                     {u.name} {u.isAdmin && <StatusBadge status="ADMIN" label="Admin" tone="info" />}
                   </p>
                   <p className="text-xs text-muted-foreground">{u.email}</p>
+                  {u._count.bookings > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {u._count.bookings} upcoming demo{u._count.bookings === 1 ? "" : "s"}
+                    </p>
+                  )}
                 </TableCell>
                 <TableCell>
                   <StatusBadge status={u.status} />
@@ -51,9 +56,14 @@ export default async function AdminUsersPage({ searchParams }: PageProps<"/admin
                           {u.isAdmin ? "Revoke admin" : "Make admin"}
                         </SubmitButton>
                       </ActionForm>
-                      <ActionForm action={setDisabledAction} compact confirm={u.status === "DISABLED" ? undefined : `Disable ${u.name}? They'll be signed out.`}>
+                      <ActionForm action={setDisabledAction} compact className="flex items-center gap-2" confirmLabel="Disable" confirm={u.status === "DISABLED" ? undefined : `Disable ${u.name}? They'll be signed out.`}>
                         <input type="hidden" name="userId" value={u.id} />
                         <input type="hidden" name="disabled" value={u.status === "DISABLED" ? "false" : "true"} />
+                        {u.status !== "DISABLED" && u._count.bookings > 0 && (
+                          <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <input type="checkbox" name="releaseBookings" defaultChecked /> release {u._count.bookings} booking{u._count.bookings === 1 ? "" : "s"}
+                          </label>
+                        )}
                         <SubmitButton size="xs" variant="ghost" className={u.status === "DISABLED" ? "" : "text-destructive"}>
                           {u.status === "DISABLED" ? "Enable" : "Disable"}
                         </SubmitButton>

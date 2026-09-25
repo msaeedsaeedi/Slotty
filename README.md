@@ -24,7 +24,7 @@ bun run dev          # http://localhost:3000
 bun run worker       # in a second terminal: sends queued emails and schedules reminders
 ```
 
-Copy `.env.example` to `.env` first if you don't have one. When `SMTP_HOST` is empty, the worker prints emails to its console. You can also read every queued email at **http://localhost:3000/dev/mail** (development only), which is the easiest way to follow invite links locally.
+Copy `.env.example` to `.env` first if you don't have one. For push notifications (PWA), add VAPID keys: `bunx web-push generate-vapid-keys`. The service worker only registers in production builds unless `NEXT_PUBLIC_ENABLE_SW=1` is set. When `SMTP_HOST` is empty, the worker prints emails to its console. You can also read every queued email at **http://localhost:3000/dev/mail** (development only), which is the easiest way to follow invite links locally.
 
 ### Demo accounts (after `db:seed`)
 
@@ -55,7 +55,10 @@ src/app/(auth)/        Sign in, invite, password reset
 src/app/(app)/         Signed-in app: dashboard, student pages, /courses/[id]/manage (staff), /admin
 src/jobs/worker.ts     Email outbox delivery + 24h/1h reminders
 prisma/                Schema, migrations, seed
+docs/                  User journeys, business rules, roadmap
 ```
+
+See [docs/user-journeys.md](docs/user-journeys.md), [docs/business-rules.md](docs/business-rules.md) and [docs/roadmap.md](docs/roadmap.md).
 
 ## Key rules
 

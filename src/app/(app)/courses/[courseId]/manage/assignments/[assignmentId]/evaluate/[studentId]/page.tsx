@@ -10,22 +10,29 @@ import { fmtRange } from "@/lib/time";
 import { requireUser } from "@/server/auth/session";
 import { load } from "@/server/page-utils";
 import { courseHasInstructor, courseRoleOf } from "@/server/services/access";
+import { getStudentBookingControls } from "@/server/services/bookings";
 import { getOrCreateEvaluation } from "@/server/services/evaluations";
 import { db } from "@/server/db";
+import { BookingControls } from "./booking-controls";
 import { EvaluationForm } from "./evaluation-form";
 
-export const metadata = { title: "Mark demo" };
+export const metadata = { title: "Student demo" };
 
 export default async function EvaluatePage({ params, searchParams }: PageProps<"/courses/[courseId]/manage/assignments/[assignmentId]/evaluate/[studentId]">) {
   const { courseId, assignmentId, studentId } = await params;
   const { returnTo } = await searchParams;
   const user = await requireUser();
   const ev = await load(getOrCreateEvaluation(user, assignmentId, studentId));
-  const [role, hasInstructor] = await Promise.all([courseRoleOf(db, user, courseId), courseHasInstructor(db, courseId)]);
+  const [role, hasInstructor, controls] = await Promise.all([
+    courseRoleOf(db, user, courseId),
+    courseHasInstructor(db, courseId),
+    getStudentBookingControls(user, assignmentId, studentId),
+  ]);
   const tz = ev.assignment.course.timezone;
   const back = typeof returnTo === "string" && returnTo.startsWith("/") ? returnTo : `/courses/${courseId}/manage/assignments/${assignmentId}?tab=students`;
   const editable = ev.status === "DRAFT" || ev.status === "RETURNED";
   const booking = ev.booking;
+  const notStarted = booking ? booking.slot.startsAt > new Date() : false;
   const canUnlock = ev.status === "FINALIZED" && (role === "INSTRUCTOR" || !hasInstructor);
   const scoreBy = new Map(ev.scores.map((s) => [s.criterionId, s]));
 
@@ -57,7 +64,12 @@ export default async function EvaluatePage({ params, searchParams }: PageProps<"
                       <ActionForm key={s} action={markAttendanceAction} compact>
                         <input type="hidden" name="bookingId" value={booking.id} />
                         <input type="hidden" name="status" value={s} />
-                        <SubmitButton size="sm" variant={s === "BOOKED" ? "ghost" : "outline"}>
+                        <SubmitButton
+                          size="sm"
+                          variant={s === "BOOKED" ? "ghost" : "outline"}
+                          disabled={s !== "BOOKED" && notStarted}
+                          title={s !== "BOOKED" && notStarted ? "Available once the demo starts" : undefined}
+                        >
                           {s === "COMPLETED" ? "Completed" : s === "NO_SHOW" ? "No-show" : "Pending"}
                         </SubmitButton>
                       </ActionForm>
@@ -70,6 +82,18 @@ export default async function EvaluatePage({ params, searchParams }: PageProps<"
           )}
         </CardContent>
       </Card>
+
+      {!ev.assignment.course.archived && (
+        <BookingControls
+          assignmentId={assignmentId}
+          student={ev.student}
+          booking={booking && booking.status !== "CANCELLED" ? booking : null}
+          budget={controls.budget}
+          allowance={controls.allowance}
+          slots={controls.slots}
+          timezone={tz}
+        />
+      )}
 
       {ev.status === "RETURNED" && ev.reviewComment && (
         <Alert>

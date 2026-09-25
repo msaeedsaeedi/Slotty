@@ -7,9 +7,12 @@ import { db } from "@/server/db";
 
 export const metadata = { title: "Dev mailbox" };
 
-/** Development only: every queued email, so invites and reminders can be followed without SMTP. */
+/**
+ * Development only: every queued email, so invites and reminders can be followed
+ * without SMTP. Production builds hide it unless ENABLE_DEV_MAIL=1 (the e2e server).
+ */
 export default async function DevMailPage({ searchParams }: PageProps<"/dev/mail">) {
-  if (process.env.NODE_ENV === "production") notFound();
+  if (process.env.NODE_ENV === "production" && process.env.ENABLE_DEV_MAIL !== "1") notFound();
   const { to } = await searchParams;
   const emails = await db.emailOutbox.findMany({
     where: typeof to === "string" && to ? { to: { contains: to } } : {},

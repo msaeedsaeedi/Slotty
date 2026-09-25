@@ -28,7 +28,7 @@ export default async function VenuesPage({ params }: PageProps<"/courses/[course
                   <p className="font-medium">{v.name}</p>
                   <p className="truncate text-sm text-muted-foreground">{[v.location, v.meetingUrl].filter(Boolean).join(" · ") || "—"}</p>
                 </div>
-                <ActionForm action={deleteVenueAction} compact confirm={`Delete ${v.name}?`}>
+                <ActionForm action={deleteVenueAction} compact confirmLabel="Delete" confirm={`Delete ${v.name}?`}>
                   <input type="hidden" name="venueId" value={v.id} />
                   <SubmitButton variant="ghost" size="sm" className="text-destructive">
                     Delete

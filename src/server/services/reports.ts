@@ -13,19 +13,26 @@ export interface AssignmentProgress {
   completed: number;
   noShow: number;
   unbooked: number;
+  /** Demos that have ended but still have no attendance recorded. */
+  needsAttendance: number;
   evaluated: number;
   submitted: number;
   finalized: number;
 }
 
 /** Per-assignment counts for the course overview. */
-export async function courseProgress(actor: Actor, courseId: string): Promise<AssignmentProgress[]> {
+export async function courseProgress(actor: Actor, courseId: string, now = new Date()): Promise<AssignmentProgress[]> {
   await assertCourseRole(db, actor, courseId, STAFF);
-  const [students, assignments, bookingGroups, evalGroups] = await Promise.all([
+  const [students, assignments, bookingGroups, evalGroups, overdueGroups] = await Promise.all([
     db.enrollment.count({ where: { courseId, role: "STUDENT" } }),
     db.assignment.findMany({ where: { courseId }, orderBy: { createdAt: "asc" } }),
     db.booking.groupBy({ by: ["assignmentId", "status"], where: { assignment: { courseId } }, _count: true }),
     db.evaluation.groupBy({ by: ["assignmentId", "status"], where: { assignment: { courseId } }, _count: true }),
+    db.booking.groupBy({
+      by: ["assignmentId", "status"],
+      where: { status: "BOOKED", assignment: { courseId }, slot: { endsAt: { lt: now } } },
+      _count: true,
+    }),
   ]);
   const count = (groups: { assignmentId: string; status: string; _count: number }[], id: string, status: string) =>
     groups.find((g) => g.assignmentId === id && g.status === status)?._count ?? 0;
@@ -46,6 +53,7 @@ export async function courseProgress(actor: Actor, courseId: string): Promise<As
       completed,
       noShow,
       unbooked: Math.max(0, students - booked - completed - noShow),
+      needsAttendance: count(overdueGroups, a.id, "BOOKED"),
       evaluated: drafts + submitted + finalized,
       submitted,
       finalized,

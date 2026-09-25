@@ -13,6 +13,7 @@ await db.user.createMany({
     { email: "ta@e2e.test", name: "Tina TA", passwordHash, status: "ACTIVE" },
     { email: "prof@e2e.test", name: "Prof Ivan", passwordHash, status: "ACTIVE" },
     { email: "sam@e2e.test", name: "Sam Student", passwordHash, status: "ACTIVE" },
+    { email: "ria@e2e.test", name: "Ria Student", passwordHash, status: "ACTIVE" },
   ],
 });
 await db.$disconnect();

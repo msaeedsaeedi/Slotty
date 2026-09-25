@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { markAllReadAction } from "@/app/actions/admin";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { EmptyState, PageHeader } from "@/components/page-header";
@@ -36,7 +35,8 @@ export default async function NotificationsPage() {
           {items.map((n) => {
             const body = (
               <div className={cn("flex gap-3 p-4", !n.readAt && "bg-primary/5")}>
-                <span className={cn("mt-1.5 size-2 shrink-0 rounded-full", n.readAt ? "bg-transparent" : "bg-blue-600")} />
+                <span className={cn("mt-1.5 size-2 shrink-0 rounded-full", n.readAt ? "bg-transparent" : "bg-blue-600")} aria-hidden />
+                {!n.readAt && <span className="sr-only">Unread:</span>}
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <p className="font-medium">{n.title}</p>
@@ -46,10 +46,11 @@ export default async function NotificationsPage() {
                 </div>
               </div>
             );
+            // A plain link (not <Link>) so prefetching never marks anything read.
             return n.link ? (
-              <Link key={n.id} href={n.link} className="block hover:bg-muted/50">
+              <a key={n.id} href={`/notifications/${n.id}`} className="block hover:bg-muted/50">
                 {body}
-              </Link>
+              </a>
             ) : (
               <div key={n.id}>{body}</div>
             );

@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { DomainError } from "@/domain/result";
-import { fromLocalInput } from "@/lib/time";
+import { fmt, fromLocalInput } from "@/lib/time";
 import { db } from "@/server/db";
 import { requireUser } from "@/server/auth/session";
 import { bool, optStr, run, str, type ActionState } from "@/server/action-utils";
@@ -14,7 +14,7 @@ import {
   updateAssignment,
   type AssignmentInput,
 } from "@/server/services/assignments";
-import { addAvailability, cancelSlot, changeVenue, deleteUnbookedSlots } from "@/server/services/slots";
+import { addAvailability, cancelSlot, changeVenue, deleteUnbookedSlots, reassignHost, updateSlotCapacity } from "@/server/services/slots";
 
 async function courseTimezone(courseId: string) {
   const course = await db.course.findUnique({ where: { id: courseId }, select: { timezone: true } });
@@ -70,17 +70,22 @@ export async function createAssignmentAction(_: ActionState, fd: FormData): Prom
 export async function updateAssignmentAction(_: ActionState, fd: FormData): Promise<ActionState> {
   const courseId = str(fd, "courseId");
   const assignmentId = str(fd, "assignmentId");
-  const result = await run(async () => {
-    await updateAssignment(await requireUser(), assignmentId, assignmentFields(fd, await courseTimezone(courseId)));
+  return run(async () => {
+    const r = await updateAssignment(await requireUser(), assignmentId, assignmentFields(fd, await courseTimezone(courseId)));
+    const notes = [
+      r.notified ? `${r.notified} booked student${r.notified === 1 ? " was" : "s were"} told about the rule changes` : "",
+      r.strandedSlots ? `${r.strandedSlots} unbooked slot${r.strandedSlots === 1 ? " is" : "s are"} now outside the demo window — delete ${r.strandedSlots === 1 ? "it" : "them"} on the Slots tab` : "",
+    ].filter(Boolean);
+    return { message: ["Saved.", ...notes].join(" "), navigate: `/courses/${courseId}/manage/assignments/${assignmentId}` };
   });
-  if (result?.ok) redirect(`/courses/${courseId}/manage/assignments/${assignmentId}`);
-  return result;
 }
 
 export async function publishAssignmentAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return run(async () => {
-    await publishAssignment(await requireUser(), str(fd, "assignmentId"));
-    return "Published — students have been notified.";
+    const r = await publishAssignment(await requireUser(), str(fd, "assignmentId"));
+    return r.opensAt
+      ? `Published — students have been notified that booking opens ${fmt(r.opensAt, r.timezone, "EEE d MMM, HH:mm")}.`
+      : "Published — students have been notified.";
   });
 }
 
@@ -136,5 +141,23 @@ export async function changeVenueAction(_: ActionState, fd: FormData): Promise<A
     if (ids.length === 0) throw new DomainError("Select at least one slot.");
     const r = await changeVenue(await requireUser(), ids, optStr(fd, "venueId"));
     return `Moved ${r.moved} slot(s)${r.notified ? `; ${r.notified} student(s) notified` : ""}.`;
+  });
+}
+
+export async function reassignHostAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run(async () => {
+    const ids = fd.getAll("slotId").map(String);
+    if (ids.length === 0) throw new DomainError("Select at least one slot.");
+    const taId = str(fd, "taId");
+    if (!taId) throw new DomainError("Choose the new host.");
+    const r = await reassignHost(await requireUser(), ids, taId);
+    return `Moved ${r.moved} slot(s) to the new host${r.notified ? `; ${r.notified} student(s) notified` : ""}.`;
+  });
+}
+
+export async function updateSlotCapacityAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run(async () => {
+    await updateSlotCapacity(await requireUser(), str(fd, "slotId"), Number(str(fd, "capacity")));
+    return "Capacity updated.";
   });
 }

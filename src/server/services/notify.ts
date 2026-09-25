@@ -1,4 +1,5 @@
 import type { Tx } from "@/server/db";
+import { isPushConfigured } from "@/server/push-config";
 
 export interface NotificationInput {
   type: string;
@@ -8,6 +9,10 @@ export interface NotificationInput {
   link?: string;
   /** Also send an email (default true). */
   email?: boolean;
+  /** Also show it in the in-app inbox (default true). */
+  inApp?: boolean;
+  /** Emails in an opt-out category are skipped for users who turned them off. */
+  category?: "reminder";
 }
 
 const appUrl = () => process.env.APP_URL ?? "http://localhost:3000";
@@ -36,12 +41,23 @@ export function queueEmail(tx: Tx, to: string, subject: string, content: { text:
 export async function notify(tx: Tx, userIds: string[], n: NotificationInput): Promise<void> {
   const ids = [...new Set(userIds)];
   if (ids.length === 0) return;
-  await tx.notification.createMany({
-    data: ids.map((userId) => ({ userId, type: n.type, title: n.title, body: n.body, link: n.link })),
-  });
+  if (n.inApp !== false) {
+    await tx.notification.createMany({
+      data: ids.map((userId) => ({ userId, type: n.type, title: n.title, body: n.body, link: n.link })),
+    });
+    // Mirror in-app notifications to devices that opted into push.
+    if (isPushConfigured()) {
+      const devices = await tx.pushSubscription.findMany({ where: { userId: { in: ids }, user: { status: "ACTIVE" } }, select: { id: true } });
+      if (devices.length) {
+        await tx.pushMessage.createMany({
+          data: devices.map((d) => ({ subscriptionId: d.id, title: n.title, body: n.body.slice(0, 500), link: n.link })),
+        });
+      }
+    }
+  }
   if (n.email === false) return;
   const users = await tx.user.findMany({
-    where: { id: { in: ids }, status: { not: "DISABLED" } },
+    where: { id: { in: ids }, status: { not: "DISABLED" }, ...(n.category === "reminder" ? { emailReminders: true } : {}) },
     select: { email: true },
   });
   const content = renderEmail(n);

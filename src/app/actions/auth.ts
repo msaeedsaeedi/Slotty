@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { DomainError } from "@/domain/result";
-import { createSession, destroySession } from "@/server/auth/session";
+import { createSession } from "@/server/auth/session";
 import { run, str, type ActionState } from "@/server/action-utils";
 import { acceptInvite, authenticate, requestPasswordReset, resetPassword } from "@/server/services/accounts";
 
@@ -17,11 +17,6 @@ export async function loginAction(_: ActionState, fd: FormData): Promise<ActionS
   });
   if (result?.ok) redirect(safeNext(str(fd, "next")));
   return result;
-}
-
-export async function logoutAction() {
-  await destroySession();
-  redirect("/login");
 }
 
 export async function acceptInviteAction(_: ActionState, fd: FormData): Promise<ActionState> {

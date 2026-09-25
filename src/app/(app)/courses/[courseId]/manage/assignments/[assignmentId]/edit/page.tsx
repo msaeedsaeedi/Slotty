@@ -1,5 +1,6 @@
 import { updateAssignmentAction } from "@/app/actions/scheduling";
 import { PageHeader } from "@/components/page-header";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toLocalInput } from "@/lib/time";
 import { db } from "@/server/db";
 import { requireUser } from "@/server/auth/session";
@@ -15,7 +16,11 @@ export default async function EditAssignmentPage({ params }: PageProps<"/courses
   const { assignment, criteria } = await load(getAssignment(user, assignmentId));
   const tz = assignment.course.timezone;
   const p = assignment.policy!;
-  const scored = await db.evaluationScore.count({ where: { criterion: { assignmentId } } });
+  const [scored, booked, topMark] = await Promise.all([
+    db.evaluationScore.count({ where: { criterion: { assignmentId } } }),
+    db.booking.count({ where: { assignmentId, status: "BOOKED" } }),
+    db.evaluation.aggregate({ where: { assignmentId }, _max: { totalMarks: true } }),
+  ]);
   return (
     <div className="max-w-3xl">
       <PageHeader
@@ -23,6 +28,21 @@ export default async function EditAssignmentPage({ params }: PageProps<"/courses
         description="Changes to slot length or capacity apply to slots you add from now on."
         back={{ href: `/courses/${courseId}/manage/assignments/${assignmentId}`, label: assignment.title }}
       />
+      {(booked > 0 || topMark._max.totalMarks !== null) && (
+        <Alert className="mb-6">
+          <AlertDescription>
+            <ul className="list-disc space-y-1 pl-4">
+              {booked > 0 && (
+                <li>
+                  {booked} student{booked === 1 ? " has" : "s have"} a booking. They&apos;ll be notified if you change when changes lock, how many
+                  changes are allowed, or whether they can cancel. The demo window must still cover their booked slots.
+                </li>
+              )}
+              {topMark._max.totalMarks !== null && <li>Max marks can&apos;t go below the highest mark already given ({topMark._max.totalMarks}).</li>}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      )}
       <AssignmentForm
         action={updateAssignmentAction}
         courseId={courseId}

@@ -20,11 +20,13 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  // A production build: dev mode's on-demand compiling and Fast Refresh make
+  // multi-browser tests flaky, and service workers/offline need a real build.
   webServer: {
-    command: `bunx next dev -p ${PORT}`,
+    command: `bunx next build && bunx next start -p ${PORT}`,
     url: `http://localhost:${PORT}/login`,
     reuseExistingServer: false,
-    timeout: 180_000,
-    env: { ...testEnv, NEXT_DIST_DIR: ".next-e2e" },
+    timeout: 600_000,
+    env: { ...testEnv, NEXT_DIST_DIR: ".next-e2e", ENABLE_DEV_MAIL: "1" },
   },
 });

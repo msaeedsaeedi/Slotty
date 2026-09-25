@@ -15,6 +15,7 @@ import { getAssignment } from "@/server/services/assignments";
 import { listCourseStaff, listVenues } from "@/server/services/courses";
 import { listAssignmentRoster } from "@/server/services/evaluations";
 import { listSlotsForStaff } from "@/server/services/slots";
+import { waitlistCount } from "@/server/services/waitlist";
 import { SlotTable, type SlotRow } from "./slot-table";
 import { StudentsTable, type StudentRow } from "./students-table";
 
@@ -25,11 +26,12 @@ export default async function ManageAssignmentPage({ params, searchParams }: Pag
   const { assignment, criteria } = await load(getAssignment(user, assignmentId));
   const tz = assignment.course.timezone;
   const policy = assignment.policy!;
-  const [slots, venues, staff, roster] = await Promise.all([
+  const [slots, venues, staff, roster, waiting] = await Promise.all([
     listSlotsForStaff(user, assignmentId),
     listVenues(user, courseId),
     listCourseStaff(courseId),
     listAssignmentRoster(user, assignmentId),
+    waitlistCount(user, assignmentId),
   ]);
   const activeTab = tab === "students" ? "students" : "slots";
   const now = new Date();
@@ -75,7 +77,7 @@ export default async function ManageAssignmentPage({ params, searchParams }: Pag
           <>
             Demos {fmt(policy.windowStart, tz, "EEE d MMM HH:mm")} – {fmt(policy.windowEnd, tz, "EEE d MMM HH:mm")} · {policy.slotDurationMin} min
             {policy.bufferMin > 0 && ` + ${policy.bufferMin} min break`} · {policy.capacityPerSlot} per slot · locks {policy.freezeHours}h before ·{" "}
-            {policy.maxReschedules} reschedule{policy.maxReschedules === 1 ? "" : "s"} · marked out of {assignment.maxMarks}
+            {policy.maxReschedules} change{policy.maxReschedules === 1 ? "" : "s"} per student · marked out of {assignment.maxMarks}
             {criteria.length > 0 && ` (${criteria.length}-row rubric)`}
           </>
         }
@@ -93,12 +95,12 @@ export default async function ManageAssignmentPage({ params, searchParams }: Pag
               </a>
             </Button>
             {assignment.status !== "PUBLISHED" ? (
-              <ActionForm action={publishAssignmentAction} compact confirm="Publish? All students in the course will be notified that booking is open.">
+              <ActionForm action={publishAssignmentAction} compact confirmLabel="Publish" confirm="Publish? All students in the course will be notified that booking is open.">
                 <input type="hidden" name="assignmentId" value={assignmentId} />
                 <SubmitButton size="sm">{assignment.status === "CLOSED" ? "Reopen booking" : "Publish"}</SubmitButton>
               </ActionForm>
             ) : (
-              <ActionForm action={closeAssignmentAction} compact confirm="Close booking? Students won't be able to book or change slots. Existing bookings stay.">
+              <ActionForm action={closeAssignmentAction} compact confirmLabel="Close booking" confirm="Close booking? Students won't be able to book or change slots. Existing bookings stay.">
                 <input type="hidden" name="assignmentId" value={assignmentId} />
                 <SubmitButton size="sm" variant="outline">
                   Close booking
@@ -106,7 +108,7 @@ export default async function ManageAssignmentPage({ params, searchParams }: Pag
               </ActionForm>
             )}
             {!hasBookings && (
-              <ActionForm action={deleteAssignmentAction} compact confirm="Delete this assignment and all its slots?">
+              <ActionForm action={deleteAssignmentAction} compact confirmLabel="Delete" confirm="Delete this assignment and all its slots?">
                 <input type="hidden" name="assignmentId" value={assignmentId} />
                 <input type="hidden" name="courseId" value={courseId} />
                 <SubmitButton size="sm" variant="ghost" className="text-destructive">
@@ -139,11 +141,16 @@ export default async function ManageAssignmentPage({ params, searchParams }: Pag
             <p className="text-sm text-muted-foreground">
               {liveSlots.length} slots · room for {totalCapacity} of {roster.length} students
               {drafts > 0 && ` · ${drafts} draft slot${drafts === 1 ? "" : "s"} go live when you publish`}
+              {waiting > 0 && ` · ${waiting} student${waiting === 1 ? " is" : "s are"} waiting for a free slot`}
             </p>
             {slots.length === 0 ? (
               <EmptyState title="No slots yet">Add your availability — Slotty splits it into {policy.slotDurationMin}-minute slots.</EmptyState>
             ) : (
-              <SlotTable slots={slotRows} venues={venues.map((v) => ({ id: v.id, name: v.name }))} />
+              <SlotTable
+                slots={slotRows}
+                venues={venues.map((v) => ({ id: v.id, name: v.name }))}
+                hosts={staff.map((s) => ({ id: s.userId, name: s.user.name }))}
+              />
             )}
           </div>
           <Card className="order-1 h-fit lg:order-2">

@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { Bell, CalendarCheck, LogOut, Shield } from "lucide-react";
-import { logoutAction } from "@/app/actions/auth";
+import { Bell, CalendarCheck, LogOut, Shield, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Actor } from "@/server/services/access";
 import { unreadCount } from "@/server/services/inbox";
@@ -40,8 +39,15 @@ export async function AppHeader({ user }: { user: Actor }) {
               )}
             </Link>
           </Button>
-          <span className="hidden max-w-40 truncate text-sm text-muted-foreground sm:inline">{user.name}</span>
-          <form action={logoutAction}>
+          <Link href="/account" className="hidden max-w-40 truncate text-sm text-muted-foreground hover:text-foreground sm:inline">
+            {user.name}
+          </Link>
+          <Button asChild variant="ghost" size="icon" aria-label="Account" className="sm:hidden">
+            <Link href="/account">
+              <UserRound />
+            </Link>
+          </Button>
+          <form action="/logout" method="post">
             <Button type="submit" variant="ghost" size="icon" aria-label="Sign out">
               <LogOut />
             </Button>

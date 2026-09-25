@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { reviewAction } from "@/app/actions/evaluations";
+import { finalizeManyAction, reviewAction } from "@/app/actions/evaluations";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { EmptyState } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -18,11 +18,21 @@ export default async function ReviewPage({ params }: PageProps<"/courses/[course
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold">Awaiting your review</h2>
-        <p className="text-sm text-muted-foreground">
-          Evaluations TAs have submitted. Finalizing releases marks to the student; returning sends it back to the TA with your comment.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold">Awaiting your review</h2>
+          <p className="text-sm text-muted-foreground">
+            Evaluations TAs have submitted. Finalizing releases marks to the student; returning sends it back to the TA with your comment.
+          </p>
+        </div>
+        {queue.length > 1 && (
+          <ActionForm action={finalizeManyAction} compact confirmLabel="Finalize all" confirm={`Finalize all ${queue.length} evaluations? Every student will see their marks.`}>
+            {queue.map((e) => (
+              <input key={e.id} type="hidden" name="evaluationId" value={e.id} />
+            ))}
+            <SubmitButton size="sm">Finalize all {queue.length}</SubmitButton>
+          </ActionForm>
+        )}
       </div>
       {queue.length === 0 ? (
         <EmptyState title="Nothing to review">You&apos;re all caught up.</EmptyState>

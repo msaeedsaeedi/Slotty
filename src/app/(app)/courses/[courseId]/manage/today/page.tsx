@@ -11,7 +11,7 @@ import { Card } from "@/components/ui/card";
 import { fmt } from "@/lib/time";
 import { requireUser } from "@/server/auth/session";
 import { load } from "@/server/page-utils";
-import { listDayBookings } from "@/server/services/bookings";
+import { listDayBookings, listOverdueAttendance } from "@/server/services/bookings";
 import { getCourseForActor } from "@/server/services/courses";
 
 export const metadata = { title: "Today" };
@@ -30,7 +30,20 @@ export default async function TodayPage({ params, searchParams }: PageProps<"/co
   const start = TZDate.tz(tz, y, m - 1, d);
   const end = addDays(start, 1);
   const onlyMine = mine !== "0";
-  const bookings = await listDayBookings(user, courseId, new Date(start.getTime()), new Date(end.getTime()), onlyMine ? { taId: user.id } : undefined);
+  const filter = onlyMine ? { taId: user.id } : undefined;
+  const [bookings, overdue] = await Promise.all([
+    listDayBookings(user, courseId, new Date(start.getTime()), new Date(end.getTime()), filter),
+    listOverdueAttendance(user, courseId, filter),
+  ]);
+  const now = new Date();
+  // Days (other than the one shown) with demos still waiting for attendance.
+  const overdueDays = new Map<string, { label: string; count: number }>();
+  for (const b of overdue) {
+    const key = fmt(b.slot.startsAt, tz, "yyyy-MM-dd");
+    if (key === day) continue;
+    const entry = overdueDays.get(key) ?? { label: fmt(b.slot.startsAt, tz, "EEE d MMM"), count: 0 };
+    overdueDays.set(key, { ...entry, count: entry.count + 1 });
+  }
 
   const base = `/courses/${courseId}/manage/today`;
   const q = (next: { date?: string; mine?: boolean }) =>
@@ -68,6 +81,18 @@ export default async function TodayPage({ params, searchParams }: PageProps<"/co
       <p className="text-sm text-muted-foreground">
         {bookings.length} demo{bookings.length === 1 ? "" : "s"} · {pending} pending · times in {tz}
       </p>
+      {overdueDays.size > 0 && (
+        <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          <p className="font-medium">Past demos still need attendance:</p>
+          <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+            {[...overdueDays].map(([d, { label, count }]) => (
+              <Link key={d} className="underline" href={q({ date: d })}>
+                {label} ({count})
+              </Link>
+            ))}
+          </p>
+        </div>
+      )}
 
       {bookings.length === 0 ? (
         <EmptyState title="No demos booked for this day" />
@@ -76,6 +101,7 @@ export default async function TodayPage({ params, searchParams }: PageProps<"/co
           {bookings.map((b) => {
             const evalHref = `/courses/${courseId}/manage/assignments/${b.assignment.id}/evaluate/${b.student.id}`;
             const locked = b.evaluation && (b.evaluation.status === "SUBMITTED" || b.evaluation.status === "FINALIZED");
+            const notStarted = b.slot.startsAt > now;
             return (
               <div key={b.id} className="flex flex-wrap items-center gap-3 p-4">
                 <div className="w-24 shrink-0 tabular-nums">
@@ -102,7 +128,7 @@ export default async function TodayPage({ params, searchParams }: PageProps<"/co
                         <ActionForm action={markAttendanceAction} compact>
                           <input type="hidden" name="bookingId" value={b.id} />
                           <input type="hidden" name="status" value="COMPLETED" />
-                          <SubmitButton size="sm" variant="outline">
+                          <SubmitButton size="sm" variant="outline" disabled={notStarted} title={notStarted ? "Available once the demo starts" : undefined}>
                             Completed
                           </SubmitButton>
                         </ActionForm>
@@ -111,7 +137,7 @@ export default async function TodayPage({ params, searchParams }: PageProps<"/co
                         <ActionForm action={markAttendanceAction} compact>
                           <input type="hidden" name="bookingId" value={b.id} />
                           <input type="hidden" name="status" value="NO_SHOW" />
-                          <SubmitButton size="sm" variant="outline">
+                          <SubmitButton size="sm" variant="outline" disabled={notStarted} title={notStarted ? "Available once the demo starts" : undefined}>
                             No-show
                           </SubmitButton>
                         </ActionForm>

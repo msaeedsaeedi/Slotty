@@ -31,6 +31,12 @@ export async function destroySession(): Promise<void> {
   jar.delete(COOKIE);
 }
 
+/** Hash of this browser's session token, so account actions can keep it while ending others. */
+export async function currentSessionHash(): Promise<string | null> {
+  const token = (await cookies()).get(COOKIE)?.value;
+  return token ? hashToken(token) : null;
+}
+
 /** The signed-in user for this request, or null. Deduplicated per request. */
 export const getCurrentUser = cache(async (): Promise<Actor | null> => {
   const token = (await cookies()).get(COOKIE)?.value;

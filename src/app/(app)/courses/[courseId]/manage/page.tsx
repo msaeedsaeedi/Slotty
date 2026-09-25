@@ -51,7 +51,11 @@ export default async function ManageCoursePage({ params }: PageProps<"/courses/[
                           {a.finalized}/{a.students} finalized
                         </span>
                       </div>
-                      <div className="flex h-2 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="flex h-2 overflow-hidden rounded-full bg-muted"
+                        role="img"
+                        aria-label={`${a.completed} completed, ${a.booked} booked, ${a.noShow} no-show out of ${a.students} students`}
+                      >
                         <div className="bg-emerald-500" style={{ width: `${pct(a.completed)}%` }} title="Completed" />
                         <div className="bg-blue-500" style={{ width: `${pct(a.booked)}%` }} title="Booked" />
                         <div className="bg-red-400" style={{ width: `${pct(a.noShow)}%` }} title="No-show" />
@@ -72,6 +76,11 @@ export default async function ManageCoursePage({ params }: PageProps<"/courses/[
                         </div>
                       ))}
                     </dl>
+                    {a.needsAttendance > 0 && (
+                      <p className="rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                        {a.needsAttendance} past demo{a.needsAttendance === 1 ? " needs" : "s need"} attendance recorded
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               </Link>

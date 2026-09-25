@@ -63,7 +63,7 @@ export default async function RosterPage({ params }: PageProps<"/courses/[course
                       </ActionForm>
                     )}
                     {m.userId !== user.id && (
-                      <ActionForm action={removeMemberAction} compact confirm={`Remove ${m.user.name} from this course?`}>
+                      <ActionForm action={removeMemberAction} compact confirmLabel="Remove" confirm={`Remove ${m.user.name} from this course? Their upcoming bookings will be cancelled and they'll be told.`}>
                         <input type="hidden" name="courseId" value={courseId} />
                         <input type="hidden" name="userId" value={m.userId} />
                         <SubmitButton variant="ghost" size="xs" className="text-destructive">

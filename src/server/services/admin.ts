@@ -8,21 +8,50 @@ export async function adminListUsers(actor: Actor, query?: string) {
   const q = query?.trim();
   return db.user.findMany({
     where: q ? { OR: [{ email: { contains: q, mode: "insensitive" } }, { name: { contains: q, mode: "insensitive" } }] } : {},
-    select: { id: true, name: true, email: true, status: true, isAdmin: true, createdAt: true, _count: { select: { enrollments: true } } },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      status: true,
+      isAdmin: true,
+      createdAt: true,
+      _count: { select: { enrollments: true, bookings: { where: { status: "BOOKED", slot: { startsAt: { gt: new Date() } } } } } },
+    },
     orderBy: { createdAt: "desc" },
     take: 200,
   });
 }
 
-export async function adminSetUserDisabled(actor: Actor, userId: string, disabled: boolean) {
+/**
+ * Disable or re-enable an account. Disabling can also release the user's upcoming
+ * bookings so their seats go back to other students.
+ */
+export async function adminSetUserDisabled(actor: Actor, userId: string, disabled: boolean, opts: { releaseBookings?: boolean } = {}, now = new Date()) {
   assertAdmin(actor);
   if (userId === actor.id) throw new DomainError("You can't disable your own account.");
   return db.$transaction(async (tx) => {
     const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
     const status = disabled ? "DISABLED" : user.passwordHash ? "ACTIVE" : "INVITED";
     await tx.user.update({ where: { id: userId }, data: { status } });
-    if (disabled) await tx.session.deleteMany({ where: { userId } });
-    await audit(tx, actor, { action: disabled ? "user.disable" : "user.enable", entityType: "User", entityId: userId, before: user.status, after: status });
+    let released = 0;
+    if (disabled) {
+      await tx.session.deleteMany({ where: { userId } });
+      if (opts.releaseBookings) {
+        const r = await tx.booking.updateMany({
+          where: { studentId: userId, status: "BOOKED", slot: { startsAt: { gt: now } } },
+          data: { status: "CANCELLED", cancelledAt: now, cancelledById: actor.id },
+        });
+        released = r.count;
+      }
+    }
+    await audit(tx, actor, {
+      action: disabled ? "user.disable" : "user.enable",
+      entityType: "User",
+      entityId: userId,
+      before: user.status,
+      after: { status, releasedBookings: released },
+    });
+    return { released };
   });
 }
 
