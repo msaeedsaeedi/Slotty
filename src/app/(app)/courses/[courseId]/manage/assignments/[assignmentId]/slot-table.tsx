@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { cancelSlotAction, changeVenueAction, deleteSlotsAction } from "@/app/actions/scheduling";
+import { cancelSlotAction, changeVenueAction, deleteSlotsAction, reassignHostAction, updateSlotCapacityAction } from "@/app/actions/scheduling";
 import { staffCancelBookingAction } from "@/app/actions/bookings";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { StatusBadge } from "@/components/status-badge";
@@ -20,7 +20,15 @@ export interface SlotRow {
   bookings: { id: string; name: string; status: string }[];
 }
 
-export function SlotTable({ slots, venues }: { slots: SlotRow[]; venues: { id: string; name: string }[] }) {
+export function SlotTable({
+  slots,
+  venues,
+  hosts,
+}: {
+  slots: SlotRow[];
+  venues: { id: string; name: string }[];
+  hosts: { id: string; name: string }[];
+}) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showCancelled, setShowCancelled] = useState(false);
   const visible = slots.filter((s) => showCancelled || s.status !== "CANCELLED");
@@ -53,6 +61,24 @@ export function SlotTable({ slots, venues }: { slots: SlotRow[]; venues: { id: s
             Move to venue
           </SubmitButton>
         </ActionForm>
+        {hosts.length > 1 && (
+          <ActionForm action={reassignHostAction} compact className="flex items-center gap-2" onSuccess={() => setSelected(new Set())}>
+            {hidden}
+            <select name="taId" className="h-7 rounded-md border bg-background px-2 text-sm" defaultValue="" aria-label="New host">
+              <option value="" disabled>
+                New host…
+              </option>
+              {hosts.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.name}
+                </option>
+              ))}
+            </select>
+            <SubmitButton size="sm" variant="outline" disabled={selected.size === 0}>
+              Change host
+            </SubmitButton>
+          </ActionForm>
+        )}
         <ActionForm action={deleteSlotsAction} compact confirm="Delete the selected slots? Slots with bookings are kept." onSuccess={() => setSelected(new Set())}>
           {hidden}
           <SubmitButton size="sm" variant="ghost" className="text-destructive" disabled={selected.size === 0}>
@@ -114,6 +140,18 @@ export function SlotTable({ slots, venues }: { slots: SlotRow[]; venues: { id: s
                     ))}
                     {s.capacity > 1 && s.bookings.length > 0 && <span className="text-xs text-muted-foreground">{s.bookings.length}/{s.capacity}</span>}
                   </div>
+                  {s.status !== "CANCELLED" && !s.past && (
+                    <details className="relative">
+                      <summary className="cursor-pointer list-none text-xs text-muted-foreground hover:text-foreground">Capacity</summary>
+                      <ActionForm action={updateSlotCapacityAction} compact className="absolute right-0 z-20 mt-1 flex w-56 items-center gap-2 rounded-lg border bg-popover p-2 shadow-md">
+                        <input type="hidden" name="slotId" value={s.id} />
+                        <Input name="capacity" type="number" min={Math.max(1, s.bookings.length)} max={100} defaultValue={s.capacity} className="h-7" aria-label="Students per slot" />
+                        <SubmitButton size="sm" variant="outline">
+                          Save
+                        </SubmitButton>
+                      </ActionForm>
+                    </details>
+                  )}
                   {s.status !== "CANCELLED" && !s.past && (
                     <details className="relative">
                       <summary className="cursor-pointer list-none text-xs text-muted-foreground hover:text-destructive">Cancel slot</summary>

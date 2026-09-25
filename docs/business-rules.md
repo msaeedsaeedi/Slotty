@@ -59,6 +59,36 @@ Staff can grant one student an exception on one assignment:
 
 The freeze window, capacity and draft slots still apply.
 
+## Staff tools & student requests
+
+| Operation | Service | Rule |
+|---|---|---|
+| Place or move a student | `bookings.staffPlaceStudent` | Ignores the freeze window and booking dates. Over capacity only when "allow over capacity" is ticked. Refused for completed demos, past or cancelled slots, and time clashes. The old booking is cancelled by staff, so no change is used. Answers the student's open booking request. |
+| Let a no-show book again | `bookings.allowRebookAfterNoShow` | Only `NO_SHOW` bookings whose evaluation isn't submitted. No change is used. |
+| Exception (`BookingAllowance`) | `bookings.setAllowance` | 0–20 extra changes and/or late booking. Setting both to zero removes it. The student is notified. |
+| Waitlist | `waitlist.joinWaitlist`, `notifyWaitlist` | Only while the assignment is open and the student has no booking. When a seat frees up (cancel, reschedule, staff cancel or move, more capacity, new published slots), every waiting student is notified, at most once per 30 minutes. First to book gets it. The entry is removed when they book. |
+| Student request | `requests.createRequest`, `resolveRequest` | One open request per kind (`BOOKING_CHANGE`, `MARK_QUERY`) per assignment. Mark queries only after marks are released. Goes to the student's host and the instructors (all staff if neither). Declining needs a reply. |
+| Change host | `slots.reassignHost` | The new host must be course staff and have no overlapping slot. Booked students are told. |
+| Slot capacity | `slots.updateSlotCapacity` | 1–100, never below the students already booked. More capacity alerts the waitlist. |
+| Bulk finalize | `evaluations.finalizeMany` | Instructor only. Same as finalizing each one. |
+
+## Automations (worker, `services/automations.ts`)
+
+Each job records what it did, so running it twice sends nothing twice.
+
+| Job | When | What |
+|---|---|---|
+| `announceOpenedBookings` | `bookingOpensAt` has passed | "Book your demo" to students without a booking |
+| `nudgeUnbookedStudents` | 48h before `windowEnd` (once) | "Last chance to book" to unbooked students |
+| `closeEndedAssignments` | `windowEnd` has passed | Assignment → `CLOSED`, waitlist cleared, audited with no actor |
+| `sendDailyAgendas` | 06:00–11:00 course time, once per local day | Email-only list of today's demos for each host (unless they opted out) |
+| `queueDueReminders` | 24h / 1h before | Reminder to the student (unless they opted out of reminder emails) |
+
+## Calendar
+
+- `/bookings/<id>/calendar`: one booking as an `.ics` file (the student's own, signed in).
+- `/calendar/<token>`: personal feed of the user's own demos plus demos they host, including the last 30 days. The token is the credential. Replacing it on the account page breaks old links.
+
 ## Scheduling rules (`src/domain/slots.ts`, `services/slots.ts`)
 
 - An availability block is split into `slotDurationMin` slots with `bufferMin` gaps and clipped to the demo window. A leftover shorter than one slot is dropped.
@@ -104,6 +134,8 @@ DRAFT ──submit──► SUBMITTED ──finalize──► FINALIZED ──un
 
 ## Accounts
 
+The account page (`/account`) covers name, password (checks the current one and signs out other devices), email preferences (`emailReminders`, `emailAgenda`), the calendar link, and "sign out other devices". Confirmation, change and marks emails can't be turned off.
+
 | Item | Value |
 |---|---|
 | Invite link | 14 days. Re-inviting invalidates older links. |
@@ -130,6 +162,15 @@ Each notification creates an in-app entry and an email (outbox). Both are writte
 | `slot.venue_changed` | booked students | Venue changed |
 | `booking.reminder` | student | 24h and 1h before (worker) |
 | `booking.no_show` | student | Marked as no-show |
+| `booking.placed_by_staff` | student | Staff booked or moved them |
+| `booking.rebook_allowed` | student | Staff cleared a no-show |
+| `booking.allowance` | student | Exception granted |
+| `waitlist.slot_available` | waiting students | A seat freed up |
+| `slot.host_changed` | booked students | Slot handed to another host |
+| `request.created` | host + instructors | Student sent a request |
+| `request.answered` | student | Staff handled or declined it |
+| `assignment.book_soon` | unbooked students | 48h before the demo window ends |
+| `agenda.daily` | host (email only) | Morning list of today's demos |
 | `evaluation.returned` | evaluator (TA) | Instructor returned an evaluation |
 | `evaluation.finalized` | student | Marks released |
 

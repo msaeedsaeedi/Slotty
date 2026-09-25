@@ -6,6 +6,7 @@ import { db, type Tx } from "@/server/db";
 import { assertAssignmentRole, assertCourseRole, STAFF, type Actor } from "./access";
 import { audit } from "./audit";
 import { notify } from "./notify";
+import { notifyWaitlist } from "./waitlist";
 
 export const ACTIVE_BOOKING = ["BOOKED", "COMPLETED", "NO_SHOW"] as const;
 
@@ -89,6 +90,7 @@ export async function addAvailability(actor: Actor, assignmentId: string, input:
       })),
     });
     await audit(tx, actor, { action: "availability.add", entityType: "Assignment", entityId: assignmentId, after: { ...block, slots: timings.length } });
+    if (status === "PUBLISHED") await notifyWaitlist(tx, assignmentId);
     return { slots: timings.length, status };
   });
 }
@@ -172,6 +174,67 @@ export async function changeVenue(actor: Actor, slotIds: string[], venueId: stri
     }
     await audit(tx, actor, { action: "slot.venue", entityType: "Slot", entityId: slots.map((s) => s.id).join(","), after: { venueId } });
     return { moved: slots.length, notified: bookings.length };
+  });
+}
+
+/**
+ * Hand slots over to another host (e.g. a TA is ill or leaving the course).
+ * Rejects the move if it would double-book the new host; booked students are told.
+ */
+export async function reassignHost(actor: Actor, slotIds: string[], taId: string) {
+  return db.$transaction(async (tx) => {
+    const slots = await tx.slot.findMany({
+      where: { id: { in: slotIds }, status: { not: "CANCELLED" } },
+      include: { assignment: { include: { course: true } } },
+      orderBy: { startsAt: "asc" },
+    });
+    if (slots.length === 0) return { moved: 0, notified: 0 };
+    const courseIds = new Set(slots.map((s) => s.assignment.courseId));
+    if (courseIds.size !== 1) throw new DomainError("Slots must belong to one course.");
+    const { course, courseId } = slots[0].assignment;
+    await assertCourseRole(tx, actor, courseId, STAFF, { write: true });
+    const host = await tx.enrollment.findUnique({ where: { courseId_userId: { courseId, userId: taId } }, include: { user: true } });
+    if (!host || host.role === "STUDENT") throw new DomainError("Slots must be hosted by a TA or instructor of this course.");
+
+    const moving = slots.filter((s) => s.taId !== taId);
+    const others = await tx.slot.findMany({
+      where: { taId, status: { not: "CANCELLED" }, id: { notIn: moving.map((s) => s.id) } },
+    });
+    const clash = moving.find((m) => others.some((o) => overlaps(m, o)));
+    if (clash) {
+      throw new DomainError(`${host.user.name} already hosts a slot overlapping ${fmtRange(clash.startsAt, clash.endsAt, course.timezone)}.`, "CONFLICT");
+    }
+    await tx.slot.updateMany({ where: { id: { in: moving.map((s) => s.id) } }, data: { taId } });
+
+    const bookings = await tx.booking.findMany({ where: { slotId: { in: moving.map((s) => s.id) }, status: "BOOKED" }, include: { slot: true } });
+    for (const b of bookings) {
+      const a = moving.find((s) => s.id === b.slotId)!.assignment;
+      await notify(tx, [b.studentId], {
+        type: "slot.host_changed",
+        title: `New examiner: ${a.title}`,
+        body: `Your demo on ${fmtRange(b.slot.startsAt, b.slot.endsAt, course.timezone)} will now be with ${host.user.name}. The time and place haven't changed.`,
+        link: `/courses/${courseId}/assignments/${a.id}`,
+      });
+    }
+    await audit(tx, actor, { action: "slot.host", entityType: "Slot", entityId: moving.map((s) => s.id).join(","), after: { taId } });
+    return { moved: moving.length, notified: bookings.length };
+  });
+}
+
+/** Change how many students one slot takes. Can't go below the students already booked. */
+export async function updateSlotCapacity(actor: Actor, slotId: string, capacity: number) {
+  if (!Number.isInteger(capacity) || capacity < 1 || capacity > 100) throw new DomainError("Capacity must be a whole number from 1 to 100.");
+  return db.$transaction(async (tx) => {
+    const slot = await tx.slot.findUnique({ where: { id: slotId }, include: { assignment: { include: { course: true } } } });
+    if (!slot) throw new DomainError("Slot not found.", "NOT_FOUND");
+    await assertCourseRole(tx, actor, slot.assignment.courseId, STAFF, { write: true });
+    if (slot.status === "CANCELLED") throw new DomainError("This slot was cancelled.");
+    await tx.$queryRaw`SELECT id FROM "Slot" WHERE id = ${slotId} FOR UPDATE`;
+    const booked = await tx.booking.count({ where: { slotId, status: { in: [...ACTIVE_BOOKING] } } });
+    if (capacity < booked) throw new DomainError(`${booked} students are already booked into this slot, so capacity can't go below ${booked}.`, "CONFLICT");
+    await tx.slot.update({ where: { id: slotId }, data: { capacity } });
+    await audit(tx, actor, { action: "slot.capacity", entityType: "Slot", entityId: slotId, before: slot.capacity, after: capacity });
+    if (capacity > slot.capacity) await notifyWaitlist(tx, slot.assignmentId);
   });
 }
 

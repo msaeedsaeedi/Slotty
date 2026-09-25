@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarClock, ExternalLink, MapPin, User } from "lucide-react";
-import { bookSlotAction, cancelBookingAction, rescheduleAction } from "@/app/actions/bookings";
+import { CalendarClock, CalendarPlus, ExternalLink, MapPin, User } from "lucide-react";
+import { bookSlotAction, cancelBookingAction, joinWaitlistAction, leaveWaitlistAction, rescheduleAction } from "@/app/actions/bookings";
+import { LocalTimeHint } from "@/components/local-time-hint";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -15,11 +16,14 @@ import { load } from "@/server/page-utils";
 import { getAssignment } from "@/server/services/assignments";
 import { getMyChangeState, listMyBookings } from "@/server/services/bookings";
 import { getMyResult } from "@/server/services/evaluations";
+import { listMyRequests } from "@/server/services/requests";
 import { listOpenSlots } from "@/server/services/slots";
+import { isOnWaitlist } from "@/server/services/waitlist";
+import { RequestPanel } from "./request-panel";
 
 export default async function StudentAssignmentPage({ params, searchParams }: PageProps<"/courses/[courseId]/assignments/[assignmentId]">) {
   const { courseId, assignmentId } = await params;
-  const { reschedule } = await searchParams;
+  const { reschedule, day: dayFilter, host: hostFilter } = await searchParams;
   const user = await requireUser();
   const { assignment, role } = await load(getAssignment(user, assignmentId));
   if (role !== "STUDENT") redirect(`/courses/${courseId}/manage/assignments/${assignmentId}`);
@@ -27,11 +31,13 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
   const tz = assignment.course.timezone;
   const policy = assignment.policy!;
   const now = new Date();
-  const [slots, history, result, changeState] = await Promise.all([
+  const [slots, history, result, changeState, requests, waiting] = await Promise.all([
     listOpenSlots(user, assignmentId),
     listMyBookings(user, { assignmentId }),
     getMyResult(user, assignmentId),
     getMyChangeState(user, assignmentId),
+    listMyRequests(user, assignmentId),
+    isOnWaitlist(user, assignmentId),
   ]);
   const { budget, allowance } = changeState ?? {
     allowance: NO_ALLOWANCE,
@@ -47,20 +53,36 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
   // After cancelling more times than allowed, only staff can place the student.
   const outOfChanges = !booking && budget.used > budget.allowed;
 
-  // Group bookable slots by day in the course timezone.
+  // Group bookable slots by day in the course timezone, with optional day/host filters.
+  const bookable = slots.filter((s) => s.id !== booking?.slotId && s.seatsLeft > 0);
+  const fullSlots = slots.filter((s) => s.id !== booking?.slotId && s.seatsLeft === 0).length;
+  const dayKey = (d: Date) => fmt(d, tz, "yyyy-MM-dd");
+  const dayOptions = [...new Map(bookable.map((s) => [dayKey(s.startsAt), fmt(s.startsAt, tz, "EEE d MMM")])).entries()];
+  const hostOptions = [...new Map(bookable.map((s) => [s.ta.id, s.ta.name])).entries()];
+  const pickDay = typeof dayFilter === "string" && dayOptions.some(([k]) => k === dayFilter) ? dayFilter : null;
+  const pickHost = typeof hostFilter === "string" && hostOptions.some(([k]) => k === hostFilter) ? hostFilter : null;
   const days = new Map<string, typeof slots>();
-  let fullSlots = 0;
-  for (const s of slots) {
-    if (s.id === booking?.slotId) continue;
-    if (s.seatsLeft === 0) {
-      fullSlots++;
-      continue;
-    }
+  for (const s of bookable) {
+    if ((pickDay && dayKey(s.startsAt) !== pickDay) || (pickHost && s.ta.id !== pickHost)) continue;
     const key = fmt(s.startsAt, tz, "EEEE d MMMM");
     days.set(key, [...(days.get(key) ?? []), s]);
   }
+  const filterHref = (next: { day?: string | null; host?: string | null }) => {
+    const q = new URLSearchParams();
+    if (rescheduling) q.set("reschedule", "1");
+    const d = next.day === undefined ? pickDay : next.day;
+    const h = next.host === undefined ? pickHost : next.host;
+    if (d) q.set("day", d);
+    if (h) q.set("host", h);
+    return `?${q}`;
+  };
 
   const showPicker = !booking || rescheduling;
+  const bookingOpensLater = Boolean(policy.bookingOpensAt && policy.bookingOpensAt > now && !allowance.lateBooking);
+  const noSlotsToBook = open && !outOfChanges && !bookingOpensLater && bookable.length === 0;
+  // Stuck = there's no self-service way forward, so offer the staff request up front.
+  const frozen = booking?.status === "BOOKED" && isFrozen(booking.slot.startsAt, now, policy.freezeHours);
+  const stuck = (!booking && (!open || outOfChanges || noSlotsToBook)) || (booking?.status === "BOOKED" && (frozen || (!canMove && !cancelRule?.ok)));
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -71,6 +93,7 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
       />
 
       {assignment.description && <p className="whitespace-pre-line text-sm">{assignment.description}</p>}
+      <LocalTimeHint timezone={tz} />
 
       {result && (
         <Card className="border-emerald-300 dark:border-emerald-900">
@@ -102,6 +125,14 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
                 <p className="whitespace-pre-line text-muted-foreground">{result.feedback}</p>
               </div>
             )}
+            <RequestPanel
+              assignmentId={assignmentId}
+              kind="MARK_QUERY"
+              requests={requests}
+              timezone={tz}
+              title="Question about your marks?"
+              hint="Explain which part you'd like looked at again. Course staff will reply here and by email."
+            />
           </CardContent>
         </Card>
       )}
@@ -132,6 +163,11 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
             <p className="flex items-center gap-2">
               <User className="size-4 text-muted-foreground" /> {booking.slot.ta.name}
             </p>
+            {booking.status === "BOOKED" && (
+              <a href={`/bookings/${booking.id}/calendar`} className="flex items-center gap-2 text-primary underline">
+                <CalendarPlus className="size-4" /> Add to calendar
+              </a>
+            )}
             {booking.status === "BOOKED" && (
               <div className="flex flex-wrap items-center gap-2 pt-3">
                 {rescheduling ? (
@@ -172,22 +208,55 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
               {fullSlots > 0 && ` · ${fullSlots} full slot${fullSlots === 1 ? "" : "s"} hidden`}
             </p>
           </div>
+          {(dayOptions.length > 1 || hostOptions.length > 1) && (
+            <nav aria-label="Filter slots" className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+              {dayOptions.length > 1 && (
+                <FilterChips label="Day" current={pickDay} options={dayOptions} href={(v) => filterHref({ day: v })} />
+              )}
+              {hostOptions.length > 1 && (
+                <FilterChips label="With" current={pickHost} options={hostOptions} href={(v) => filterHref({ host: v })} />
+              )}
+            </nav>
+          )}
           {!open ? (
             <Alert>
-              <AlertDescription>Booking is closed for this assignment. Contact your TA if you still need a slot.</AlertDescription>
+              <AlertDescription>Booking is closed for this assignment. Send a request below if you still need a slot.</AlertDescription>
             </Alert>
           ) : outOfChanges ? (
             <Alert>
               <AlertDescription>
-                You&apos;ve used all {budget.allowed} change{budget.allowed === 1 ? "" : "s"} for this assignment, so you can&apos;t book again yourself. Ask your TA for a slot.
+                You&apos;ve used all {budget.allowed} change{budget.allowed === 1 ? "" : "s"} for this assignment, so you can&apos;t book again yourself. Send a
+                request below and your TA can place you in a slot.
               </AlertDescription>
             </Alert>
-          ) : policy.bookingOpensAt && policy.bookingOpensAt > now && !allowance.lateBooking ? (
+          ) : bookingOpensLater ? (
             <Alert>
-              <AlertDescription>Booking opens {fmt(policy.bookingOpensAt, tz, "EEEE d MMMM 'at' HH:mm")}. We&apos;ll notify you when it opens.</AlertDescription>
+              <AlertDescription>Booking opens {fmt(policy.bookingOpensAt!, tz, "EEEE d MMMM 'at' HH:mm")}. We&apos;ll notify you when it opens.</AlertDescription>
             </Alert>
+          ) : noSlotsToBook ? (
+            <EmptyState title={fullSlots > 0 ? "All slots are taken right now" : "No slots available right now"}>
+              {waiting ? (
+                <ActionForm action={leaveWaitlistAction} compact className="mt-2 space-y-2">
+                  <p>You&apos;re on the list — we&apos;ll notify you as soon as a slot frees up.</p>
+                  <input type="hidden" name="assignmentId" value={assignmentId} />
+                  <SubmitButton size="sm" variant="ghost">
+                    Stop alerts
+                  </SubmitButton>
+                </ActionForm>
+              ) : (
+                <ActionForm action={joinWaitlistAction} compact className="mt-2 space-y-2">
+                  <p>Slots free up when others cancel, and your TA may add more times.</p>
+                  <input type="hidden" name="assignmentId" value={assignmentId} />
+                  <SubmitButton size="sm">Notify me when a slot frees up</SubmitButton>
+                </ActionForm>
+              )}
+            </EmptyState>
           ) : days.size === 0 ? (
-            <EmptyState title="No slots available right now">Check back later — your TA may add more times.</EmptyState>
+            <EmptyState title="No slots match these filters">
+              <Link className="underline" href={filterHref({ day: null, host: null })}>
+                Show all slots
+              </Link>
+            </EmptyState>
           ) : (
             [...days.entries()].map(([day, daySlots]) => (
               <div key={day} className="space-y-2">
@@ -236,6 +305,22 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
         </section>
       )}
 
+      {booking?.status !== "COMPLETED" && (
+        <RequestPanel
+          assignmentId={assignmentId}
+          kind="BOOKING_CHANGE"
+          requests={requests}
+          timezone={tz}
+          open={stuck}
+          title={stuck ? "Need a different time? Ask course staff" : "Need help with your booking?"}
+          hint={
+            frozen
+              ? "Your slot is locked, so only staff can change it. Say what happened and which times would work."
+              : "Explain what you need, e.g. times that would work for you. Staff can move you without using your changes."
+          }
+        />
+      )}
+
       {history.filter((b) => b.status === "CANCELLED").length > 0 && (
         <details className="text-sm text-muted-foreground">
           <summary className="cursor-pointer">Booking history</summary>
@@ -245,11 +330,42 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
               .map((b) => (
                 <li key={b.id}>
                   {fmtRange(b.slot.startsAt, b.slot.endsAt, tz)} — cancelled {b.cancelledAt && fmt(b.cancelledAt, tz, "d MMM HH:mm")}
+                  {b.cancelledById === user.id ? " by you (used a change)" : " by staff"}
                 </li>
               ))}
           </ul>
         </details>
       )}
+    </div>
+  );
+}
+
+function FilterChips({
+  label,
+  current,
+  options,
+  href,
+}: {
+  label: string;
+  current: string | null;
+  options: [string, string][];
+  href: (value: string | null) => string;
+}) {
+  const chip = (value: string | null, text: string) => (
+    <Link
+      key={value ?? "all"}
+      href={href(value)}
+      aria-current={current === value ? "true" : undefined}
+      className={`rounded-full border px-2.5 py-0.5 ${current === value ? "border-primary bg-primary/10 font-medium" : "text-muted-foreground hover:text-foreground"}`}
+    >
+      {text}
+    </Link>
+  );
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-muted-foreground">{label}:</span>
+      {chip(null, "Any")}
+      {options.map(([value, text]) => chip(value, text))}
     </div>
   );
 }

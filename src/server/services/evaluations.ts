@@ -253,3 +253,9 @@ export async function getMyResult(actor: Actor, assignmentId: string) {
       .map((s) => ({ label: s.criterion.label, points: s.points, maxPoints: s.criterion.maxPoints, comment: s.comment })),
   };
 }
+
+/** Finalize several submitted evaluations at once (instructor review queue). */
+export async function finalizeMany(actor: Actor, evaluationIds: string[]) {
+  for (const id of evaluationIds) await reviewEvaluation(actor, id, "finalize");
+  return evaluationIds.length;
+}

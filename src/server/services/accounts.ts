@@ -3,6 +3,7 @@ import { DomainError } from "@/domain/result";
 import { db, type Tx } from "@/server/db";
 import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "@/server/auth/password";
 import { generateToken, hashToken } from "@/server/auth/tokens";
+import type { Actor } from "./access";
 import { queueEmail, renderEmail } from "./notify";
 
 const INVITE_DAYS = 14;
@@ -117,4 +118,47 @@ export async function resetPassword(token: string, newPassword: string) {
     await tx.session.deleteMany({ where: { userId: user.id } });
     return tx.user.update({ where: { id: user.id }, data: { passwordHash } });
   });
+}
+
+// ─── Account page ─────────────────────────────────────────────────────────────
+
+export async function getAccount(actor: Actor) {
+  return db.user.findUniqueOrThrow({
+    where: { id: actor.id },
+    select: { name: true, email: true, emailReminders: true, emailAgenda: true, calendarToken: true, _count: { select: { sessions: true } } },
+  });
+}
+
+export async function updateProfile(actor: Actor, input: { name: string }) {
+  const name = z.string().trim().min(1, "Enter your name.").max(120).parse(input.name);
+  await db.user.update({ where: { id: actor.id }, data: { name } });
+}
+
+/**
+ * Change password after checking the current one. Other devices are signed out;
+ * the session identified by `keepSessionHash` (this browser) stays.
+ */
+export async function changePassword(actor: Actor, input: { current: string; next: string }, keepSessionHash: string | null) {
+  const next = passwordSchema.parse(input.next);
+  const user = await db.user.findUniqueOrThrow({ where: { id: actor.id } });
+  if (!user.passwordHash || !(await verifyPassword(user.passwordHash, input.current))) {
+    throw new DomainError("Your current password is incorrect.");
+  }
+  const passwordHash = await hashPassword(next);
+  await db.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: actor.id }, data: { passwordHash } });
+    await tx.session.deleteMany({ where: { userId: actor.id, ...(keepSessionHash ? { tokenHash: { not: keepSessionHash } } : {}) } });
+  });
+}
+
+export async function setEmailPreferences(actor: Actor, prefs: { emailReminders: boolean; emailAgenda: boolean }) {
+  await db.user.update({ where: { id: actor.id }, data: { emailReminders: prefs.emailReminders, emailAgenda: prefs.emailAgenda } });
+}
+
+/** Sign out everywhere except this browser. Returns how many sessions ended. */
+export async function signOutOtherSessions(actor: Actor, keepSessionHash: string | null) {
+  const r = await db.session.deleteMany({
+    where: { userId: actor.id, ...(keepSessionHash ? { tokenHash: { not: keepSessionHash } } : {}) },
+  });
+  return r.count;
 }

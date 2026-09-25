@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { markAllReadAction } from "@/app/actions/admin";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { EmptyState, PageHeader } from "@/components/page-header";
@@ -46,10 +45,11 @@ export default async function NotificationsPage() {
                 </div>
               </div>
             );
+            // A plain link (not <Link>) so prefetching never marks anything read.
             return n.link ? (
-              <Link key={n.id} href={n.link} className="block hover:bg-muted/50">
+              <a key={n.id} href={`/notifications/${n.id}`} className="block hover:bg-muted/50">
                 {body}
-              </Link>
+              </a>
             ) : (
               <div key={n.id}>{body}</div>
             );

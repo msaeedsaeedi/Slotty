@@ -16,14 +16,21 @@ enum UserStatus {
 }
 
 model User {
-  id           String     @id @default(cuid())
-  email        String     @unique
-  name         String
-  passwordHash String?
-  isAdmin      Boolean    @default(false)
-  status       UserStatus @default(INVITED)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id             String     @id @default(cuid())
+  email          String     @unique
+  name           String
+  passwordHash   String?
+  isAdmin        Boolean    @default(false)
+  status         UserStatus @default(INVITED)
+  /// Secret for the personal iCal feed (/calendar/<token>); null until created.
+  calendarToken  String?    @unique
+  /// Email preferences (in-app notifications are always kept).
+  emailReminders Boolean    @default(true)
+  emailAgenda    Boolean    @default(true)
+  /// Last time the worker sent this staff member their daily agenda.
+  agendaSentAt   DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 
   sessions        Session[]
   tokens          AuthToken[]
@@ -40,6 +47,9 @@ model User {
   auditLogs       AuditLog[]
   allowances      BookingAllowance[]  @relation("AllowanceStudent")
   allowancesGiven BookingAllowance[]  @relation("AllowanceGrantedBy")
+  waitlist        WaitlistEntry[]
+  requests        StudentRequest[]    @relation("RequestStudent")
+  requestsHandled StudentRequest[]    @relation("RequestResolvedBy")
 }
 
 model Session {
@@ -148,6 +158,8 @@ model Assignment {
   criteria    RubricCriterion[]
   policy      DemoPolicy?
   allowances  BookingAllowance[]
+  waitlist    WaitlistEntry[]
+  requests    StudentRequest[]
   blocks      AvailabilityBlock[]
   slots       Slot[]
   bookings    Booking[]
@@ -180,6 +192,8 @@ model DemoPolicy {
   allowStudentCancel Boolean   @default(true)
   /// When students were told booking is open (set on publish, or by the worker at bookingOpensAt).
   openAnnouncedAt    DateTime?
+  /// When unbooked students were nudged that the demo window is about to end.
+  nudgeSentAt        DateTime?
 
   assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
 }
@@ -251,11 +265,12 @@ model Booking {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  slot        Slot        @relation(fields: [slotId], references: [id], onDelete: Cascade)
-  assignment  Assignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  student     User        @relation("BookingStudent", fields: [studentId], references: [id])
-  cancelledBy User?       @relation("BookingCancelledBy", fields: [cancelledById], references: [id])
+  slot        Slot             @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  assignment  Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student     User             @relation("BookingStudent", fields: [studentId], references: [id])
+  cancelledBy User?            @relation("BookingCancelledBy", fields: [cancelledById], references: [id])
   evaluation  Evaluation?
+  requests    StudentRequest[]
 
   @@index([slotId, status])
   @@index([studentId])
@@ -281,6 +296,56 @@ model BookingAllowance {
   grantedBy  User       @relation("AllowanceGrantedBy", fields: [grantedById], references: [id])
 
   @@unique([assignmentId, studentId])
+}
+
+/// "Tell me when a slot frees up" for an assignment with no free slots.
+model WaitlistEntry {
+  id           String    @id @default(cuid())
+  assignmentId String
+  studentId    String
+  notifiedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student    User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, studentId])
+}
+
+enum RequestKind {
+  /// Can't make my slot / need a different time (often inside the freeze window).
+  BOOKING_CHANGE
+  /// Question about released marks.
+  MARK_QUERY
+}
+
+enum RequestStatus {
+  OPEN
+  RESOLVED
+  DECLINED
+}
+
+/// A message from a student to course staff about one assignment.
+model StudentRequest {
+  id           String        @id @default(cuid())
+  kind         RequestKind
+  status       RequestStatus @default(OPEN)
+  assignmentId String
+  studentId    String
+  bookingId    String?
+  message      String
+  response     String?
+  resolvedById String?
+  resolvedAt   DateTime?
+  createdAt    DateTime      @default(now())
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student    User       @relation("RequestStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  booking    Booking?   @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  resolvedBy User?      @relation("RequestResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([assignmentId, status])
+  @@index([studentId])
 }
 
 // ─── Evaluation ──────────────────────────────────────────────────────────────

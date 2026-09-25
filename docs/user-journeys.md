@@ -21,6 +21,8 @@ Roles are **per course** (`Enrollment.role`). One person can be a student in one
 | S9 | Handles staff changes | Bell + email | — | `slot.cancelled`, `booking.cancelled_by_staff` (always with a reason), `slot.venue_changed`, `assignment.rules_changed`. Rebooking after a staff cancellation doesn't use a change. |
 | S10 | Attends the demo | — | — | The booking card shows venue, meeting link and TA. |
 | S11 | Sees results | Assignment page | `evaluations.getMyResult` | Only **FINALIZED** marks are shown: total, rubric rows, feedback. Private notes are never shown. `evaluation.finalized` notification. |
+| S12b | Gets help when stuck | Assignment page | `requests.createRequest`, `waitlist.joinWaitlist` | "Need a different time? Ask course staff" opens automatically when self-service is blocked (freeze window, no changes left, closed, nothing free). With every slot full, "Notify me when a slot frees up". After marks are released, "Question about your marks?". |
+| S12c | Calendar & account | Booking card, `/account` | `calendar.*`, `accounts.*` | "Add to calendar" (.ics) or subscribe to the personal feed. Change name or password, email preferences, sign out other devices. |
 | S12 | Reviews history | `/bookings`, `/notifications` | `listMyBookings`, `inbox` | Every booking, including cancelled and past ones. The notification feed has "Mark all read". |
 
 ## TA (can run a course alone)
@@ -35,6 +37,8 @@ Roles are **per course** (`Enrollment.role`). One person can be a student in one
 | T6 | Publishes | Assignment header | `publishAssignment` | Needs at least one slot. Draft slots go live. Students are notified now, or told the opening time and notified again by the worker when booking opens. |
 | T7 | Manages slots | *Slots* tab | `changeVenue`, `deleteUnbookedSlots`, `cancelSlot`, `staffCancelBooking` | Bulk move venue, delete unbooked slots, cancel a slot or one student's booking. A reason is required whenever a student is affected. |
 | T7b | Edits the assignment | `…/edit` | `updateAssignment` | A notice explains the impact on booked students. The edit is blocked if max marks drop below awarded marks or the window no longer covers booked slots. Booked students are told about rule changes. |
+| T7c | Handles student requests | `…/manage/requests` (badge in nav) | `requests.resolveRequest` | Open the student to move them, clear a no-show, or grant an exception, then mark the request handled or declined with a reply. |
+| T7d | Fixes one student's booking | Student page (`…/evaluate/[studentId]`), *Booking* card | `staffPlaceStudent`, `allowRebookAfterNoShow`, `setAllowance` | Place or move into any upcoming slot, even inside the freeze window, and optionally over capacity. None of it uses the student's changes. |
 | T8 | Runs the day | `…/manage/today` | `listDayBookings`, `markAttendance`, `listOverdueAttendance` | Day navigation with "My demos" or "Everyone". Mark *Completed* / *No-show* / *Undo* once the demo has started. Past days with unrecorded attendance are listed as links. A no-show notifies the student. Attendance locks once the evaluation is submitted. |
 | T9 | Marks | `…/evaluate/[studentId]` | `getOrCreateEvaluation`, `saveEvaluation` | Rubric scores with comments, feedback, private notes, and an optional total override (needs a note). |
 | T10 | Submits | Evaluate page or *Students & marks* tab (bulk) | `submitEvaluations` | Every rubric row has to be scored. **With an instructor:** goes to `SUBMITTED` for review. **Without one:** goes straight to `FINALIZED` and the student sees it. |
@@ -48,7 +52,7 @@ Everything a TA can do, plus:
 | # | Step | Screen | Service | What happens / feedback |
 |---|---|---|---|---|
 | I1 | Watches progress | `…/manage` | `reports.courseProgress` | Per assignment: unbooked / booked / done / no-show / review / final, plus a warning for past demos missing attendance. |
-| I2 | Reviews marks | `…/manage/review` | `reviewEvaluation` | **Finalize** releases marks to the student. **Return** needs a comment, which goes to the TA. |
+| I2 | Reviews marks | `…/manage/review` | `reviewEvaluation`, `finalizeMany` | **Finalize** releases marks to the student. **Return** needs a comment, which goes to the TA. |
 | I3 | Corrects a released mark | Evaluate page | `unlockEvaluation` | Needs a reason. The evaluation goes back to `RETURNED`. In a course without an instructor, the TA can unlock. |
 | I4 | Exports | Assignment → *Export CSV* | `reports.exportAssignmentCsv` | One row per student: slot, TA, venue, attendance, rubric scores, total, status. Formula-injection safe. |
 

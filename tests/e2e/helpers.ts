@@ -5,6 +5,7 @@ export async function login(browser: Browser, email: string, password = "passwor
   const page = await context.newPage();
   page.on("dialog", (d) => d.accept());
   await page.goto("/login");
+  await page.waitForLoadState("networkidle");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
@@ -12,8 +13,14 @@ export async function login(browser: Browser, email: string, password = "passwor
   return page;
 }
 
+/** Navigate and wait until the page has settled, so the first click lands on hydrated forms (dev compiles pages on demand). */
+export async function open(page: Page, url: string) {
+  await page.goto(url);
+  await page.waitForLoadState("networkidle");
+}
+
 export async function createCourse(page: Page, code: string, role: "TA" | "Instructor") {
-  await page.goto("/courses/new");
+  await open(page, "/courses/new");
   await page.getByLabel("Course code").fill(code);
   await page.getByLabel("Title").fill(`${code} Title`);
   await page.getByLabel("Term").fill("Fall 2026");
@@ -31,9 +38,9 @@ export async function importRoster(page: Page, csv: string) {
   await expect(page.getByText(/Roster imported/)).toBeVisible();
 }
 
-/** Create a 2-row rubric assignment, add 09:00–10:00 availability on the first demo day, and publish. */
-export async function createPublishedAssignment(page: Page, courseId: string, title: string) {
-  await page.goto(`/courses/${courseId}/manage/assignments/new`);
+/** Create a 2-row rubric assignment, add one hour of availability (09:00 by default) on the first demo day, and publish. */
+export async function createPublishedAssignment(page: Page, courseId: string, title: string, hours: { from: string; to: string } = { from: "09:00", to: "10:00" }) {
+  await open(page, `/courses/${courseId}/manage/assignments/new`);
   await page.getByLabel("Title", { exact: true }).fill(title);
   await page.getByRole("button", { name: "Add rubric row" }).click();
   await page.getByRole("button", { name: "Add rubric row" }).click();
@@ -44,8 +51,8 @@ export async function createPublishedAssignment(page: Page, courseId: string, ti
   await page.getByRole("button", { name: "Create assignment" }).click();
   await expect(page.getByRole("button", { name: "Generate slots" })).toBeVisible();
 
-  await page.getByLabel("From", { exact: true }).fill("09:00");
-  await page.getByLabel("To", { exact: true }).fill("10:00");
+  await page.getByLabel("From", { exact: true }).fill(hours.from);
+  await page.getByLabel("To", { exact: true }).fill(hours.to);
   await page.getByRole("button", { name: "Generate slots" }).click();
   await expect(page.getByText("4 slots created as drafts.")).toBeVisible();
   await page.getByRole("button", { name: "Publish" }).click();

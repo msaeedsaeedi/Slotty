@@ -14,7 +14,7 @@ import {
   updateAssignment,
   type AssignmentInput,
 } from "@/server/services/assignments";
-import { addAvailability, cancelSlot, changeVenue, deleteUnbookedSlots } from "@/server/services/slots";
+import { addAvailability, cancelSlot, changeVenue, deleteUnbookedSlots, reassignHost, updateSlotCapacity } from "@/server/services/slots";
 
 async function courseTimezone(courseId: string) {
   const course = await db.course.findUnique({ where: { id: courseId }, select: { timezone: true } });
@@ -141,5 +141,23 @@ export async function changeVenueAction(_: ActionState, fd: FormData): Promise<A
     if (ids.length === 0) throw new DomainError("Select at least one slot.");
     const r = await changeVenue(await requireUser(), ids, optStr(fd, "venueId"));
     return `Moved ${r.moved} slot(s)${r.notified ? `; ${r.notified} student(s) notified` : ""}.`;
+  });
+}
+
+export async function reassignHostAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run(async () => {
+    const ids = fd.getAll("slotId").map(String);
+    if (ids.length === 0) throw new DomainError("Select at least one slot.");
+    const taId = str(fd, "taId");
+    if (!taId) throw new DomainError("Choose the new host.");
+    const r = await reassignHost(await requireUser(), ids, taId);
+    return `Moved ${r.moved} slot(s) to the new host${r.notified ? `; ${r.notified} student(s) notified` : ""}.`;
+  });
+}
+
+export async function updateSlotCapacityAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run(async () => {
+    await updateSlotCapacity(await requireUser(), str(fd, "slotId"), Number(str(fd, "capacity")));
+    return "Capacity updated.";
   });
 }

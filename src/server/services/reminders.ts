@@ -43,6 +43,7 @@ export async function queueDueReminders(now = new Date()): Promise<number> {
           title: `Reminder: ${b.assignment.title} demo ${w.label}`,
           body: `Your ${b.assignment.course.code} demo is ${w.label}.\n\nWhen: ${fmtRange(b.slot.startsAt, b.slot.endsAt, tz)} (${tz})\nWhere: ${venue}${b.slot.venue?.meetingUrl ? `\nMeeting link: ${b.slot.venue.meetingUrl}` : ""}\nWith: ${b.slot.ta.name}`,
           link: `/courses/${b.assignment.courseId}/assignments/${b.assignmentId}`,
+          category: "reminder",
         });
         queued++;
       });

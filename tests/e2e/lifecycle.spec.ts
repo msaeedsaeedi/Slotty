@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createCourse, createPublishedAssignment, importRoster, login } from "./helpers";
+import { createCourse, createPublishedAssignment, importRoster, login, open } from "./helpers";
 
 test("TA runs the whole loop alone: roster → slots → booking → marking → student sees marks → export", async ({ browser }) => {
   // TA sets up the course and imports a new student by email.
@@ -8,7 +8,7 @@ test("TA runs the whole loop alone: roster → slots → booking → marking →
   await importRoster(ta, "email,name\nnina@e2e.test,Nina New");
   await expect(ta.getByRole("cell", { name: /Nina New/ })).toBeVisible();
 
-  await ta.goto(`/courses/${courseId}/manage/venues`);
+  await open(ta, `/courses/${courseId}/manage/venues`);
   await ta.getByLabel("Name").fill("Lab 7");
   await ta.getByRole("button", { name: "Add venue" }).click();
   await expect(ta.getByText("Venue added.")).toBeVisible();
@@ -21,7 +21,7 @@ test("TA runs the whole loop alone: roster → slots → booking → marking →
   const inviteHref = await mail.getByRole("link", { name: /\/invite\// }).first().getAttribute("href");
   const student = await (await browser.newContext()).newPage();
   student.on("dialog", (d) => d.accept());
-  await student.goto(new URL(inviteHref!).pathname);
+  await open(student, new URL(inviteHref!).pathname);
   await student.getByLabel("New password").fill("nina-secret-1");
   await student.getByLabel("Confirm password").fill("nina-secret-1");
   await student.getByRole("button", { name: "Activate account" }).click();
@@ -42,7 +42,7 @@ test("TA runs the whole loop alone: roster → slots → booking → marking →
 
   // TA scores the demo; with no instructor, submitting releases marks. Attendance
   // can't be recorded before the demo starts.
-  await ta.goto(`/courses/${courseId}/manage/assignments/${assignmentId}?tab=students`);
+  await open(ta, `/courses/${courseId}/manage/assignments/${assignmentId}?tab=students`);
   await ta.getByRole("link", { name: "Mark", exact: true }).click();
   await expect(ta.getByRole("button", { name: "Completed" })).toBeDisabled();
   await ta.getByLabel("Functionality").fill("5");
@@ -76,12 +76,12 @@ test("with an instructor, TA submissions wait for review and the instructor fina
   const assignmentId = await createPublishedAssignment(prof, courseId, "Viva");
 
   const student = await login(browser, "sam@e2e.test");
-  await student.goto(`/courses/${courseId}/assignments/${assignmentId}`);
+  await open(student, `/courses/${courseId}/assignments/${assignmentId}`);
   await student.getByRole("button", { name: "Book" }).first().click();
   await expect(student.getByText("Your demo")).toBeVisible();
 
   const ta = await login(browser, "ta@e2e.test");
-  await ta.goto(`/courses/${courseId}/manage/assignments/${assignmentId}?tab=students`);
+  await open(ta, `/courses/${courseId}/manage/assignments/${assignmentId}?tab=students`);
   await ta.getByRole("link", { name: "Mark", exact: true }).click();
   await ta.getByLabel("Functionality").fill("6");
   await ta.getByLabel("Code quality").fill("4");
@@ -92,7 +92,7 @@ test("with an instructor, TA submissions wait for review and the instructor fina
   await student.reload();
   await expect(student.getByText("Your result")).toHaveCount(0);
 
-  await prof.goto(`/courses/${courseId}/manage/review`);
+  await open(prof, `/courses/${courseId}/manage/review`);
   await expect(prof.getByText("Sam Student")).toBeVisible();
   await prof.getByRole("button", { name: "Finalize" }).click();
   await expect(prof.getByText("Nothing to review")).toBeVisible();
