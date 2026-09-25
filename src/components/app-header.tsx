@@ -1,0 +1,53 @@
+import Link from "next/link";
+import { Bell, CalendarCheck, LogOut, Shield } from "lucide-react";
+import { logoutAction } from "@/app/actions/auth";
+import { Button } from "@/components/ui/button";
+import type { Actor } from "@/server/services/access";
+import { unreadCount } from "@/server/services/inbox";
+
+export async function AppHeader({ user }: { user: Actor }) {
+  const unread = await unreadCount(user);
+  return (
+    <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur">
+      <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4">
+        <Link href="/dashboard" className="mr-2 flex items-center gap-2 font-semibold">
+          <CalendarCheck className="size-5 text-primary" />
+          Slotty
+        </Link>
+        <nav className="flex items-center gap-1 text-sm">
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/dashboard">Courses</Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/bookings">My bookings</Link>
+          </Button>
+          {user.isAdmin && (
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/admin">
+                <Shield /> Admin
+              </Link>
+            </Button>
+          )}
+        </nav>
+        <div className="ml-auto flex items-center gap-1">
+          <Button asChild variant="ghost" size="icon" aria-label={`Notifications (${unread} unread)`} className="relative">
+            <Link href="/notifications">
+              <Bell />
+              {unread > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-red-600 px-1 text-[10px] font-semibold leading-4 text-white">
+                  {unread > 99 ? "99+" : unread}
+                </span>
+              )}
+            </Link>
+          </Button>
+          <span className="hidden max-w-40 truncate text-sm text-muted-foreground sm:inline">{user.name}</span>
+          <form action={logoutAction}>
+            <Button type="submit" variant="ghost" size="icon" aria-label="Sign out">
+              <LogOut />
+            </Button>
+          </form>
+        </div>
+      </div>
+    </header>
+  );
+}

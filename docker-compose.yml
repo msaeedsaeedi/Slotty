@@ -1,0 +1,19 @@
+# Optional: real Postgres + Mailpit for machines with Docker.
+# Then set in .env:
+#   DATABASE_URL="postgres://slotty:slotty@localhost:5432/slotty"
+#   (remove DATABASE_POOL_MAX and SHADOW_DATABASE_URL)
+#   SMTP_HOST="localhost"  SMTP_PORT="1025"   → inbox at http://localhost:8025
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: slotty
+      POSTGRES_PASSWORD: slotty
+      POSTGRES_DB: slotty
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+  mailpit:
+    image: axllent/mailpit
+    ports: ["1025:1025", "8025:8025"]
+volumes:
+  pgdata:

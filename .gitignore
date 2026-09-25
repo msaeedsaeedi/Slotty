@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+!.env.example
+!.env.test
+
+# prisma generated client
+/src/generated
+
+# playwright
+/test-results
+/playwright-report
+/.next-e2e/

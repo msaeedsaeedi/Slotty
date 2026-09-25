@@ -1,0 +1,366 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Identity ────────────────────────────────────────────────────────────────
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  DISABLED
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String
+  passwordHash String?
+  isAdmin      Boolean    @default(false)
+  status       UserStatus @default(INVITED)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  sessions       Session[]
+  tokens         AuthToken[]
+  enrollments    Enrollment[]
+  coursesCreated Course[]           @relation("CourseCreator")
+  slotsHosted    Slot[]             @relation("SlotTA")
+  blocks         AvailabilityBlock[]
+  bookings       Booking[]          @relation("BookingStudent")
+  cancellations  Booking[]          @relation("BookingCancelledBy")
+  evaluations    Evaluation[]       @relation("EvaluationStudent")
+  evaluated      Evaluation[]       @relation("EvaluationEvaluator")
+  reviewed       Evaluation[]       @relation("EvaluationReviewer")
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum AuthTokenType {
+  INVITE
+  PASSWORD_RESET
+}
+
+model AuthToken {
+  id        String        @id @default(cuid())
+  userId    String
+  type      AuthTokenType
+  tokenHash String        @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+}
+
+// ─── Courses ─────────────────────────────────────────────────────────────────
+
+enum CourseRole {
+  INSTRUCTOR
+  TA
+  STUDENT
+}
+
+model Course {
+  id          String   @id @default(cuid())
+  code        String
+  title       String
+  term        String
+  timezone    String   @default("UTC")
+  archived    Boolean  @default(false)
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy   User          @relation("CourseCreator", fields: [createdById], references: [id])
+  enrollments Enrollment[]
+  venues      Venue[]
+  assignments Assignment[]
+}
+
+model Enrollment {
+  id        String     @id @default(cuid())
+  courseId  String
+  userId    String
+  role      CourseRole
+  section   String?
+  createdAt DateTime   @default(now())
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, userId])
+  @@index([userId])
+}
+
+model Venue {
+  id         String   @id @default(cuid())
+  courseId   String
+  name       String
+  location   String?
+  meetingUrl String?
+  createdAt  DateTime @default(now())
+
+  course Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  slots  Slot[]
+  blocks AvailabilityBlock[]
+}
+
+// ─── Assignments & scheduling ────────────────────────────────────────────────
+
+enum AssignmentStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+model Assignment {
+  id          String           @id @default(cuid())
+  courseId    String
+  title       String
+  description String           @default("")
+  maxMarks    Float
+  status      AssignmentStatus @default(DRAFT)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  course      Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  criteria    RubricCriterion[]
+  policy      DemoPolicy?
+  blocks      AvailabilityBlock[]
+  slots       Slot[]
+  bookings    Booking[]
+  evaluations Evaluation[]
+
+  @@index([courseId])
+}
+
+model RubricCriterion {
+  id           String @id @default(cuid())
+  assignmentId String
+  label        String
+  maxPoints    Float
+  order        Int
+
+  assignment Assignment        @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  scores     EvaluationScore[]
+}
+
+model DemoPolicy {
+  assignmentId       String    @id
+  windowStart        DateTime
+  windowEnd          DateTime
+  slotDurationMin    Int
+  bufferMin          Int       @default(0)
+  capacityPerSlot    Int       @default(1)
+  bookingOpensAt     DateTime?
+  freezeHours        Int       @default(12)
+  maxReschedules     Int       @default(2)
+  allowStudentCancel Boolean   @default(true)
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+}
+
+/// A TA's availability window; the system slices it into slots.
+model AvailabilityBlock {
+  id           String   @id @default(cuid())
+  assignmentId String
+  taId         String
+  venueId      String?
+  startsAt     DateTime
+  endsAt       DateTime
+  createdAt    DateTime @default(now())
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  ta         User       @relation(fields: [taId], references: [id])
+  venue      Venue?     @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  slots      Slot[]
+}
+
+enum SlotStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+}
+
+model Slot {
+  id           String     @id @default(cuid())
+  assignmentId String
+  blockId      String?
+  taId         String
+  venueId      String?
+  startsAt     DateTime
+  endsAt       DateTime
+  capacity     Int
+  status       SlotStatus @default(DRAFT)
+  createdAt    DateTime   @default(now())
+
+  assignment Assignment         @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  block      AvailabilityBlock? @relation(fields: [blockId], references: [id], onDelete: SetNull)
+  ta         User               @relation("SlotTA", fields: [taId], references: [id])
+  venue      Venue?             @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  bookings   Booking[]
+
+  @@index([assignmentId, startsAt])
+  @@index([taId, startsAt])
+}
+
+enum BookingStatus {
+  BOOKED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+/// At most one active (non-cancelled) booking per student per assignment is
+/// enforced by the partial unique index `booking_one_active_per_student`
+/// (see the init migration).
+model Booking {
+  id              String        @id @default(cuid())
+  slotId          String
+  assignmentId    String
+  studentId       String
+  status          BookingStatus @default(BOOKED)
+  rescheduleCount Int           @default(0)
+  cancelledAt     DateTime?
+  cancelledById   String?
+  reminder24hAt   DateTime?
+  reminder1hAt    DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  slot        Slot        @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  assignment  Assignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student     User        @relation("BookingStudent", fields: [studentId], references: [id])
+  cancelledBy User?       @relation("BookingCancelledBy", fields: [cancelledById], references: [id])
+  evaluation  Evaluation?
+
+  @@index([slotId, status])
+  @@index([studentId])
+}
+
+// ─── Evaluation ──────────────────────────────────────────────────────────────
+
+enum EvaluationStatus {
+  DRAFT
+  SUBMITTED
+  RETURNED
+  FINALIZED
+}
+
+model Evaluation {
+  id            String           @id @default(cuid())
+  assignmentId  String
+  studentId     String
+  bookingId     String?          @unique
+  evaluatorId   String
+  totalMarks    Float?
+  totalOverride Boolean          @default(false)
+  overrideNote  String?
+  feedback      String?
+  privateNotes  String?
+  status        EvaluationStatus @default(DRAFT)
+  submittedAt   DateTime?
+  reviewedById  String?
+  reviewedAt    DateTime?
+  reviewComment String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  assignment Assignment        @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student    User              @relation("EvaluationStudent", fields: [studentId], references: [id])
+  booking    Booking?          @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  evaluator  User              @relation("EvaluationEvaluator", fields: [evaluatorId], references: [id])
+  reviewedBy User?             @relation("EvaluationReviewer", fields: [reviewedById], references: [id])
+  scores     EvaluationScore[]
+
+  @@unique([assignmentId, studentId])
+}
+
+model EvaluationScore {
+  id           String  @id @default(cuid())
+  evaluationId String
+  criterionId  String
+  points       Float
+  comment      String?
+
+  evaluation Evaluation      @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  criterion  RubricCriterion @relation(fields: [criterionId], references: [id], onDelete: Cascade)
+
+  @@unique([evaluationId, criterionId])
+}
+
+// ─── Notifications & audit ───────────────────────────────────────────────────
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+/// Transactional outbox: rows are written in the same transaction as the change
+/// that triggers them and delivered by the worker (`bun run worker`).
+model EmailOutbox {
+  id        String      @id @default(cuid())
+  to        String
+  subject   String
+  text      String
+  html      String?
+  status    EmailStatus @default(PENDING)
+  attempts  Int         @default(0)
+  lastError String?
+  sendAfter DateTime    @default(now())
+  sentAt    DateTime?
+  createdAt DateTime    @default(now())
+
+  @@index([status, sendAfter])
+}
