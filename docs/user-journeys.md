@@ -12,7 +12,7 @@ Roles are **per course** (`Enrollment.role`). One person can be a student in one
 |---|---|---|---|---|
 | S1 | Gets invited | Email → `/invite/[token]` | `accounts.acceptInvite` | Staff import the class list, which sends an invite email valid for 14 days. The student sets a name and password, and the account becomes `ACTIVE`. If they were already active, they get a "Added to <course>" notification instead. |
 | S2 | Signs in | `/login`, `/forgot-password` | `accounts.authenticate` | A clear message for a wrong password, a disabled account, or an invite not yet accepted. Password reset links last 2 hours. |
-| S3 | Sees what to do | `/dashboard` | `listMyCourses`, `listMyBookings` | Upcoming demos (time, venue, TA) and course cards. |
+| S3 | Sees what to do | `/dashboard` | `listMyCourses`, `listMyBookings` | Upcoming demos (time, room, TA, "Join online", "Add to calendar") and course cards. |
 | S4 | Opens a course | `/courses/[id]` | `listAssignments` | Published and closed assignments with a status: *Not booked*, *Booked*, *Closed*, *Marked x/y*. |
 | S5 | Books a slot | `/courses/[id]/assignments/[aid]` | `bookings.bookSlot` | Slots grouped by day in the course timezone. Full slots are hidden and counted. A disabled **Book** button shows why it's disabled. Success: a toast plus a `booking.confirmed` notification and email. |
 | S6 | Gets reminders | Email + bell | `reminders.queueDueReminders` (worker) | 24h and 1h before the slot. Skipped if the student booked inside that window. |

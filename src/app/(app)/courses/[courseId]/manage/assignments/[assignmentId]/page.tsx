@@ -95,12 +95,12 @@ export default async function ManageAssignmentPage({ params, searchParams }: Pag
               </a>
             </Button>
             {assignment.status !== "PUBLISHED" ? (
-              <ActionForm action={publishAssignmentAction} compact confirm="Publish? All students in the course will be notified that booking is open.">
+              <ActionForm action={publishAssignmentAction} compact confirmLabel="Publish" confirm="Publish? All students in the course will be notified that booking is open.">
                 <input type="hidden" name="assignmentId" value={assignmentId} />
                 <SubmitButton size="sm">{assignment.status === "CLOSED" ? "Reopen booking" : "Publish"}</SubmitButton>
               </ActionForm>
             ) : (
-              <ActionForm action={closeAssignmentAction} compact confirm="Close booking? Students won't be able to book or change slots. Existing bookings stay.">
+              <ActionForm action={closeAssignmentAction} compact confirmLabel="Close booking" confirm="Close booking? Students won't be able to book or change slots. Existing bookings stay.">
                 <input type="hidden" name="assignmentId" value={assignmentId} />
                 <SubmitButton size="sm" variant="outline">
                   Close booking
@@ -108,7 +108,7 @@ export default async function ManageAssignmentPage({ params, searchParams }: Pag
               </ActionForm>
             )}
             {!hasBookings && (
-              <ActionForm action={deleteAssignmentAction} compact confirm="Delete this assignment and all its slots?">
+              <ActionForm action={deleteAssignmentAction} compact confirmLabel="Delete" confirm="Delete this assignment and all its slots?">
                 <input type="hidden" name="assignmentId" value={assignmentId} />
                 <input type="hidden" name="courseId" value={courseId} />
                 <SubmitButton size="sm" variant="ghost" className="text-destructive">

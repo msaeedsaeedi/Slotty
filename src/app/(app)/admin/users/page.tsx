@@ -56,7 +56,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps<"/admin
                           {u.isAdmin ? "Revoke admin" : "Make admin"}
                         </SubmitButton>
                       </ActionForm>
-                      <ActionForm action={setDisabledAction} compact className="flex items-center gap-2" confirm={u.status === "DISABLED" ? undefined : `Disable ${u.name}? They'll be signed out.`}>
+                      <ActionForm action={setDisabledAction} compact className="flex items-center gap-2" confirmLabel="Disable" confirm={u.status === "DISABLED" ? undefined : `Disable ${u.name}? They'll be signed out.`}>
                         <input type="hidden" name="userId" value={u.id} />
                         <input type="hidden" name="disabled" value={u.status === "DISABLED" ? "false" : "true"} />
                         {u.status !== "DISABLED" && u._count.bookings > 0 && (

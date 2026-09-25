@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarClock, MapPin, Plus, Users } from "lucide-react";
+import { CalendarClock, CalendarPlus, ExternalLink, MapPin, Plus, Users } from "lucide-react";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -38,26 +38,42 @@ export default async function DashboardPage() {
         <section className="space-y-3">
           <h2 className="text-sm font-medium text-muted-foreground">Upcoming demos</h2>
           <div className="grid gap-3 sm:grid-cols-2">
-            {upcoming.map((b) => (
-              <Link key={b.id} href={`/courses/${b.assignment.courseId}/assignments/${b.assignmentId}`}>
-                <Card className="transition-colors hover:border-primary/40">
+            {upcoming.map((b) => {
+              const tz = b.assignment.course.timezone;
+              const venue = b.slot.venue;
+              return (
+                <Card key={b.id} className="transition-colors hover:border-primary/40">
                   <CardHeader>
                     <CardDescription>{b.assignment.course.code}</CardDescription>
-                    <CardTitle>{b.assignment.title}</CardTitle>
+                    <CardTitle>
+                      <Link className="hover:underline" href={`/courses/${b.assignment.courseId}/assignments/${b.assignmentId}`}>
+                        {b.assignment.title}
+                      </Link>
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-1 text-sm">
                     <p className="flex items-center gap-2">
-                      <CalendarClock className="size-4 text-muted-foreground" />
-                      {fmtRange(b.slot.startsAt, b.slot.endsAt, b.assignment.course.timezone)}
+                      <CalendarClock className="size-4 shrink-0 text-muted-foreground" />
+                      {fmtRange(b.slot.startsAt, b.slot.endsAt, tz)}
                     </p>
                     <p className="flex items-center gap-2">
-                      <MapPin className="size-4 text-muted-foreground" />
-                      {b.slot.venue?.name ?? "Venue TBA"} · with {b.slot.ta.name}
+                      <MapPin className="size-4 shrink-0 text-muted-foreground" />
+                      {venue ? [venue.name, venue.location].filter(Boolean).join(", ") : "Venue to be announced"} · with {b.slot.ta.name}
+                    </p>
+                    <p className="flex flex-wrap gap-x-4 gap-y-1 pt-1">
+                      {venue?.meetingUrl && (
+                        <a href={venue.meetingUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary underline">
+                          <ExternalLink className="size-3.5" /> Join online
+                        </a>
+                      )}
+                      <a href={`/bookings/${b.id}/calendar`} className="inline-flex items-center gap-1 text-primary underline">
+                        <CalendarPlus className="size-3.5" /> Add to calendar
+                      </a>
                     </p>
                   </CardContent>
                 </Card>
-              </Link>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}

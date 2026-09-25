@@ -9,7 +9,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { canBookSlot, canCancelBooking, cancelConsequence, changeBudget, freezeAt, isFrozen, NO_ALLOWANCE } from "@/domain/booking-rules";
+import { canBookSlot, canCancelBooking, cancelConsequence, rescheduleConsequence, changeBudget, freezeAt, isFrozen, NO_ALLOWANCE } from "@/domain/booking-rules";
 import { fmt, fmtRange } from "@/lib/time";
 import { requireUser } from "@/server/auth/session";
 import { load } from "@/server/page-utils";
@@ -181,7 +181,7 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
                   </Button>
                 ) : null}
                 {cancelRule?.ok && (
-                  <ActionForm action={cancelBookingAction} compact confirm={`Cancel this booking? ${cancelConsequence(budget)}`}>
+                  <ActionForm action={cancelBookingAction} compact confirm={`Cancel this booking? ${cancelConsequence(budget)}`} confirmLabel="Cancel booking">
                     <input type="hidden" name="bookingId" value={booking.id} />
                     <SubmitButton variant="destructive" size="sm">
                       Cancel booking
@@ -276,7 +276,8 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
                         key={s.id}
                         action={rescheduling ? rescheduleAction : bookSlotAction}
                         compact
-                        confirm={rescheduling ? `Move your demo to ${fmtRange(s.startsAt, s.endsAt, tz)}?` : undefined}
+                        confirm={rescheduling ? `Move your demo to ${fmtRange(s.startsAt, s.endsAt, tz)}? ${rescheduleConsequence(budget)}` : undefined}
+                        confirmLabel="Move my demo"
                       >
                         <input type="hidden" name="slotId" value={s.id} />
                         {booking && <input type="hidden" name="bookingId" value={booking.id} />}

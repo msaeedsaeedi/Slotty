@@ -26,7 +26,7 @@ export default async function ReviewPage({ params }: PageProps<"/courses/[course
           </p>
         </div>
         {queue.length > 1 && (
-          <ActionForm action={finalizeManyAction} compact confirm={`Finalize all ${queue.length} evaluations? Every student will see their marks.`}>
+          <ActionForm action={finalizeManyAction} compact confirmLabel="Finalize all" confirm={`Finalize all ${queue.length} evaluations? Every student will see their marks.`}>
             {queue.map((e) => (
               <input key={e.id} type="hidden" name="evaluationId" value={e.id} />
             ))}

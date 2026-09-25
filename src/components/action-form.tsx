@@ -1,12 +1,13 @@
 "use client";
 
-import { useActionState, useEffect, useRef, type ComponentProps, type ReactNode } from "react";
+import { useActionState, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { ActionState } from "@/server/action-utils";
 
 type Action = (state: ActionState, formData: FormData) => Promise<ActionState>;
@@ -22,6 +23,7 @@ export function ActionForm({
   compact = false,
   resetOnSuccess = false,
   confirm,
+  confirmLabel = "Confirm",
   onSuccess,
 }: {
   action: Action;
@@ -30,8 +32,10 @@ export function ActionForm({
   /** Show errors as toasts instead of an inline alert (for button-only forms). */
   compact?: boolean;
   resetOnSuccess?: boolean;
-  /** Ask the browser to confirm before submitting. */
+  /** Ask before submitting: the dialog shows this text, which should say what will happen. */
   confirm?: string;
+  /** Label of the confirming button (default "Confirm"). */
+  confirmLabel?: string;
   /** Called after a successful submit (client components only). */
   onSuccess?: () => void;
 }) {
@@ -58,16 +62,54 @@ export function ActionForm({
     return result;
   }, null);
 
+  // Confirmation: hold the submit, show a dialog, then resubmit with the same
+  // submitter (so buttons with name/value still send them).
+  const [asking, setAsking] = useState(false);
+  const confirmed = useRef(false);
+  const submitter = useRef<HTMLElement | null>(null);
+
   return (
     <form
       ref={formRef}
       action={formAction}
       className={className}
       onSubmit={(e) => {
-        if (confirm && !window.confirm(confirm)) e.preventDefault();
+        if (!confirm || confirmed.current) {
+          confirmed.current = false;
+          return;
+        }
+        e.preventDefault();
+        submitter.current = (e.nativeEvent as SubmitEvent).submitter;
+        setAsking(true);
       }}
     >
       {children}
+      {confirm && (
+        <Dialog open={asking} onOpenChange={setAsking}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Are you sure?</DialogTitle>
+              <DialogDescription>{confirm}</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setAsking(false)}>
+                Go back
+              </Button>
+              <Button
+                type="button"
+                autoFocus
+                onClick={() => {
+                  setAsking(false);
+                  confirmed.current = true;
+                  formRef.current?.requestSubmit(submitter.current instanceof HTMLButtonElement ? submitter.current : undefined);
+                }}
+              >
+                {confirmLabel}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
       {!compact && state && !state.ok && (
         <Alert variant="destructive" className="mt-3">
           <AlertDescription>{state.error}</AlertDescription>

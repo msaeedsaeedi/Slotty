@@ -143,6 +143,14 @@ export function cancelConsequence(budget: ChangeBudget): string {
   }.`;
 }
 
+/** What a reschedule will cost, in words, for the confirmation dialog. */
+export function rescheduleConsequence(budget: ChangeBudget): string {
+  const after = budget.left - 1;
+  return `This uses 1 of your ${budget.allowed} change${budget.allowed === 1 ? "" : "s"}${
+    after > 0 ? ` (${after} left afterwards)` : " — you won't be able to change it again yourself"
+  }.`;
+}
+
 /** Attendance can only be recorded once the demo has started; resetting to pending is always allowed. */
 export function canMarkAttendance(args: {
   now: Date;

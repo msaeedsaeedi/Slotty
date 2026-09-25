@@ -35,6 +35,8 @@ test("TA runs the whole loop alone: roster → slots → booking → marking →
   await expect(student.getByText("09:00–09:15")).toBeVisible();
   await student.getByRole("link", { name: "Reschedule" }).click();
   await student.getByRole("button", { name: "Move here" }).first().click();
+  await expect(student.getByRole("dialog")).toContainText("This uses 1 of your 2 changes");
+  await student.getByRole("button", { name: "Move my demo" }).click();
   await expect(student.getByText("Rescheduled.")).toBeVisible();
   await expect(student).not.toHaveURL(/reschedule=1/);
   await expect(student.getByText("09:15–09:30")).toBeVisible();

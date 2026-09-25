@@ -56,6 +56,7 @@ export async function createPublishedAssignment(page: Page, courseId: string, ti
   await page.getByRole("button", { name: "Generate slots" }).click();
   await expect(page.getByText("4 slots created as drafts.")).toBeVisible();
   await page.getByRole("button", { name: "Publish" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Publish" }).click();
   await expect(page.getByText(/Published — students have been notified/)).toBeVisible();
   return page.url().split("/").pop()!;
 }

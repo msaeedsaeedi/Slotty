@@ -124,7 +124,7 @@ export function SlotTable({
                         <StatusBadge status={b.status} label={b.name} />
                         {b.status === "BOOKED" && !s.past && (
                           <details className="relative">
-                            <summary className="cursor-pointer list-none px-1 text-xs text-muted-foreground hover:text-destructive" aria-label={`Cancel ${b.name}'s booking`}>
+                            <summary className="cursor-pointer list-none rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring px-1 text-xs text-muted-foreground hover:text-destructive" aria-label={`Cancel ${b.name}'s booking`}>
                               ✕
                             </summary>
                             <ActionForm action={staffCancelBookingAction} compact className="absolute left-0 z-20 mt-1 flex w-72 gap-2 rounded-lg border bg-popover p-2 shadow-md">
@@ -142,7 +142,7 @@ export function SlotTable({
                   </div>
                   {s.status !== "CANCELLED" && !s.past && (
                     <details className="relative">
-                      <summary className="cursor-pointer list-none text-xs text-muted-foreground hover:text-foreground">Capacity</summary>
+                      <summary className="cursor-pointer list-none rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-xs text-muted-foreground hover:text-foreground">Capacity</summary>
                       <ActionForm action={updateSlotCapacityAction} compact className="absolute right-0 z-20 mt-1 flex w-56 items-center gap-2 rounded-lg border bg-popover p-2 shadow-md">
                         <input type="hidden" name="slotId" value={s.id} />
                         <Input name="capacity" type="number" min={Math.max(1, s.bookings.length)} max={100} defaultValue={s.capacity} className="h-7" aria-label="Students per slot" />
@@ -154,7 +154,7 @@ export function SlotTable({
                   )}
                   {s.status !== "CANCELLED" && !s.past && (
                     <details className="relative">
-                      <summary className="cursor-pointer list-none text-xs text-muted-foreground hover:text-destructive">Cancel slot</summary>
+                      <summary className="cursor-pointer list-none rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-xs text-muted-foreground hover:text-destructive">Cancel slot</summary>
                       <ActionForm action={cancelSlotAction} compact className="absolute right-0 z-20 mt-1 flex w-72 gap-2 rounded-lg border bg-popover p-2 shadow-md">
                         <input type="hidden" name="slotId" value={s.id} />
                         <Input name="reason" placeholder="Reason (sent to students)" className="h-7" />

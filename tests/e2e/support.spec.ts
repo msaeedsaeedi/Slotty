@@ -31,6 +31,7 @@ test.fixme("a stuck student asks for help, staff move them, and the calendar fee
   await ta.waitForLoadState("networkidle");
   await ta.getByLabel("Move to another slot").selectOption({ index: 0 });
   await ta.getByRole("button", { name: "Move", exact: true }).click();
+  await ta.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
   await expect(ta.getByText("Done — the student was notified.")).toBeVisible();
   await ta.goto(`/courses/${courseId}/manage/requests`);
   await expect(ta.getByText("No open requests")).toBeVisible();

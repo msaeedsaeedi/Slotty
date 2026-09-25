@@ -48,7 +48,9 @@ Done on `feature/usability-roadmap`. Tests: `tests/integration/operations.test.t
 | OP-15 | P3 | Slot picker filters (day / TA / venue). Show the viewer's local time next to the course timezone. |
 | OP-16 | P3 | Opening a notification marks it as read (today only "Mark all read" does). |
 
-## Phase 3: Feedback & usability polish
+## Phase 3: Feedback & usability polish ✅
+
+Done on `feature/usability-roadmap`. Confirmations use `ActionForm`'s `confirm` / `confirmLabel` (an in-page dialog). Write the consequence into `confirm`, and use `rescheduleConsequence` / `cancelConsequence` from `booking-rules.ts` for student changes.
 
 | ID | Change |
 |---|---|

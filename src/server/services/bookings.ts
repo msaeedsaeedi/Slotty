@@ -269,7 +269,7 @@ export async function markAttendance(actor: Actor, bookingId: string, status: "B
       await notify(tx, [booking.studentId], {
         type: "booking.no_show",
         title: `Missed demo: ${booking.assignment.title}`,
-        body: `You were marked as not attending your demo on ${fmtRange(booking.slot.startsAt, booking.slot.endsAt, booking.assignment.course.timezone)}.\nIf this is a mistake or you had a good reason, contact your TA from the assignment page.`,
+        body: `You were marked as not attending your demo on ${fmtRange(booking.slot.startsAt, booking.slot.endsAt, booking.assignment.course.timezone)}.\nIf this is a mistake or you had a good reason, send a request to your TA from the assignment page.`,
         link: `/courses/${booking.assignment.courseId}/assignments/${booking.assignmentId}`,
       });
     }
