@@ -130,6 +130,7 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
               kind="MARK_QUERY"
               requests={requests}
               timezone={tz}
+              now={now}
               title="Question about your marks?"
               hint="Explain which part you'd like looked at again. Course staff will reply here and by email."
             />
@@ -311,6 +312,7 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
           kind="BOOKING_CHANGE"
           requests={requests}
           timezone={tz}
+          now={now}
           open={stuck}
           title={stuck ? "Need a different time? Ask course staff" : "Need help with your booking?"}
           hint={

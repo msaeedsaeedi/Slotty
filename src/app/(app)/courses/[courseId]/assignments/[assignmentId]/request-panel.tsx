@@ -32,6 +32,7 @@ export function RequestPanel({
   hint,
   open,
   timezone,
+  now,
 }: {
   assignmentId: string;
   kind: RequestRow["kind"];
@@ -41,11 +42,11 @@ export function RequestPanel({
   /** Expanded by default (e.g. the student is stuck). */
   open?: boolean;
   timezone: string;
+  now: Date;
 }) {
   const mine = requests.filter((r) => r.kind === kind);
   const pending = mine.some((r) => r.status === "OPEN");
-  const now = Date.now();
-  const recentReply = mine.some((r) => r.resolvedAt && now - r.resolvedAt.getTime() < SHOW_REPLY_MS);
+  const recentReply = mine.some((r) => r.resolvedAt && now.getTime() - r.resolvedAt.getTime() < SHOW_REPLY_MS);
   return (
     <details className="group rounded-lg border bg-card p-3 text-sm" open={open || pending || recentReply || undefined}>
       <summary className="cursor-pointer font-medium">{title}</summary>
