@@ -5,6 +5,7 @@ import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ClearSavedPages } from "@/components/pwa";
 import { getCurrentUser } from "@/server/auth/session";
 
 export const metadata = { title: "Sign in" };
@@ -14,6 +15,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const { next } = await searchParams;
   return (
     <Card>
+      <ClearSavedPages />
       <CardHeader>
         <CardTitle>Sign in</CardTitle>
         <CardDescription>Use the email your course staff added you with.</CardDescription>

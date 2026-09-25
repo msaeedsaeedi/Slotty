@@ -32,24 +32,25 @@ model User {
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
-  sessions        Session[]
-  tokens          AuthToken[]
-  enrollments     Enrollment[]
-  coursesCreated  Course[]            @relation("CourseCreator")
-  slotsHosted     Slot[]              @relation("SlotTA")
-  blocks          AvailabilityBlock[]
-  bookings        Booking[]           @relation("BookingStudent")
-  cancellations   Booking[]           @relation("BookingCancelledBy")
-  evaluations     Evaluation[]        @relation("EvaluationStudent")
-  evaluated       Evaluation[]        @relation("EvaluationEvaluator")
-  reviewed        Evaluation[]        @relation("EvaluationReviewer")
-  notifications   Notification[]
-  auditLogs       AuditLog[]
-  allowances      BookingAllowance[]  @relation("AllowanceStudent")
-  allowancesGiven BookingAllowance[]  @relation("AllowanceGrantedBy")
-  waitlist        WaitlistEntry[]
-  requests        StudentRequest[]    @relation("RequestStudent")
-  requestsHandled StudentRequest[]    @relation("RequestResolvedBy")
+  sessions          Session[]
+  tokens            AuthToken[]
+  enrollments       Enrollment[]
+  coursesCreated    Course[]            @relation("CourseCreator")
+  slotsHosted       Slot[]              @relation("SlotTA")
+  blocks            AvailabilityBlock[]
+  bookings          Booking[]           @relation("BookingStudent")
+  cancellations     Booking[]           @relation("BookingCancelledBy")
+  evaluations       Evaluation[]        @relation("EvaluationStudent")
+  evaluated         Evaluation[]        @relation("EvaluationEvaluator")
+  reviewed          Evaluation[]        @relation("EvaluationReviewer")
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+  allowances        BookingAllowance[]  @relation("AllowanceStudent")
+  allowancesGiven   BookingAllowance[]  @relation("AllowanceGrantedBy")
+  waitlist          WaitlistEntry[]
+  requests          StudentRequest[]    @relation("RequestStudent")
+  requestsHandled   StudentRequest[]    @relation("RequestResolvedBy")
+  pushSubscriptions PushSubscription[]
 }
 
 model Session {
@@ -59,7 +60,8 @@ model Session {
   expiresAt DateTime
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pushSubscriptions PushSubscription[]
 
   @@index([userId])
 }
@@ -454,4 +456,43 @@ model EmailOutbox {
   createdAt DateTime    @default(now())
 
   @@index([status, sendAfter])
+}
+
+/**
+ * A browser/device that accepted push notifications. Tied to the login session
+ * that created it, so signing out (or any session removal) stops pushes to it.
+ */
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  sessionId String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session  Session       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  messages PushMessage[]
+
+  @@index([userId])
+}
+
+/// Push outbox: written with the notification, delivered by the worker.
+model PushMessage {
+  id             String      @id @default(cuid())
+  subscriptionId String
+  title          String
+  body           String
+  link           String?
+  status         EmailStatus @default(PENDING)
+  attempts       Int         @default(0)
+  lastError      String?
+  sentAt         DateTime?
+  createdAt      DateTime    @default(now())
+
+  subscription PushSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
 }

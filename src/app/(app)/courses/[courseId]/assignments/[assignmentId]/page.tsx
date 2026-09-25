@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { CalendarClock, CalendarPlus, ExternalLink, MapPin, User } from "lucide-react";
 import { bookSlotAction, cancelBookingAction, joinWaitlistAction, leaveWaitlistAction, rescheduleAction } from "@/app/actions/bookings";
 import { LocalTimeHint } from "@/components/local-time-hint";
+import { PushPrompt } from "@/components/pwa";
+import { vapidPublicKey } from "@/server/push-config";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -198,6 +200,8 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
           </CardContent>
         </Card>
       )}
+
+      {booking?.status === "BOOKED" && !rescheduling && <PushPrompt publicKey={vapidPublicKey()} />}
 
       {showPicker && (
         <section className="space-y-4">

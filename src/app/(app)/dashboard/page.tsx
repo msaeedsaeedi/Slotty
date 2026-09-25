@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CalendarClock, CalendarPlus, ExternalLink, MapPin, Plus, Users } from "lucide-react";
 import { EmptyState, PageHeader } from "@/components/page-header";
+import { InstallHint } from "@/components/pwa";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +34,8 @@ export default async function DashboardPage() {
           </Button>
         }
       />
+
+      <InstallHint />
 
       {upcoming.length > 0 && (
         <section className="space-y-3">

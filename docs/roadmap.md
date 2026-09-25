@@ -60,7 +60,9 @@ Done on `feature/usability-roadmap`. Confirmations use `ActionForm`'s `confirm` 
 | UX-04 | Dashboard and *My bookings* show the same details as the booking card: venue, meeting link, TA. |
 | UX-05 | Accessibility: text labels on the colour-only progress bars, and a keyboard-friendly "Cancel slot" popover. |
 
-## Phase 4: PWA (installable app, push, offline view)
+## Phase 4: PWA (installable app, push, offline view) ✅
+
+Done on `feature/usability-roadmap`. How it works: [business-rules.md → PWA](business-rules.md#pwa). Push needs VAPID keys in `.env` (see `.env.example`).
 
 Based on the local Next 16 guides: `node_modules/next/dist/docs/01-app/02-guides/progressive-web-apps.md` and `offline-support.md`.
 
@@ -86,4 +88,12 @@ Run short task-based sessions with the seed accounts: book, reschedule, cancel t
 ## Open issues (to check manually)
 
 - **E2E `tests/e2e/support.spec.ts` is marked `fixme`.** Everything works up to the staff move: request sent, staff move, request auto-resolved. The last check fails because once a request is answered, the "Need help with your booking?" panel is collapsed, so the "Handled" badge is hidden. The panel now stays open for 7 days after a staff reply, which should fix this. Re-run the test and remove `fixme`.
+- **Intermittent e2e timeout.** Once, the instructor test timed out on a page load after the service worker arrived (it passed on rerun). Watch for it; if it recurs, suspect `waitForLoadState("networkidle")` in `tests/e2e/helpers.ts` together with SW registration.
+- **Manual PWA checks** (automated tests don't cover browsers here):
+  - Install on Android/Chrome, and on iOS via Add to Home Screen.
+  - Turn on push from the account page, book a slot, and confirm the notification arrives with the worker running.
+  - Go offline (DevTools → Network → Offline) and confirm the dashboard, bookings and a booked assignment still load with the offline banner, and buttons are disabled.
+  - Sign out and confirm cached pages are gone.
+
+  Use `next build && next start`, or `NEXT_PUBLIC_ENABLE_SW=1` with `next dev --experimental-https`.
 - **E2E now runs on a production build** (`next build && next start`, see `playwright.config.ts`). Under `next dev`, Fast Refresh from on-demand compiling sometimes dropped the page refresh after an action in multi-browser tests. `/dev/mail` is enabled there through `ENABLE_DEV_MAIL=1`.

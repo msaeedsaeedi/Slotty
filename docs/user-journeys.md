@@ -23,6 +23,7 @@ Roles are **per course** (`Enrollment.role`). One person can be a student in one
 | S11 | Sees results | Assignment page | `evaluations.getMyResult` | Only **FINALIZED** marks are shown: total, rubric rows, feedback. Private notes are never shown. `evaluation.finalized` notification. |
 | S12b | Gets help when stuck | Assignment page | `requests.createRequest`, `waitlist.joinWaitlist` | "Need a different time? Ask course staff" opens automatically when self-service is blocked (freeze window, no changes left, closed, nothing free). With every slot full, "Notify me when a slot frees up". After marks are released, "Question about your marks?". |
 | S12c | Calendar & account | Booking card, `/account` | `calendar.*`, `accounts.*` | "Add to calendar" (.ics) or subscribe to the personal feed. Change name or password, email preferences, sign out other devices. |
+| S12d | Installs the app / goes offline | Dashboard hint, account page | PWA (`components/pwa.tsx`, `public/sw.js`) | Installs Slotty to the home screen. Turns on notifications for the device (asked after the first booking, or from the account page). Offline, recently opened pages still show the demo time, room, link and TA, with a banner. Changes wait until the device reconnects. |
 | S12 | Reviews history | `/bookings`, `/notifications` | `listMyBookings`, `inbox` | Every booking, including cancelled and past ones. The notification feed has "Mark all read". |
 
 ## TA (can run a course alone)

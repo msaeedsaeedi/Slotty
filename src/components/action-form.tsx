@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { ActionState } from "@/server/action-utils";
+import { useOnline } from "@/components/pwa";
 
 type Action = (state: ActionState, formData: FormData) => Promise<ActionState>;
 
@@ -119,10 +120,12 @@ export function ActionForm({
   );
 }
 
+/** Submit button with a pending spinner. Disabled while offline: changes are never queued for later. */
 export function SubmitButton({ children, ...props }: ComponentProps<typeof Button>) {
   const { pending } = useFormStatus();
+  const online = useOnline();
   return (
-    <Button type="submit" disabled={pending || props.disabled} {...props}>
+    <Button type="submit" {...props} disabled={pending || !online || props.disabled} title={!online ? "You're offline" : props.title}>
       {pending && <Loader2 className="animate-spin" />}
       {children}
     </Button>

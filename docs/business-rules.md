@@ -89,6 +89,18 @@ Each job records what it did, so running it twice sends nothing twice.
 - `/bookings/<id>/calendar`: one booking as an `.ics` file (the student's own, signed in).
 - `/calendar/<token>`: personal feed of the user's own demos plus demos they host, including the last 30 days. The token is the credential. Replacing it on the account page breaks old links.
 
+## PWA
+
+| Piece | Where | Behaviour |
+|---|---|---|
+| Install | `src/app/manifest.ts`, `src/app/icons/[kind]/route.tsx`, `InstallHint` (dashboard) | Standalone app starting at `/dashboard`. Icons are generated (192, 512, maskable, badge). The dashboard offers "Install", or Add to Home Screen instructions on iOS. The hint can be dismissed and stays dismissed. |
+| Service worker | `public/sw.js`, registered by `ServiceWorkerRegistrar` in production (or with `NEXT_PUBLIC_ENABLE_SW=1`) | Build assets are cache-first. Dashboard, bookings, notifications, course and assignment pages are network-first with the last good copy used offline. Anything else offline shows `/offline`. Only GETs are cached; Server Actions and RSC fetches never are. |
+| Offline mode | `OfflineBanner`, `SubmitButton` | A banner says the page is the copy saved at a given time. Every submit button is disabled while offline. **Changes are never queued**: replaying a booking later could hit a slot that has since changed. |
+| Push | `PushSubscription` (tied to the login `Session`), `PushMessage` outbox, `server/push.ts` (worker) | Every in-app notification is also queued as a push for the user's devices, in the same transaction. The worker delivers pushes, drops ones older than 6h, and deletes subscriptions the push service reports gone (404/410). Opt-in is on the account page, or a prompt after booking. The permission request is never shown on page load. |
+| Privacy | `/logout` route, `ClearSavedPages` (login page) | Signing out sends `Clear-Site-Data: "cache", "storage"` and deletes the session, which removes that device's push subscription. The sign-in page also clears saved pages. |
+
+Limits: push arrives even when the app is closed, but the device needs a connection. iOS supports push only after Add to Home Screen (16.4+). Push and service workers need HTTPS (localhost is exempt).
+
 ## Scheduling rules (`src/domain/slots.ts`, `services/slots.ts`)
 
 - An availability block is split into `slotDurationMin` slots with `bufferMin` gaps and clipped to the demo window. A leftover shorter than one slot is dropped.

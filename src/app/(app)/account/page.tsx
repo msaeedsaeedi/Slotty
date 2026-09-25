@@ -1,6 +1,9 @@
 import { changePasswordAction, rotateCalendarAction, setEmailPreferencesAction, signOutOthersAction, updateProfileAction } from "@/app/actions/account";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { PageHeader } from "@/components/page-header";
+import { PushToggle } from "@/components/pwa";
+import { vapidPublicKey } from "@/server/push-config";
+import { countPushDevices } from "@/server/services/push";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +16,7 @@ export const metadata = { title: "Account" };
 
 export default async function AccountPage() {
   const user = await requireUser();
-  const account = await getAccount(user);
+  const [account, pushDevices] = await Promise.all([getAccount(user), countPushDevices(user)]);
   const otherSessions = Math.max(0, account._count.sessions - 1);
 
   return (
@@ -53,6 +56,19 @@ export default async function AccountPage() {
             </label>
             <SubmitButton variant="outline">Save preferences</SubmitButton>
           </ActionForm>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Notifications on this device</CardTitle>
+          <CardDescription>
+            Get reminders and booking changes as phone or desktop notifications, even when Slotty isn&apos;t open.
+            {pushDevices > 0 && ` On for ${pushDevices} device${pushDevices === 1 ? "" : "s"}.`} Signing out of a device turns them off there.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PushToggle publicKey={vapidPublicKey()} />
         </CardContent>
       </Card>
 

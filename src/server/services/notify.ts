@@ -1,4 +1,5 @@
 import type { Tx } from "@/server/db";
+import { isPushConfigured } from "@/server/push-config";
 
 export interface NotificationInput {
   type: string;
@@ -44,6 +45,15 @@ export async function notify(tx: Tx, userIds: string[], n: NotificationInput): P
     await tx.notification.createMany({
       data: ids.map((userId) => ({ userId, type: n.type, title: n.title, body: n.body, link: n.link })),
     });
+    // Mirror in-app notifications to devices that opted into push.
+    if (isPushConfigured()) {
+      const devices = await tx.pushSubscription.findMany({ where: { userId: { in: ids }, user: { status: "ACTIVE" } }, select: { id: true } });
+      if (devices.length) {
+        await tx.pushMessage.createMany({
+          data: devices.map((d) => ({ subscriptionId: d.id, title: n.title, body: n.body.slice(0, 500), link: n.link })),
+        });
+      }
+    }
   }
   if (n.email === false) return;
   const users = await tx.user.findMany({

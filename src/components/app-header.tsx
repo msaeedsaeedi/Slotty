@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Bell, CalendarCheck, LogOut, Shield, UserRound } from "lucide-react";
-import { logoutAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import type { Actor } from "@/server/services/access";
 import { unreadCount } from "@/server/services/inbox";
@@ -48,7 +47,7 @@ export async function AppHeader({ user }: { user: Actor }) {
               <UserRound />
             </Link>
           </Button>
-          <form action={logoutAction}>
+          <form action="/logout" method="post">
             <Button type="submit" variant="ghost" size="icon" aria-label="Sign out">
               <LogOut />
             </Button>

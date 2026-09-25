@@ -4,6 +4,8 @@
  */
 import "dotenv/config";
 import { deliverPendingEmails } from "@/server/mailer";
+import { deliverPendingPush } from "@/server/push";
+import { isPushConfigured } from "@/server/push-config";
 import { announceOpenedBookings, closeEndedAssignments, nudgeUnbookedStudents, sendDailyAgendas } from "@/server/services/automations";
 import { queueDueReminders } from "@/server/services/reminders";
 
@@ -18,7 +20,8 @@ async function tick() {
     const agendas = await sendDailyAgendas();
     const reminders = await queueDueReminders();
     const { sent, failed } = await deliverPendingEmails();
-    const counts = { opened, nudged, closed, agendas, reminders, sent, failed };
+    const push = await deliverPendingPush();
+    const counts = { opened, nudged, closed, agendas, reminders, sent, failed, pushed: push.sent, pushFailed: push.failed };
     if (Object.values(counts).some(Boolean)) {
       console.log(`[worker] ${new Date().toISOString()} ${Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(" ")}`);
     }
@@ -28,7 +31,9 @@ async function tick() {
 }
 
 async function main() {
-  console.log(`[worker] started (every ${INTERVAL_MS / 1000}s, SMTP ${process.env.SMTP_HOST ? "on" : "off — printing emails"})`);
+  console.log(
+    `[worker] started (every ${INTERVAL_MS / 1000}s, SMTP ${process.env.SMTP_HOST ? "on" : "off — printing emails"}, push ${isPushConfigured() ? "on" : "off"})`,
+  );
   while (running) {
     await tick();
     await new Promise((r) => setTimeout(r, INTERVAL_MS));
