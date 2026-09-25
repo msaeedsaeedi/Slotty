@@ -97,13 +97,18 @@ export function SlotTable({ slots, venues }: { slots: SlotRow[]; venues: { id: s
                       <span key={b.id} className="inline-flex items-center gap-1">
                         <StatusBadge status={b.status} label={b.name} />
                         {b.status === "BOOKED" && !s.past && (
-                          <ActionForm action={staffCancelBookingAction} compact confirm={`Cancel ${b.name}'s booking? They'll be asked to rebook.`}>
-                            <input type="hidden" name="bookingId" value={b.id} />
-                            <input type="hidden" name="reason" value="" />
-                            <SubmitButton size="xs" variant="ghost" aria-label={`Cancel ${b.name}'s booking`}>
+                          <details className="relative">
+                            <summary className="cursor-pointer list-none px-1 text-xs text-muted-foreground hover:text-destructive" aria-label={`Cancel ${b.name}'s booking`}>
                               ✕
-                            </SubmitButton>
-                          </ActionForm>
+                            </summary>
+                            <ActionForm action={staffCancelBookingAction} compact className="absolute left-0 z-20 mt-1 flex w-72 gap-2 rounded-lg border bg-popover p-2 shadow-md">
+                              <input type="hidden" name="bookingId" value={b.id} />
+                              <Input name="reason" required placeholder={`Reason (sent to ${b.name})`} className="h-7" aria-label="Reason" />
+                              <SubmitButton size="sm" variant="destructive">
+                                Cancel
+                              </SubmitButton>
+                            </ActionForm>
+                          </details>
                         )}
                       </span>
                     ))}

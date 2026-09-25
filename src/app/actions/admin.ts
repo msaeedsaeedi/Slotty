@@ -1,15 +1,18 @@
 "use server";
 
 import { requireUser } from "@/server/auth/session";
-import { run, str, type ActionState } from "@/server/action-utils";
+import { bool, run, str, type ActionState } from "@/server/action-utils";
 import { adminSetAdmin, adminSetUserDisabled } from "@/server/services/admin";
 import { markRead } from "@/server/services/inbox";
 
 export async function setDisabledAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return run(async () => {
     const disabled = str(fd, "disabled") === "true";
-    await adminSetUserDisabled(await requireUser(), str(fd, "userId"), disabled);
-    return disabled ? "User disabled." : "User re-enabled.";
+    const { released } = await adminSetUserDisabled(await requireUser(), str(fd, "userId"), disabled, {
+      releaseBookings: bool(fd, "releaseBookings"),
+    });
+    if (!disabled) return "User re-enabled.";
+    return `User disabled${released ? `; ${released} upcoming booking${released === 1 ? "" : "s"} released` : ""}.`;
   });
 }
 

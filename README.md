@@ -55,7 +55,10 @@ src/app/(auth)/        Sign in, invite, password reset
 src/app/(app)/         Signed-in app: dashboard, student pages, /courses/[id]/manage (staff), /admin
 src/jobs/worker.ts     Email outbox delivery + 24h/1h reminders
 prisma/                Schema, migrations, seed
+docs/                  User journeys, business rules, roadmap
 ```
+
+See [docs/user-journeys.md](docs/user-journeys.md), [docs/business-rules.md](docs/business-rules.md) and [docs/roadmap.md](docs/roadmap.md).
 
 ## Key rules
 

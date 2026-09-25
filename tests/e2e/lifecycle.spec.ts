@@ -38,13 +38,13 @@ test("TA runs the whole loop alone: roster → slots → booking → marking →
   await expect(student.getByText("Rescheduled.")).toBeVisible();
   await expect(student).not.toHaveURL(/reschedule=1/);
   await expect(student.getByText("09:15–09:30")).toBeVisible();
-  await expect(student.getByText("1 of 2 reschedules left.")).toBeVisible();
+  await expect(student.getByText(/1 of 2 changes left/)).toBeVisible();
 
-  // TA marks attendance and scores the demo; with no instructor, submitting releases marks.
+  // TA scores the demo; with no instructor, submitting releases marks. Attendance
+  // can't be recorded before the demo starts.
   await ta.goto(`/courses/${courseId}/manage/assignments/${assignmentId}?tab=students`);
   await ta.getByRole("link", { name: "Mark", exact: true }).click();
-  await ta.getByRole("button", { name: "Completed" }).click();
-  await expect(ta.getByText("Completed", { exact: true })).toBeVisible();
+  await expect(ta.getByRole("button", { name: "Completed" })).toBeDisabled();
   await ta.getByLabel("Functionality").fill("5");
   await ta.getByLabel("Code quality").fill("3.5");
   await expect(ta.getByLabel("Total marks")).toHaveValue("8.5");
@@ -64,7 +64,7 @@ test("TA runs the whole loop alone: roster → slots → booking → marking →
   expect(res.status()).toBe(200);
   const csv = await res.text();
   expect(csv).toContain("nina@e2e.test");
-  expect(csv).toContain("completed");
+  expect(csv).toContain("pending");
   expect(csv).toContain("8.5");
   expect(csv).toContain("finalized");
 });

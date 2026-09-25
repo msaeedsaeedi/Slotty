@@ -72,6 +72,11 @@ export default async function ManageCoursePage({ params }: PageProps<"/courses/[
                         </div>
                       ))}
                     </dl>
+                    {a.needsAttendance > 0 && (
+                      <p className="rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                        {a.needsAttendance} past demo{a.needsAttendance === 1 ? " needs" : "s need"} attendance recorded
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               </Link>

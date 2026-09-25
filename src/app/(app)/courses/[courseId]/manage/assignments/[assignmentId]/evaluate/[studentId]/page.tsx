@@ -26,6 +26,7 @@ export default async function EvaluatePage({ params, searchParams }: PageProps<"
   const back = typeof returnTo === "string" && returnTo.startsWith("/") ? returnTo : `/courses/${courseId}/manage/assignments/${assignmentId}?tab=students`;
   const editable = ev.status === "DRAFT" || ev.status === "RETURNED";
   const booking = ev.booking;
+  const notStarted = booking ? booking.slot.startsAt > new Date() : false;
   const canUnlock = ev.status === "FINALIZED" && (role === "INSTRUCTOR" || !hasInstructor);
   const scoreBy = new Map(ev.scores.map((s) => [s.criterionId, s]));
 
@@ -57,7 +58,12 @@ export default async function EvaluatePage({ params, searchParams }: PageProps<"
                       <ActionForm key={s} action={markAttendanceAction} compact>
                         <input type="hidden" name="bookingId" value={booking.id} />
                         <input type="hidden" name="status" value={s} />
-                        <SubmitButton size="sm" variant={s === "BOOKED" ? "ghost" : "outline"}>
+                        <SubmitButton
+                          size="sm"
+                          variant={s === "BOOKED" ? "ghost" : "outline"}
+                          disabled={s !== "BOOKED" && notStarted}
+                          title={s !== "BOOKED" && notStarted ? "Available once the demo starts" : undefined}
+                        >
                           {s === "COMPLETED" ? "Completed" : s === "NO_SHOW" ? "No-show" : "Pending"}
                         </SubmitButton>
                       </ActionForm>

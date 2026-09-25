@@ -137,7 +137,7 @@ export function AssignmentForm({
           <div className="grid gap-4 sm:grid-cols-3">
             <Field label="Booking opens (optional)" name="bookingOpensAt" type="datetime-local" defaultValue={defaults.bookingOpensAt} hint="Leave empty to open on publish." />
             <Field label="Lock changes (hours before)" name="freezeHours" type="number" min={0} defaultValue={defaults.freezeHours} hint="No booking, cancelling or rescheduling inside this window." />
-            <Field label="Reschedules allowed" name="maxReschedules" type="number" min={0} defaultValue={defaults.maxReschedules} />
+            <Field label="Changes allowed" name="maxReschedules" type="number" min={0} defaultValue={defaults.maxReschedules} hint="Per student. Reschedules and self-cancellations both count; staff changes never do." />
           </div>
           <label className="flex items-center gap-2 text-sm">
             <Checkbox name="allowStudentCancel" defaultChecked={defaults.allowStudentCancel} />

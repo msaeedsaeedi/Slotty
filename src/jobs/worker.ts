@@ -4,6 +4,7 @@
  */
 import "dotenv/config";
 import { deliverPendingEmails } from "@/server/mailer";
+import { announceOpenedBookings } from "@/server/services/automations";
 import { queueDueReminders } from "@/server/services/reminders";
 
 const INTERVAL_MS = Number(process.env.WORKER_INTERVAL_MS ?? 15_000);
@@ -11,10 +12,11 @@ let running = true;
 
 async function tick() {
   try {
+    const opened = await announceOpenedBookings();
     const reminders = await queueDueReminders();
     const { sent, failed } = await deliverPendingEmails();
-    if (reminders || sent || failed) {
-      console.log(`[worker] ${new Date().toISOString()} reminders=${reminders} sent=${sent} failed=${failed}`);
+    if (opened || reminders || sent || failed) {
+      console.log(`[worker] ${new Date().toISOString()} opened=${opened} reminders=${reminders} sent=${sent} failed=${failed}`);
     }
   } catch (err) {
     console.error("[worker] tick failed", err);

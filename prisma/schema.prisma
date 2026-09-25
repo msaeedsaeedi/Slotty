@@ -25,19 +25,21 @@ model User {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  sessions       Session[]
-  tokens         AuthToken[]
-  enrollments    Enrollment[]
-  coursesCreated Course[]           @relation("CourseCreator")
-  slotsHosted    Slot[]             @relation("SlotTA")
-  blocks         AvailabilityBlock[]
-  bookings       Booking[]          @relation("BookingStudent")
-  cancellations  Booking[]          @relation("BookingCancelledBy")
-  evaluations    Evaluation[]       @relation("EvaluationStudent")
-  evaluated      Evaluation[]       @relation("EvaluationEvaluator")
-  reviewed       Evaluation[]       @relation("EvaluationReviewer")
-  notifications  Notification[]
-  auditLogs      AuditLog[]
+  sessions        Session[]
+  tokens          AuthToken[]
+  enrollments     Enrollment[]
+  coursesCreated  Course[]            @relation("CourseCreator")
+  slotsHosted     Slot[]              @relation("SlotTA")
+  blocks          AvailabilityBlock[]
+  bookings        Booking[]           @relation("BookingStudent")
+  cancellations   Booking[]           @relation("BookingCancelledBy")
+  evaluations     Evaluation[]        @relation("EvaluationStudent")
+  evaluated       Evaluation[]        @relation("EvaluationEvaluator")
+  reviewed        Evaluation[]        @relation("EvaluationReviewer")
+  notifications   Notification[]
+  auditLogs       AuditLog[]
+  allowances      BookingAllowance[]  @relation("AllowanceStudent")
+  allowancesGiven BookingAllowance[]  @relation("AllowanceGrantedBy")
 }
 
 model Session {
@@ -90,7 +92,7 @@ model Course {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  createdBy   User          @relation("CourseCreator", fields: [createdById], references: [id])
+  createdBy   User         @relation("CourseCreator", fields: [createdById], references: [id])
   enrollments Enrollment[]
   venues      Venue[]
   assignments Assignment[]
@@ -145,6 +147,7 @@ model Assignment {
   course      Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
   criteria    RubricCriterion[]
   policy      DemoPolicy?
+  allowances  BookingAllowance[]
   blocks      AvailabilityBlock[]
   slots       Slot[]
   bookings    Booking[]
@@ -175,6 +178,8 @@ model DemoPolicy {
   freezeHours        Int       @default(12)
   maxReschedules     Int       @default(2)
   allowStudentCancel Boolean   @default(true)
+  /// When students were told booking is open (set on publish, or by the worker at bookingOpensAt).
+  openAnnouncedAt    DateTime?
 
   assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
 }
@@ -234,18 +239,17 @@ enum BookingStatus {
 /// enforced by the partial unique index `booking_one_active_per_student`
 /// (see the init migration).
 model Booking {
-  id              String        @id @default(cuid())
-  slotId          String
-  assignmentId    String
-  studentId       String
-  status          BookingStatus @default(BOOKED)
-  rescheduleCount Int           @default(0)
-  cancelledAt     DateTime?
-  cancelledById   String?
-  reminder24hAt   DateTime?
-  reminder1hAt    DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id            String        @id @default(cuid())
+  slotId        String
+  assignmentId  String
+  studentId     String
+  status        BookingStatus @default(BOOKED)
+  cancelledAt   DateTime?
+  cancelledById String?
+  reminder24hAt DateTime?
+  reminder1hAt  DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   slot        Slot        @relation(fields: [slotId], references: [id], onDelete: Cascade)
   assignment  Assignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
@@ -255,6 +259,28 @@ model Booking {
 
   @@index([slotId, status])
   @@index([studentId])
+  @@index([assignmentId, studentId])
+}
+
+/// A staff-granted exception to an assignment's booking rules for one student.
+model BookingAllowance {
+  id           String   @id @default(cuid())
+  assignmentId String
+  studentId    String
+  /// Changes (reschedules or cancellations) on top of the policy's maxReschedules.
+  extraChanges Int      @default(0)
+  /// May book or change even after booking has closed or before it opens.
+  lateBooking  Boolean  @default(false)
+  note         String?
+  grantedById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student    User       @relation("AllowanceStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  grantedBy  User       @relation("AllowanceGrantedBy", fields: [grantedById], references: [id])
+
+  @@unique([assignmentId, studentId])
 }
 
 // ─── Evaluation ──────────────────────────────────────────────────────────────

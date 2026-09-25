@@ -75,7 +75,7 @@ export default async function ManageAssignmentPage({ params, searchParams }: Pag
           <>
             Demos {fmt(policy.windowStart, tz, "EEE d MMM HH:mm")} – {fmt(policy.windowEnd, tz, "EEE d MMM HH:mm")} · {policy.slotDurationMin} min
             {policy.bufferMin > 0 && ` + ${policy.bufferMin} min break`} · {policy.capacityPerSlot} per slot · locks {policy.freezeHours}h before ·{" "}
-            {policy.maxReschedules} reschedule{policy.maxReschedules === 1 ? "" : "s"} · marked out of {assignment.maxMarks}
+            {policy.maxReschedules} change{policy.maxReschedules === 1 ? "" : "s"} per student · marked out of {assignment.maxMarks}
             {criteria.length > 0 && ` (${criteria.length}-row rubric)`}
           </>
         }

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { canSubmit, canTransition, computeTotal, nextStatus, validateScores } from "@/domain/evaluation";
 import { assertRule, DomainError } from "@/domain/result";
 import { db, type Tx } from "@/server/db";
-import { assertAssignmentRole, assertCourseRole, courseHasInstructor, STAFF, type Actor } from "./access";
+import { assertAssignmentRole, assertCourseRole, assertCourseWritable, courseHasInstructor, STAFF, type Actor } from "./access";
 import { audit } from "./audit";
 import { notify } from "./notify";
 import { ACTIVE_BOOKING } from "./slots";
@@ -64,6 +64,8 @@ async function loadForStaff(tx: Tx, actor: Actor, evaluationId: string) {
   });
   if (!evaluation) throw new DomainError("Evaluation not found.", "NOT_FOUND");
   const role = await assertCourseRole(tx, actor, evaluation.assignment.courseId, STAFF);
+  // Every caller changes the evaluation, so archived courses are read-only here.
+  assertCourseWritable(evaluation.assignment.course);
   return { evaluation, role };
 }
 

@@ -19,7 +19,7 @@ export const availabilityInput = z
   .refine((b) => b.endsAt > b.startsAt, { message: "End time must be after start time.", path: ["endsAt"] });
 
 async function loadForScheduling(tx: Tx, actor: Actor, assignmentId: string) {
-  const { assignment } = await assertAssignmentRole(tx, actor, assignmentId, STAFF);
+  const { assignment } = await assertAssignmentRole(tx, actor, assignmentId, STAFF, { write: true });
   if (!assignment.policy) throw new DomainError("Set the demo policy first.");
   if (assignment.status === "CLOSED") throw new DomainError("This assignment is closed.");
   return { assignment, policy: assignment.policy };
@@ -101,7 +101,7 @@ export async function deleteUnbookedSlots(actor: Actor, slotIds: string[]) {
       include: { _count: { select: { bookings: true } } },
     });
     const assignmentIds = [...new Set(slots.map((s) => s.assignmentId))];
-    for (const id of assignmentIds) await assertAssignmentRole(tx, actor, id, STAFF);
+    for (const id of assignmentIds) await assertAssignmentRole(tx, actor, id, STAFF, { write: true });
     const deletable = slots.filter((s) => s._count.bookings === 0).map((s) => s.id);
     await tx.slot.deleteMany({ where: { id: { in: deletable } } });
     return { deleted: deletable.length, skipped: slots.length - deletable.length };
@@ -113,10 +113,11 @@ export async function cancelSlot(actor: Actor, slotId: string, reason: string) {
   return db.$transaction(async (tx) => {
     const slot = await tx.slot.findUnique({ where: { id: slotId }, include: { assignment: { include: { course: true } } } });
     if (!slot) throw new DomainError("Slot not found.", "NOT_FOUND");
-    await assertCourseRole(tx, actor, slot.assignment.courseId, STAFF);
+    await assertCourseRole(tx, actor, slot.assignment.courseId, STAFF, { write: true });
     if (slot.status === "CANCELLED") return;
     await tx.$queryRaw`SELECT id FROM "Slot" WHERE id = ${slotId} FOR UPDATE`;
     const booked = await tx.booking.findMany({ where: { slotId, status: "BOOKED" } });
+    if (booked.length > 0 && !reason.trim()) throw new DomainError("Give a reason — it's sent to the booked students.");
     await tx.booking.updateMany({
       where: { slotId, status: "BOOKED" },
       data: { status: "CANCELLED", cancelledAt: new Date(), cancelledById: actor.id },
@@ -129,7 +130,7 @@ export async function cancelSlot(actor: Actor, slotId: string, reason: string) {
       {
         type: "slot.cancelled",
         title: `Demo slot cancelled: ${slot.assignment.title}`,
-        body: `Your demo slot on ${when} was cancelled by course staff.${reason.trim() ? `\nReason: ${reason.trim()}` : ""}\nPlease book a new slot.`,
+        body: `Your demo slot on ${when} was cancelled by course staff.${reason.trim() ? `\nReason: ${reason.trim()}` : ""}\nPlease book a new slot. This doesn't use any of your changes.`,
         link: `/courses/${slot.assignment.courseId}/assignments/${slot.assignmentId}`,
       },
     );
@@ -149,7 +150,7 @@ export async function changeVenue(actor: Actor, slotIds: string[], venueId: stri
     const courseIds = new Set(slots.map((s) => s.assignment.courseId));
     if (courseIds.size !== 1) throw new DomainError("Slots must belong to one course.");
     const courseId = slots[0].assignment.courseId;
-    await assertCourseRole(tx, actor, courseId, STAFF);
+    await assertCourseRole(tx, actor, courseId, STAFF, { write: true });
     const venue = venueId ? await tx.venue.findUnique({ where: { id: venueId } }) : null;
     if (venueId && (!venue || venue.courseId !== courseId)) throw new DomainError("Unknown venue.");
 

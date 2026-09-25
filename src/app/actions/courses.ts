@@ -83,8 +83,8 @@ export async function importRosterAction(_: ActionState, fd: FormData): Promise<
 
 export async function removeMemberAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return run(async () => {
-    await removeMember(await requireUser(), str(fd, "courseId"), str(fd, "userId"));
-    return "Removed from course.";
+    const { released } = await removeMember(await requireUser(), str(fd, "courseId"), str(fd, "userId"));
+    return `Removed from course${released ? `; ${released} upcoming booking${released === 1 ? "" : "s"} released` : ""}.`;
   });
 }
 

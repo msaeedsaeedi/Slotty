@@ -2,8 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/server/db";
 import { acceptInvite, authenticate } from "@/server/services/accounts";
 import { createCourse, importRoster } from "@/server/services/courses";
-import { createAssignment, publishAssignment } from "@/server/services/assignments";
-import { addAvailability, cancelSlot, changeVenue, listOpenSlots } from "@/server/services/slots";
+import { cancelSlot, changeVenue, listOpenSlots } from "@/server/services/slots";
 import { bookSlot, cancelBooking, markAttendance, rescheduleBooking } from "@/server/services/bookings";
 import {
   getMyResult,
@@ -16,42 +15,7 @@ import {
 import { courseProgress, exportAssignmentCsv } from "@/server/services/reports";
 import { queueDueReminders } from "@/server/services/reminders";
 import { createVenue } from "@/server/services/courses";
-import type { Actor } from "@/server/services/access";
-import { inHours, makeUser, resetDb } from "./helpers";
-
-async function setupCourse(ta: Actor, opts: { capacity?: number; freezeHours?: number } = {}) {
-  const course = await createCourse(ta, { code: "CS101", title: "Intro", term: "Fall 2026", timezone: "UTC", myRole: "TA" });
-  const venue = await createVenue(ta, course.id, { name: "Lab 1", location: "Building A" });
-  const start = inHours(48);
-  const assignment = await createAssignment(ta, course.id, {
-    title: "Project demo",
-    description: "",
-    maxMarks: 10,
-    criteria: [
-      { label: "Functionality", maxPoints: 6 },
-      { label: "Code quality", maxPoints: 4 },
-    ],
-    policy: {
-      windowStart: inHours(24),
-      windowEnd: inHours(24 * 14),
-      slotDurationMin: 15,
-      bufferMin: 0,
-      capacityPerSlot: opts.capacity ?? 1,
-      bookingOpensAt: null,
-      freezeHours: opts.freezeHours ?? 12,
-      maxReschedules: 1,
-      allowStudentCancel: true,
-    },
-  });
-  await addAvailability(ta, assignment.id, { taId: ta.id, venueId: venue.id, startsAt: start, endsAt: inHours(1, start) });
-  await publishAssignment(ta, assignment.id);
-  const slots = await db.slot.findMany({ where: { assignmentId: assignment.id }, orderBy: { startsAt: "asc" } });
-  return { course, venue, assignment, slots };
-}
-
-async function enroll(courseId: string, users: Actor[], role: "STUDENT" | "TA" | "INSTRUCTOR" = "STUDENT") {
-  await db.enrollment.createMany({ data: users.map((u) => ({ courseId, userId: u.id, role })) });
-}
+import { enroll, inHours, makeUser, resetDb, setupCourse } from "./helpers";
 
 beforeEach(resetDb);
 
@@ -104,9 +68,8 @@ describe("booking", () => {
     expect(open.find((s) => s.id === slots[0].id)?.seatsLeft).toBe(0);
 
     const moved = await rescheduleBooking(ann, booking!.id, slots[1].id);
-    expect(moved!.rescheduleCount).toBe(1);
     await bookSlot(bob, slots[0].id); // freed by the reschedule
-    await expect(rescheduleBooking(ann, moved!.id, slots[2].id)).rejects.toThrow(/used all 1 reschedules/);
+    await expect(rescheduleBooking(ann, moved!.id, slots[2].id)).rejects.toThrow(/used all 1 change/);
 
     // Inside the freeze window the booking is locked.
     const nearSlotStart = inHours(-1, slots[1].startsAt);
@@ -166,7 +129,7 @@ describe("evaluation lifecycle", () => {
     const { course, assignment, slots } = await setupCourse(ta);
     await enroll(course.id, [ann]);
     const booking = await bookSlot(ann, slots[0].id);
-    await markAttendance(ta, booking!.id, "COMPLETED");
+    await markAttendance(ta, booking!.id, "COMPLETED", inHours(1, slots[0].startsAt));
 
     const ev = await getOrCreateEvaluation(ta, assignment.id, ann.id);
     const [functionality, quality] = ev.assignment.criteria;
@@ -189,7 +152,7 @@ describe("evaluation lifecycle", () => {
     expect(JSON.stringify(mine)).not.toContain("Struggled");
 
     await expect(saveEvaluation(ta, ev.id, { scores: [], totalMarks: 1 })).rejects.toThrow(/locked/);
-    await expect(markAttendance(ta, booking!.id, "NO_SHOW")).rejects.toThrow(/locked/);
+    await expect(markAttendance(ta, booking!.id, "NO_SHOW", inHours(1, slots[0].startsAt))).rejects.toThrow(/locked/);
     // With no instructor, the TA may unlock to fix a mistake.
     await unlockEvaluation(ta, ev.id, "typo");
     expect((await db.evaluation.findUniqueOrThrow({ where: { id: ev.id } })).status).toBe("RETURNED");
@@ -208,7 +171,7 @@ describe("evaluation lifecycle", () => {
     await enroll(course.id, [ann]);
     await enroll(course.id, [prof], "INSTRUCTOR");
     const booking = await bookSlot(ann, slots[0].id);
-    await markAttendance(ta, booking!.id, "COMPLETED");
+    await markAttendance(ta, booking!.id, "COMPLETED", inHours(1, slots[0].startsAt));
 
     const ev = await getOrCreateEvaluation(ta, assignment.id, ann.id);
     const scores = ev.assignment.criteria.map((c) => ({ criterionId: c.id, points: c.maxPoints }));

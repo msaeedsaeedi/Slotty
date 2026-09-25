@@ -8,12 +8,12 @@ import { StatusBadge } from "@/components/status-badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { canBookSlot, canCancelBooking, isFrozen } from "@/domain/booking-rules";
+import { canBookSlot, canCancelBooking, cancelConsequence, changeBudget, freezeAt, isFrozen, NO_ALLOWANCE } from "@/domain/booking-rules";
 import { fmt, fmtRange } from "@/lib/time";
 import { requireUser } from "@/server/auth/session";
 import { load } from "@/server/page-utils";
 import { getAssignment } from "@/server/services/assignments";
-import { listMyBookings } from "@/server/services/bookings";
+import { getMyChangeState, listMyBookings } from "@/server/services/bookings";
 import { getMyResult } from "@/server/services/evaluations";
 import { listOpenSlots } from "@/server/services/slots";
 
@@ -27,21 +27,25 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
   const tz = assignment.course.timezone;
   const policy = assignment.policy!;
   const now = new Date();
-  const [slots, history, result] = await Promise.all([
+  const [slots, history, result, changeState] = await Promise.all([
     listOpenSlots(user, assignmentId),
     listMyBookings(user, { assignmentId }),
     getMyResult(user, assignmentId),
+    getMyChangeState(user, assignmentId),
   ]);
+  const { budget, allowance } = changeState ?? {
+    allowance: NO_ALLOWANCE,
+    budget: changeBudget({ maxReschedules: policy.maxReschedules, selfCancellations: 0 }),
+  };
+  const open = assignment.status === "PUBLISHED" || (assignment.status === "CLOSED" && allowance.lateBooking);
   const booking = history.find((b) => b.status !== "CANCELLED");
   const rescheduling = Boolean(reschedule && booking?.status === "BOOKED");
-  const bookingState = booking && { status: booking.status, rescheduleCount: booking.rescheduleCount, slotStartsAt: booking.slot.startsAt };
-  const cancelRule = bookingState ? canCancelBooking({ now, policy, booking: bookingState }) : null;
-  const reschedulesLeft = booking ? Math.max(0, policy.maxReschedules - booking.rescheduleCount) : policy.maxReschedules;
-  const canMove =
-    booking?.status === "BOOKED" &&
-    assignment.status === "PUBLISHED" &&
-    reschedulesLeft > 0 &&
-    !isFrozen(booking.slot.startsAt, now, policy.freezeHours);
+  const bookingState = booking && { status: booking.status, slotStartsAt: booking.slot.startsAt };
+  const cancelRule = bookingState ? canCancelBooking({ now, assignmentStatus: assignment.status, policy, booking: bookingState, allowance }) : null;
+  const canMove = booking?.status === "BOOKED" && open && budget.left > 0 && !isFrozen(booking.slot.startsAt, now, policy.freezeHours);
+  const locksAt = booking && policy.freezeHours > 0 ? freezeAt(booking.slot.startsAt, policy.freezeHours) : null;
+  // After cancelling more times than allowed, only staff can place the student.
+  const outOfChanges = !booking && budget.used > budget.allowed;
 
   // Group bookable slots by day in the course timezone.
   const days = new Map<string, typeof slots>();
@@ -140,7 +144,7 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
                   </Button>
                 ) : null}
                 {cancelRule?.ok && (
-                  <ActionForm action={cancelBookingAction} compact confirm="Cancel this booking? You'll need to book another slot.">
+                  <ActionForm action={cancelBookingAction} compact confirm={`Cancel this booking? ${cancelConsequence(budget)}`}>
                     <input type="hidden" name="bookingId" value={booking.id} />
                     <SubmitButton variant="destructive" size="sm">
                       Cancel booking
@@ -149,7 +153,8 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
                 )}
                 <p className="w-full text-xs text-muted-foreground">
                   {cancelRule && !cancelRule.ok ? cancelRule.reason + " " : ""}
-                  {policy.maxReschedules > 0 && `${reschedulesLeft} of ${policy.maxReschedules} reschedules left.`}
+                  {budget.allowed > 0 && `${budget.left} of ${budget.allowed} change${budget.allowed === 1 ? "" : "s"} left (reschedules and cancellations both count). `}
+                  {locksAt && locksAt > now && `Changes lock ${fmt(locksAt, tz, "EEE d MMM, HH:mm")}.`}
                 </p>
               </div>
             )}
@@ -167,13 +172,19 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
               {fullSlots > 0 && ` · ${fullSlots} full slot${fullSlots === 1 ? "" : "s"} hidden`}
             </p>
           </div>
-          {assignment.status === "CLOSED" ? (
+          {!open ? (
             <Alert>
               <AlertDescription>Booking is closed for this assignment. Contact your TA if you still need a slot.</AlertDescription>
             </Alert>
-          ) : policy.bookingOpensAt && policy.bookingOpensAt > now ? (
+          ) : outOfChanges ? (
             <Alert>
-              <AlertDescription>Booking opens {fmt(policy.bookingOpensAt, tz)}.</AlertDescription>
+              <AlertDescription>
+                You&apos;ve used all {budget.allowed} change{budget.allowed === 1 ? "" : "s"} for this assignment, so you can&apos;t book again yourself. Ask your TA for a slot.
+              </AlertDescription>
+            </Alert>
+          ) : policy.bookingOpensAt && policy.bookingOpensAt > now && !allowance.lateBooking ? (
+            <Alert>
+              <AlertDescription>Booking opens {fmt(policy.bookingOpensAt, tz, "EEEE d MMMM 'at' HH:mm")}. We&apos;ll notify you when it opens.</AlertDescription>
             </Alert>
           ) : days.size === 0 ? (
             <EmptyState title="No slots available right now">Check back later — your TA may add more times.</EmptyState>
@@ -188,6 +199,7 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
                       assignmentStatus: assignment.status,
                       policy,
                       slot: { startsAt: s.startsAt, status: s.status, capacity: s.capacity, activeBookings: s.booked },
+                      allowance,
                     });
                     return (
                       <ActionForm

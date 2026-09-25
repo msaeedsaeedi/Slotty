@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { CourseRole } from "@/generated/prisma/client";
 import { DomainError } from "@/domain/result";
 import { parseRoster, type RosterRow } from "@/domain/csv-roster";
-import { isValidTimezone } from "@/lib/time";
+import { fmtRange, isValidTimezone } from "@/lib/time";
 import { db } from "@/server/db";
 import { assertCourseRole, assertStaff, courseRoleOf, type Actor } from "./access";
 import { audit } from "./audit";
@@ -30,7 +30,7 @@ export async function createCourse(actor: Actor, input: z.input<typeof courseInp
 export async function updateCourse(actor: Actor, courseId: string, input: z.input<typeof courseInput>) {
   const data = courseInput.parse(input);
   return db.$transaction(async (tx) => {
-    await assertStaff(tx, actor, courseId);
+    await assertStaff(tx, actor, courseId, { write: true });
     const before = await tx.course.findUniqueOrThrow({ where: { id: courseId } });
     const course = await tx.course.update({ where: { id: courseId }, data });
     await audit(tx, actor, { action: "course.update", entityType: "Course", entityId: courseId, before, after: data });
@@ -117,12 +117,17 @@ export async function importRoster(actor: Actor, courseId: string, csv: string) 
 
   return db.$transaction(
     async (tx) => {
-      const myRole = await assertStaff(tx, actor, courseId);
+      const myRole = await assertStaff(tx, actor, courseId, { write: true });
       if (myRole !== "INSTRUCTOR" && rows.some((r) => r.role === "INSTRUCTOR")) {
         throw new DomainError("Only instructors can add other instructors.", "FORBIDDEN");
       }
       const course = await tx.course.findUniqueOrThrow({ where: { id: courseId } });
       const summary = { invited: 0, enrolled: 0, updated: 0, unchanged: 0 };
+      // Students joining after demos opened are told what they still need to book.
+      const open = await tx.assignment.findMany({ where: { courseId, status: "PUBLISHED" }, select: { title: true }, orderBy: { createdAt: "asc" } });
+      const openNote = open.length
+        ? `\n\n${open.length === 1 ? "A demo is" : `${open.length} demos are`} open for booking: ${open.map((a) => a.title).join(", ")}.`
+        : "";
 
       for (const row of rows) {
         let user = await tx.user.findUnique({ where: { email: row.email } });
@@ -149,7 +154,9 @@ export async function importRoster(actor: Actor, courseId: string, csv: string) 
         }
         await tx.enrollment.create({ data: { courseId, userId: user.id, role: row.role, section: row.section } });
         summary.enrolled++;
-        const context = `${actor.name} added you to ${course.code} — ${course.title} (${course.term}) as ${row.role.toLowerCase()}.`;
+        const context = `${actor.name} added you to ${course.code} — ${course.title} (${course.term}) as ${row.role.toLowerCase()}.${
+          row.role === "STUDENT" ? openNote : ""
+        }`;
         if (isNew || user.status === "INVITED") {
           await issueInvite(tx, user, context);
           summary.invited++;
@@ -169,23 +176,63 @@ export async function importRoster(actor: Actor, courseId: string, csv: string) 
   );
 }
 
-export async function removeMember(actor: Actor, courseId: string, userId: string) {
+/**
+ * Remove someone from a course. A student's upcoming bookings are released (and
+ * they're told); staff who still host upcoming slots must hand them over first.
+ */
+export async function removeMember(actor: Actor, courseId: string, userId: string, now = new Date()) {
   return db.$transaction(async (tx) => {
-    const myRole = await assertStaff(tx, actor, courseId);
-    const target = await tx.enrollment.findUnique({ where: { courseId_userId: { courseId, userId } } });
+    const myRole = await assertStaff(tx, actor, courseId, { write: true });
+    const target = await tx.enrollment.findUnique({
+      where: { courseId_userId: { courseId, userId } },
+      include: { user: { select: { name: true } }, course: true },
+    });
     if (!target) throw new DomainError("Member not found.", "NOT_FOUND");
     if (target.role === "INSTRUCTOR" && myRole !== "INSTRUCTOR") {
       throw new DomainError("Only instructors can remove instructors.", "FORBIDDEN");
     }
     if (userId === actor.id) throw new DomainError("You can't remove yourself.");
+
+    let released = 0;
+    if (target.role === "STUDENT") {
+      const upcoming = await tx.booking.findMany({
+        where: { studentId: userId, status: "BOOKED", assignment: { courseId }, slot: { startsAt: { gt: now } } },
+        include: { slot: true },
+      });
+      if (upcoming.length) {
+        await tx.booking.updateMany({
+          where: { id: { in: upcoming.map((b) => b.id) } },
+          data: { status: "CANCELLED", cancelledAt: now, cancelledById: actor.id },
+        });
+        await notify(tx, [userId], {
+          type: "course.removed",
+          title: `Removed from ${target.course.code}`,
+          body: `You were removed from ${target.course.code} — ${target.course.title}, so your upcoming demo${upcoming.length === 1 ? " was" : "s were"} cancelled:\n${upcoming
+            .map((b) => fmtRange(b.slot.startsAt, b.slot.endsAt, target.course.timezone))
+            .join("\n")}`,
+        });
+        released = upcoming.length;
+      }
+    } else {
+      const hosted = await tx.slot.count({
+        where: { taId: userId, status: { not: "CANCELLED" }, startsAt: { gt: now }, assignment: { courseId } },
+      });
+      if (hosted > 0) {
+        throw new DomainError(
+          `${target.user.name} hosts ${hosted} upcoming slot${hosted === 1 ? "" : "s"}. Reassign them to another host on the assignment's Slots tab first.`,
+          "CONFLICT",
+        );
+      }
+    }
     await tx.enrollment.delete({ where: { id: target.id } });
-    await audit(tx, actor, { action: "enrollment.remove", entityType: "Enrollment", entityId: target.id, before: target });
+    await audit(tx, actor, { action: "enrollment.remove", entityType: "Enrollment", entityId: target.id, before: target, after: { releasedBookings: released } });
+    return { released };
   });
 }
 
 export async function resendInvite(actor: Actor, courseId: string, userId: string) {
   return db.$transaction(async (tx) => {
-    await assertStaff(tx, actor, courseId);
+    await assertStaff(tx, actor, courseId, { write: true });
     const enrollment = await tx.enrollment.findUnique({
       where: { courseId_userId: { courseId, userId } },
       include: { user: true, course: true },
@@ -218,7 +265,7 @@ export async function listVenues(actor: Actor, courseId: string) {
 export async function createVenue(actor: Actor, courseId: string, input: z.input<typeof venueInput>) {
   const data = venueInput.parse(input);
   return db.$transaction(async (tx) => {
-    await assertStaff(tx, actor, courseId);
+    await assertStaff(tx, actor, courseId, { write: true });
     return tx.venue.create({ data: { ...data, courseId } });
   });
 }
@@ -227,7 +274,7 @@ export async function deleteVenue(actor: Actor, venueId: string) {
   return db.$transaction(async (tx) => {
     const venue = await tx.venue.findUnique({ where: { id: venueId }, include: { _count: { select: { slots: { where: { status: { not: "CANCELLED" } } } } } } });
     if (!venue) throw new DomainError("Venue not found.", "NOT_FOUND");
-    await assertStaff(tx, actor, venue.courseId);
+    await assertStaff(tx, actor, venue.courseId, { write: true });
     if (venue._count.slots > 0) throw new DomainError("This venue is used by active slots. Move those slots first.", "CONFLICT");
     await tx.venue.delete({ where: { id: venueId } });
   });
