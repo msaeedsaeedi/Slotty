@@ -1,10 +1,10 @@
 import { buildCalendar, type CalendarEvent } from "@/domain/ics";
 import { DomainError } from "@/domain/result";
 import { db } from "@/server/db";
+import { absoluteUrl } from "@/server/app-url";
 import { generateToken } from "@/server/auth/tokens";
 import type { Actor } from "./access";
 
-const appUrl = () => process.env.APP_URL ?? "http://localhost:3000";
 /** Past demos stay in the feed for a while so calendars don't lose them immediately. */
 const KEEP_PAST_MS = 30 * 86_400_000;
 
@@ -28,7 +28,7 @@ function bookingRows(filter: object) {
 }
 
 function studentEvent(b: BookingRow): CalendarEvent {
-  const url = `${appUrl()}/courses/${b.assignment.courseId}/assignments/${b.assignmentId}`;
+  const url = absoluteUrl(`/courses/${b.assignment.courseId}/assignments/${b.assignmentId}`);
   return {
     uid: `booking-${b.id}@slotty`,
     start: b.slot.startsAt,
@@ -41,7 +41,7 @@ function studentEvent(b: BookingRow): CalendarEvent {
 }
 
 function hostEvent(b: BookingRow): CalendarEvent {
-  const url = `${appUrl()}/courses/${b.assignment.courseId}/manage/assignments/${b.assignmentId}/evaluate/${b.studentId}`;
+  const url = absoluteUrl(`/courses/${b.assignment.courseId}/manage/assignments/${b.assignmentId}/evaluate/${b.studentId}`);
   return {
     uid: `host-${b.id}@slotty`,
     start: b.slot.startsAt,
@@ -87,4 +87,4 @@ export async function getCalendarToken(actor: Actor) {
   return user?.calendarToken ?? null;
 }
 
-export const calendarFeedUrl = (token: string) => `${appUrl()}/calendar/${token}`;
+export const calendarFeedUrl = (token: string) => absoluteUrl(`/calendar/${token}`);

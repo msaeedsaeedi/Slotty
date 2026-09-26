@@ -1,6 +1,7 @@
 import type { Tx } from "@/server/db";
 import { signalOutbox } from "@/server/outbox-signal";
 import { isPushConfigured } from "@/server/push-config";
+import { absoluteUrl } from "@/server/app-url";
 
 export interface NotificationInput {
   type: string;
@@ -16,10 +17,9 @@ export interface NotificationInput {
   category?: "reminder";
 }
 
-const appUrl = () => process.env.APP_URL ?? "http://localhost:3000";
 
 export function renderEmail(n: { title: string; body: string; link?: string }) {
-  const url = n.link ? new URL(n.link, appUrl()).toString() : null;
+  const url = n.link ? absoluteUrl(n.link) : null;
   const text = [n.body, url ? `\nOpen in Slotty: ${url}` : "", "\n— Slotty"].join("\n");
   const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
   const html = `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:auto;padding:24px;color:#111">
