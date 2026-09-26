@@ -1,4 +1,5 @@
 import type { Tx } from "@/server/db";
+import { signalOutbox } from "@/server/outbox-signal";
 import { isPushConfigured } from "@/server/push-config";
 
 export interface NotificationInput {
@@ -30,8 +31,10 @@ ${url ? `<p><a href="${esc(url)}" style="display:inline-block;background:#111;co
 }
 
 /** Queue a raw email in the outbox (delivered by the worker). */
-export function queueEmail(tx: Tx, to: string, subject: string, content: { text: string; html?: string }) {
-  return tx.emailOutbox.create({ data: { to, subject, text: content.text, html: content.html } });
+export async function queueEmail(tx: Tx, to: string, subject: string, content: { text: string; html?: string }) {
+  const email = await tx.emailOutbox.create({ data: { to, subject, text: content.text, html: content.html } });
+  await signalOutbox(tx);
+  return email;
 }
 
 /**
@@ -52,6 +55,7 @@ export async function notify(tx: Tx, userIds: string[], n: NotificationInput): P
         await tx.pushMessage.createMany({
           data: devices.map((d) => ({ subscriptionId: d.id, title: n.title, body: n.body.slice(0, 500), link: n.link })),
         });
+        await signalOutbox(tx);
       }
     }
   }
@@ -61,7 +65,9 @@ export async function notify(tx: Tx, userIds: string[], n: NotificationInput): P
     select: { email: true },
   });
   const content = renderEmail(n);
+  if (users.length === 0) return;
   await tx.emailOutbox.createMany({
     data: users.map((u) => ({ to: u.email, subject: n.title, text: content.text, html: content.html })),
   });
+  await signalOutbox(tx);
 }

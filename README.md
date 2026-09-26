@@ -58,7 +58,7 @@ Slotty runs as one Docker image in three roles: **web** (`next start`), **worker
 To update: `git pull && docker compose up -d --build`. To check it's running: `docker compose ps`, `docker compose logs -f web worker`, or `https://<domain>/health`.
 
 **Rules to keep in mind:**
-- Run exactly **one worker**. The outbox isn't row-locked, so a second worker would send duplicates.
+- One worker is enough. Every job claims its rows before acting, so a second worker shares the work instead of sending duplicates. Delivery is at-least-once: a crash mid-send can repeat that one message.
 - Keep the VAPID keys stable. New keys invalidate existing push subscriptions.
 - HTTPS is required for login cookies, the service worker and push. `APP_URL` must be the public `https://` address.
 - All configuration is read at runtime, so the same image works in every environment.
@@ -66,7 +66,7 @@ To update: `git pull && docker compose up -d --build`. To check it's running: `d
 **Moving to AWS later:**
 - Push the image to ECR.
 - Run web as an ECS service behind an ALB, which does TLS and uses `/health` for health checks.
-- Run the worker as an ECS service with exactly 1 task.
+- Run the worker as an ECS service (1 task is enough), with a stop timeout of at least 30 seconds.
 - Run migrations as a one-off task on each deploy.
 - Use RDS for Postgres, and SES for SMTP.
 - Before running more than one web instance, set the same `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` on every instance (see Next's self-hosting guide).

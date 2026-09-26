@@ -44,10 +44,12 @@ services:
       start_period: 20s
       retries: 3
 
-  # Exactly one worker: the outbox isn't claimed with row locks, so two workers would send duplicates.
+  # One worker is plenty; jobs claim their rows, so extra workers would share work, not duplicate it.
   worker:
     <<: *app
     command: ["bun", "src/jobs/worker.ts"]
+    # Lets it finish the batch it's sending on deploy/restart (it force-exits after 25s).
+    stop_grace_period: 30s
     depends_on:
       migrate: { condition: service_completed_successfully }
 
