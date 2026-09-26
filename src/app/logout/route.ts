@@ -6,10 +6,8 @@ import { destroySession } from "@/server/auth/session";
  * on shared computers. Ending the session also removes this device's push
  * subscription (it's tied to the session).
  */
-export async function POST(req: Request) {
+export async function POST() {
   await destroySession();
-  return new Response(null, {
-    status: 303,
-    headers: { Location: new URL("/login", req.url).toString(), "Clear-Site-Data": '"cache", "storage"' },
-  });
+  // Relative Location: `req.url` carries the server's internal address, not the public one.
+  return new Response(null, { status: 303, headers: { Location: "/login", "Clear-Site-Data": '"cache", "storage"' } });
 }
