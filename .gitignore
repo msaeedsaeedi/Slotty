@@ -49,3 +49,6 @@ next-env.d.ts
 /test-results
 /playwright-report
 /.next-e2e/
+
+# production backups (deploy/backup.sh)
+/deploy/backups

@@ -1,0 +1,7 @@
+# Caddy gets and renews the HTTPS certificate for $DOMAIN automatically.
+# Point the domain's DNS A/AAAA record at the VPS before the first start.
+{$DOMAIN} {
+	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy web:3000
+}

@@ -11,7 +11,7 @@ function configure() {
   if (configured) return;
   webpush.setVapidDetails(
     process.env.VAPID_SUBJECT ?? "mailto:no-reply@slotty.local",
-    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+    process.env.VAPID_PUBLIC_KEY!,
     process.env.VAPID_PRIVATE_KEY!,
   );
   configured = true;
