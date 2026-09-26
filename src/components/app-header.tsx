@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { Bell, CalendarCheck, LogOut, Shield, UserRound } from "lucide-react";
+import { Bell, CalendarCheck, CalendarClock, LogOut, Shield, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Actor } from "@/server/services/access";
+import { myRoleKinds } from "@/server/services/courses";
 import { unreadCount } from "@/server/services/inbox";
 
 export async function AppHeader({ user }: { user: Actor }) {
-  const unread = await unreadCount(user);
+  const [unread, roles] = await Promise.all([unreadCount(user), myRoleKinds(user)]);
   return (
     <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4">
@@ -17,9 +18,18 @@ export async function AppHeader({ user }: { user: Actor }) {
           <Button asChild variant="ghost" size="sm">
             <Link href="/dashboard">Courses</Link>
           </Button>
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/bookings">My bookings</Link>
-          </Button>
+          {roles.staff && (
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/today">
+                <CalendarClock /> Demo day
+              </Link>
+            </Button>
+          )}
+          {roles.student && (
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/bookings">My bookings</Link>
+            </Button>
+          )}
           {user.isAdmin && (
             <Button asChild variant="ghost" size="sm">
               <Link href="/admin">

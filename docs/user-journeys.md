@@ -40,7 +40,7 @@ Roles are **per course** (`Enrollment.role`). One person can be a student in one
 | T7b | Edits the assignment | `…/edit` | `updateAssignment` | A notice explains the impact on booked students. The edit is blocked if max marks drop below awarded marks or the window no longer covers booked slots. Booked students are told about rule changes. |
 | T7c | Handles student requests | `…/manage/requests` (badge in nav) | `requests.resolveRequest` | Open the student to move them, clear a no-show, or grant an exception, then mark the request handled or declined with a reply. |
 | T7d | Fixes one student's booking | Student page (`…/evaluate/[studentId]`), *Booking* card | `staffPlaceStudent`, `allowRebookAfterNoShow`, `setAllowance` | Place or move into any upcoming slot, even inside the freeze window, and optionally over capacity. None of it uses the student's changes. |
-| T8 | Runs the day | `…/manage/today` | `listDayBookings`, `markAttendance`, `listOverdueAttendance` | Day navigation with "My demos" or "Everyone". Mark *Completed* / *No-show* / *Undo* once the demo has started. Past days with unrecorded attendance are listed as links. A no-show notifies the student. Attendance locks once the evaluation is submitted. |
+| T8 | Runs the day | `/today` (all courses; *Demo day* in the header and a *Today* card on the dashboard), or a course's *Today* tab | `demo-day.getDemoDay`, `markAttendance` | Opens on who's **now** (time left) or **up next** (starts in…), plus a *Coming up* list. The day is a timeline with open slots and free gaps; a 7-day strip shows how many demos each day has. *Completed → mark* records attendance and opens marking, and submitting returns here. *No-show* asks first. Focus moves to the next student once attendance is recorded. The page refreshes itself every 30 s. *To finish* lists earlier days without attendance, completed demos without submitted marks, and open student requests. "My demos" by default; "Everyone" shows all hosts. |
 | T9 | Marks | `…/evaluate/[studentId]` | `getOrCreateEvaluation`, `saveEvaluation` | Rubric scores with comments, feedback, private notes, and an optional total override (needs a note). |
 | T10 | Submits | Evaluate page or *Students & marks* tab (bulk) | `submitEvaluations` | Every rubric row has to be scored. **With an instructor:** goes to `SUBMITTED` for review. **Without one:** goes straight to `FINALIZED` and the student sees it. |
 | T11 | Fixes a returned evaluation | Evaluate page | `saveEvaluation`, `submitEvaluations` | `evaluation.returned` notification includes the instructor's comment. |
@@ -73,7 +73,7 @@ Everything a TA can do, plus:
 TA: create course → import roster → venues → assignment + policy + rubric
   → add availability (draft slots) → publish ──► students notified
 Students: book / reschedule / cancel (policy rules) ──► confirmations + 24h/1h reminders
-Demo day: Today view → attendance → mark → submit
+Demo day: /today (now / next) → Completed → mark → submit → back to /today
   ├─ course has instructor → SUBMITTED → instructor finalizes / returns
   └─ no instructor         → FINALIZED directly
 Student sees marks → staff export CSV → close assignment → archive course

@@ -41,7 +41,7 @@ export default async function EvaluatePage({ params, searchParams }: PageProps<"
       <PageHeader
         title={ev.student.name}
         description={`${ev.assignment.title} · ${ev.student.email}`}
-        back={{ href: back, label: "Back" }}
+        back={{ href: back, label: /^\/today|\/manage\/today/.test(back) ? "Back to demo day" : "Back" }}
         actions={<StatusBadge status={ev.status} />}
       />
 

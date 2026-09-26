@@ -55,6 +55,13 @@ export async function listMyCourses(actor: Actor) {
   return enrollments.map((e) => ({ ...e.course, role: e.role, studentCount: e.course._count.enrollments }));
 }
 
+/** Which kinds of course roles the user holds, for navigation (admin rights don't count). */
+export async function myRoleKinds(actor: Actor) {
+  const roles = await db.enrollment.findMany({ where: { userId: actor.id, course: { archived: false } }, select: { role: true }, distinct: ["role"] });
+  const hasBookings = roles.some((r) => r.role === "STUDENT") || (await db.booking.count({ where: { studentId: actor.id }, take: 1 })) > 0;
+  return { staff: roles.some((r) => r.role !== "STUDENT"), student: hasBookings };
+}
+
 /** Course + the actor's role in it; throws NOT_FOUND when the actor has no access. */
 export async function getCourseForActor(actor: Actor, courseId: string) {
   const course = await db.course.findUnique({ where: { id: courseId } });

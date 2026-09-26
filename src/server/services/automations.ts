@@ -132,7 +132,7 @@ export async function sendDailyAgendas(now = new Date()): Promise<number> {
         type: "agenda.daily",
         title: `Today: ${todays.length} demo${todays.length === 1 ? "" : "s"}`,
         body: `Your demos today (${tz}):\n\n${lines.join("\n")}`,
-        link: `/courses/${todays[0].assignment.courseId}/manage/today`,
+        link: "/today",
         inApp: false,
       });
       sent++;

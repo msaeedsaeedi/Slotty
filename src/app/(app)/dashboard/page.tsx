@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CalendarClock, CalendarPlus, ExternalLink, MapPin, Plus, Users } from "lucide-react";
 import { EmptyState, PageHeader } from "@/components/page-header";
+import { DemoDaySummary } from "@/components/demo-day";
 import { InstallHint } from "@/components/pwa";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -9,14 +10,18 @@ import { fmtRange } from "@/lib/time";
 import { requireUser } from "@/server/auth/session";
 import { listMyBookings } from "@/server/services/bookings";
 import { listMyCourses } from "@/server/services/courses";
+import { getDemoDay } from "@/server/services/demo-day";
 
 export const metadata = { title: "Dashboard" };
 
 export default async function DashboardPage() {
   const user = await requireUser();
+  const now = new Date();
   const [courses, bookings] = await Promise.all([listMyCourses(user), listMyBookings(user)]);
+  // Staff land here too: lead with today's demos.
+  const demoDay = courses.some((c) => c.role !== "STUDENT" && !c.archived) ? await getDemoDay(user, { now }) : null;
   const upcoming = bookings
-    .filter((b) => b.status === "BOOKED" && b.slot.endsAt > new Date())
+    .filter((b) => b.status === "BOOKED" && b.slot.endsAt > now)
     .sort((a, b) => a.slot.startsAt.getTime() - b.slot.startsAt.getTime());
   const active = courses.filter((c) => !c.archived);
   const archived = courses.filter((c) => c.archived);
@@ -34,6 +39,8 @@ export default async function DashboardPage() {
           </Button>
         }
       />
+
+      {demoDay && <DemoDaySummary data={demoDay} now={now} />}
 
       <InstallHint />
 

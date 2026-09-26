@@ -437,25 +437,6 @@ export async function getAllowance(actor: Actor, assignmentId: string, studentId
   return db.bookingAllowance.findUnique({ where: { assignmentId_studentId: { assignmentId, studentId } } });
 }
 
-/** Bookings on a given day across the course (the TA "Today" view). */
-export async function listDayBookings(actor: Actor, courseId: string, dayStart: Date, dayEnd: Date, opts?: { taId?: string }) {
-  await assertCourseRole(db, actor, courseId, STAFF);
-  return db.booking.findMany({
-    where: {
-      status: { in: [...ACTIVE_BOOKING] },
-      assignment: { courseId },
-      slot: { startsAt: { gte: dayStart, lt: dayEnd }, ...(opts?.taId ? { taId: opts.taId } : {}) },
-    },
-    include: {
-      student: { select: { id: true, name: true, email: true } },
-      slot: { include: { venue: true, ta: { select: { id: true, name: true } } } },
-      assignment: { select: { id: true, title: true, maxMarks: true } },
-      evaluation: { select: { id: true, status: true, totalMarks: true } },
-    },
-    orderBy: { slot: { startsAt: "asc" } },
-  });
-}
-
 /** Demos that have ended without attendance being recorded, grouped by course-local day (for the Today nudge). */
 export async function listOverdueAttendance(actor: Actor, courseId: string, opts?: { taId?: string }, now = new Date()) {
   await assertCourseRole(db, actor, courseId, STAFF);
