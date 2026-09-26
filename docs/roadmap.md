@@ -12,6 +12,5 @@ Run short task-based sessions with the seed accounts: book, reschedule, cancel t
 
 ## Open issues
 
-- **E2E `tests/e2e/support.spec.ts` is marked `fixme`.** Everything works up to the staff move: request sent, staff move, request auto-resolved. The last check fails because once a request is answered, the "Need help with your booking?" panel is collapsed, so the "Handled" badge is hidden. The panel now stays open for 7 days after a staff reply, which should fix this. Re-run the test and remove `fixme`.
 - **Intermittent e2e timeout.** Once, the instructor test timed out on a page load after the service worker arrived (it passed on rerun). Watch for it; if it recurs, suspect `waitForLoadState("networkidle")` in `tests/e2e/helpers.ts` together with SW registration.
 - **E2E now runs on a production build** (`next build && next start`, see `playwright.config.ts`). Under `next dev`, Fast Refresh from on-demand compiling sometimes dropped the page refresh after an action in multi-browser tests. `/dev/mail` is enabled there through `ENABLE_DEV_MAIL=1`.

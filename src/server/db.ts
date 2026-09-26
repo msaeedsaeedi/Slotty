@@ -8,8 +8,7 @@ export type Tx = Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$trans
 function createClient() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error("DATABASE_URL is not set");
-  // `prisma dev` (PGlite) is a single-session server: concurrent connections can
-  // interleave protocol messages, so local setups set DATABASE_POOL_MAX=1.
+  // Optional cap on connections per process (e.g. for a small managed Postgres plan).
   const max = process.env.DATABASE_POOL_MAX ? Number(process.env.DATABASE_POOL_MAX) : undefined;
   return new PrismaClient({ adapter: new PrismaPg({ connectionString, max }) });
 }

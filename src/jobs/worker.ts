@@ -5,7 +5,8 @@
  * - delivery: sends queued emails and push messages. It wakes as soon as a
  *   transaction that queued something commits (Postgres LISTEN/NOTIFY, see
  *   `signalOutbox`), with a slow poll as a backstop. Where notifications don't
- *   arrive (PGlite from `prisma dev`), it polls every WORKER_INTERVAL_MS instead.
+ *   arrive (e.g. behind a transaction-mode pooler such as PgBouncer), it polls
+ *   every WORKER_INTERVAL_MS instead.
  * - schedule: time-based jobs (booking opens, nudges, auto-close, agendas,
  *   reminders) every WORKER_SCHEDULE_MS.
  *

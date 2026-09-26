@@ -2,8 +2,9 @@
 
 # Slotty — working notes
 
-- Package manager/runner is **bun** (`bun run …`, `bunx …`). There is no Docker, pnpm, or sudo on the dev machine; the local DB is `prisma dev`.
-- Dev DB: `bunx prisma dev --name slotty --detach` (port 51214). Test DB: `--name slotty-test` (port 51218, `.env.test`). Both are PGlite, so keep `DATABASE_POOL_MAX=1`.
+- Package manager/runner is **bun** (`bun run …`, `bunx …`). No pnpm or sudo.
+- Local services run in Docker: `bun run infra:up` (infra/docker-compose.yml) starts Postgres 17 on :5432 and Mailpit (SMTP :1025, inbox http://localhost:8025). One server holds three databases: `slotty` (dev, `.env`), `slotty_test` (tests, `.env.test`), and `slotty_app` (`bun run app:up`, the production image on :3001).
+- If `docker` says permission denied in an agent shell, run it through `sg docker -c "…"`.
 - `prisma migrate reset` is blocked for agents. Ask the user before wiping the dev DB.
 - Checks: `bun run typecheck`, `bun run lint`, `bun run test` (unit + integration), `bun run test:e2e`.
 

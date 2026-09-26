@@ -1,9 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { createCourse, createPublishedAssignment, importRoster, login, open } from "./helpers";
 
-// FIXME: final assertions fail because the answered request collapses its panel
-// ("Handled" is hidden inside <details>). See docs/roadmap.md → "Open issues".
-test.fixme("a stuck student asks for help, staff move them, and the calendar feed follows", async ({ browser }) => {
+test("a stuck student asks for help, staff move them, and the calendar feed follows", async ({ browser }) => {
   test.setTimeout(300_000); // visits several pages the dev server compiles on first use
   const ta = await login(browser, "ta@e2e.test");
   const courseId = await createCourse(ta, "HELP300", "TA");

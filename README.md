@@ -17,14 +17,16 @@ Next.js 16 (App Router, Server Actions), TypeScript, PostgreSQL with Prisma 7, T
 
 ```bash
 bun install
-bun run db:up        # local Postgres via `prisma dev` (runs in the background)
+bun run infra:up     # Postgres + Mailpit in Docker (infra/docker-compose.yml)
 bun run db:migrate   # apply migrations
 bun run db:seed      # demo data (see below)
 bun run dev          # http://localhost:3000
 bun run worker       # in a second terminal: sends queued emails and schedules reminders
 ```
 
-Copy `.env.example` to `.env` first if you don't have one. For push notifications (PWA), add VAPID keys (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`): `bunx web-push generate-vapid-keys`. The service worker only registers in production builds unless `NEXT_PUBLIC_ENABLE_SW=1` is set. When `SMTP_HOST` is empty, the worker prints emails to its console. You can also read every queued email at **http://localhost:3000/dev/mail** (development only), which is the easiest way to follow invite links locally.
+Copy `.env.example` to `.env` first if you don't have one. For push notifications (PWA), add VAPID keys (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`): `bunx web-push generate-vapid-keys`. The service worker only registers in production builds unless `NEXT_PUBLIC_ENABLE_SW=1` is set. Emails go to Mailpit, at **http://localhost:8025**. If `SMTP_HOST` is empty, the worker prints them to its console instead. **http://localhost:3000/dev/mail** also lists every queued email (development only).
+
+To try the production image locally, run `bun run app:up`. It builds the Docker image and runs migrate, web and worker against their own database, at **http://localhost:3001**, with email going to Mailpit. Stop everything with `bun run infra:down`.
 
 ### Demo accounts (after `db:seed`)
 
@@ -38,8 +40,8 @@ Copy `.env.example` to `.env` first if you don't have one. For push notification
 ## Tests
 
 ```bash
+bun run infra:up      # the slotty_test database lives in the same Postgres (see .env.test)
 bun run test:unit     # domain rules: slot generation, booking rules, evaluation states, CSV parsing
-bunx prisma dev --name slotty-test --detach   # once: separate test database (see .env.test)
 bun run test:int      # services against the test DB, including a 20-way booking race
 bun run test:e2e      # Playwright: the full loop in a real browser (starts its own server on :3100)
 ```
@@ -81,6 +83,7 @@ src/app/actions/       Server Actions: thin wrappers that call services
 src/app/(auth)/        Sign in, invite, password reset
 src/app/(app)/         Signed-in app: dashboard, student pages, /courses/[id]/manage (staff), /admin
 src/jobs/worker.ts     Email/push outbox delivery, reminders, automations
+infra/                 Local Docker services (Postgres, Mailpit) and the production image for local runs
 deploy/                Production stack for one VPS (compose, Caddy, backups)
 prisma/                Schema, migrations, seed
 docs/                  User journeys, business rules, roadmap
@@ -94,7 +97,3 @@ See [docs/user-journeys.md](docs/user-journeys.md), [docs/business-rules.md](doc
 - **Freeze window.** Students can't book, cancel, or reschedule within *N* hours of a slot. Staff can still cancel.
 - **Emails are transactional.** Notifications are written in the same DB transaction as the change, so a failed booking never sends a confirmation.
 - **Evaluation states.** `DRAFT → SUBMITTED → FINALIZED`, or `RETURNED` for changes. Without an instructor, `submit` goes straight to `FINALIZED`. Students only ever see finalized marks and never see private notes.
-
-## Local database notes
-
-`prisma dev` runs PGlite, a single-session Postgres, so `.env` sets `DATABASE_POOL_MAX=1`. With a normal Postgres server (for example `docker compose up` using the included `docker-compose.yml`), remove that line.

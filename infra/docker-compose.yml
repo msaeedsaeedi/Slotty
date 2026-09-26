@@ -1,0 +1,70 @@
+# Local development services: Postgres (same major version as production) and Mailpit.
+#   bun run infra:up      → Postgres on localhost:5432, Mailpit SMTP on :1025, inbox at http://localhost:8025
+#   bun run infra:down    (add -v to the underlying command to wipe the data volume)
+#
+# Databases: slotty (dev, .env), slotty_test (tests, .env.test), slotty_app (the `app` profile).
+#
+# `app` profile: runs the production image (migrate → web + worker) against slotty_app,
+# with email going to Mailpit — the same containers deploy/ runs, minus Caddy:
+#   bun run app:up        → http://localhost:3001
+name: slotty
+
+x-app: &app
+  image: slotty-app:latest
+  build: ..
+  profiles: [app]
+  # VAPID keys etc. come from your .env; the values below override its localhost-only settings.
+  env_file: [{ path: ../.env, required: false }]
+  environment:
+    DATABASE_URL: postgres://slotty:slotty@postgres:5432/slotty_app
+    APP_URL: http://localhost:3001
+    SMTP_HOST: mailpit
+    SMTP_PORT: "1025"
+    MAIL_FROM: Slotty <no-reply@slotty.local>
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: slotty
+      POSTGRES_PASSWORD: slotty
+      POSTGRES_DB: slotty
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U slotty -d slotty"]
+      interval: 2s
+      retries: 30
+
+  mailpit:
+    image: axllent/mailpit
+    ports: ["1025:1025", "8025:8025"]
+
+  migrate:
+    <<: *app
+    command: ["node_modules/.bin/prisma", "migrate", "deploy"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  web:
+    <<: *app
+    ports: ["3001:3000"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 5s
+      start_period: 20s
+      retries: 5
+
+  worker:
+    <<: *app
+    command: ["bun", "src/jobs/worker.ts"]
+    stop_grace_period: 30s
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+volumes:
+  pgdata:

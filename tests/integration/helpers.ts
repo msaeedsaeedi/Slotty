@@ -6,7 +6,7 @@ import { addAvailability } from "@/server/services/slots";
 
 /** Wipe every table (test DB only). */
 export async function resetDb() {
-  if (!process.env.DATABASE_URL?.includes("51218")) throw new Error("Refusing to reset a non-test database");
+  if (!/\/slotty_test(\?|$)/.test(process.env.DATABASE_URL ?? "")) throw new Error("Refusing to reset a non-test database");
   const tables = await db.$queryRaw<{ tablename: string }[]>`
     SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`;
   await db.$executeRawUnsafe(`TRUNCATE ${tables.map((t) => `"${t.tablename}"`).join(", ")} CASCADE`);
