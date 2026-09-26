@@ -6,13 +6,13 @@ import { savePushSubscription } from "@/server/services/push";
 import { enroll, inHours, makeUser, resetDb, setupCourse } from "./helpers";
 
 const keys = webpush.generateVAPIDKeys();
-const saved = { pub: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY, priv: process.env.VAPID_PRIVATE_KEY };
+const saved = { pub: process.env.VAPID_PUBLIC_KEY, priv: process.env.VAPID_PRIVATE_KEY };
 beforeAll(() => {
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY = keys.publicKey;
+  process.env.VAPID_PUBLIC_KEY = keys.publicKey;
   process.env.VAPID_PRIVATE_KEY = keys.privateKey;
 });
 afterAll(() => {
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY = saved.pub;
+  process.env.VAPID_PUBLIC_KEY = saved.pub;
   process.env.VAPID_PRIVATE_KEY = saved.priv;
 });
 beforeEach(resetDb);

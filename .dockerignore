@@ -1,0 +1,16 @@
+.git
+node_modules
+.next
+.next-*
+src/generated
+test-results
+playwright-report
+coverage
+certificates
+docs
+tests
+*.tsbuildinfo
+.env*
+!.env.example
+deploy/.env
+deploy/backups
