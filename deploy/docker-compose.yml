@@ -10,6 +10,8 @@ x-app: &app
   env_file: .env
   environment:
     DATABASE_URL: postgres://slotty:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}@postgres:5432/slotty
+    # Links in emails and calendar feeds; derived from DOMAIN so the two can't drift apart.
+    APP_URL: https://${DOMAIN:?set DOMAIN in deploy/.env}
   restart: unless-stopped
 
 services:

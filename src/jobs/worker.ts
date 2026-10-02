@@ -16,6 +16,7 @@
  */
 import "dotenv/config";
 import { Client } from "pg";
+import { appUrl } from "@/server/app-url";
 import { db } from "@/server/db";
 import { closeMailer, deliverPendingEmails } from "@/server/mailer";
 import { OUTBOX_CHANNEL } from "@/server/outbox-signal";
@@ -175,6 +176,7 @@ async function reconnect() {
 let loops: Promise<unknown> = Promise.resolve();
 
 async function main() {
+  appUrl(); // fail fast: emails built without a valid APP_URL would link to the wrong place
   const listenOk = await startListener();
   log(
     `started: delivery ${listenOk ? `on notify (backstop ${BACKSTOP_MS / 1000}s)` : `polling every ${POLL_MS / 1000}s`}, ` +

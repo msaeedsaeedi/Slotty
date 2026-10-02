@@ -2,6 +2,7 @@ import { z } from "zod";
 import { DomainError } from "@/domain/result";
 import { db, type Tx } from "@/server/db";
 import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "@/server/auth/password";
+import { absoluteUrl } from "@/server/app-url";
 import { generateToken, hashToken } from "@/server/auth/tokens";
 import type { Actor } from "./access";
 import { queueEmail, renderEmail } from "./notify";
@@ -14,7 +15,6 @@ export const passwordSchema = z
   .min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`)
   .max(200);
 
-const appUrl = () => process.env.APP_URL ?? "http://localhost:3000";
 
 let dummyHash: Promise<string> | undefined;
 
@@ -44,7 +44,7 @@ export async function issueInvite(tx: Tx, user: { id: string; email: string; nam
       expiresAt: new Date(Date.now() + INVITE_DAYS * 86_400_000),
     },
   });
-  const link = `${appUrl()}/invite/${token}`;
+  const link = absoluteUrl(`/invite/${token}`);
   const content = renderEmail({
     title: "You're invited to Slotty",
     body: `Hi ${user.name},\n\n${context}\n\nSet your password to get started (link valid for ${INVITE_DAYS} days):\n${link}`,
@@ -97,7 +97,7 @@ export async function requestPasswordReset(email: string): Promise<void> {
         expiresAt: new Date(Date.now() + RESET_HOURS * 3_600_000),
       },
     });
-    const link = `${appUrl()}/reset-password/${token}`;
+    const link = absoluteUrl(`/reset-password/${token}`);
     await queueEmail(
       tx,
       user.email,
