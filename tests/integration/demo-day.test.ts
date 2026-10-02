@@ -83,9 +83,9 @@ describe("demo day", () => {
     await bookSlot(ann, slots[0].id);
 
     expect((await getDemoDay(admin)).courses).toEqual([]);
-    expect(await myRoleKinds(admin)).toEqual({ staff: false, student: false });
-    expect(await myRoleKinds(ta)).toEqual({ staff: true, student: false });
-    expect(await myRoleKinds(ann)).toEqual({ staff: false, student: true });
+    expect(await myRoleKinds(admin)).toEqual({ staff: false, student: false, enrolled: false });
+    expect(await myRoleKinds(ta)).toEqual({ staff: true, student: false, enrolled: true });
+    expect(await myRoleKinds(ann)).toEqual({ staff: false, student: true, enrolled: true });
     await expect(getDemoDay(ann, { courseId: course.id })).rejects.toThrow(/permission/);
   });
 });

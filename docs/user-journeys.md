@@ -59,11 +59,16 @@ Everything a TA can do, plus:
 
 ## Admin
 
+Admins run the platform from the web console. They don't enrol in courses or book anything, and they don't need offline access. An admin who isn't in any course lands on `/admin`, and the header shows only *Administration*. Someone who is also a TA or student keeps their course links as well.
+
 | # | Step | Screen | Service | What happens / feedback |
 |---|---|---|---|---|
-| A1 | Manages users | `/admin/users` | `adminListUsers`, `adminSetUserDisabled`, `adminSetAdmin` | Search. Shows each user's upcoming demos. Disabling someone ends their sessions and can release their upcoming bookings. An admin can't disable themselves or remove their own admin rights. |
-| A2 | Oversees courses | `/admin/courses` | `adminListCourses` | Can open any course as an instructor (shown as "Viewing as admin"). |
-| A3 | Audits | `/admin/audit` | `adminAuditLog` | The latest 200 moderation-relevant changes (who, what, before/after). |
+| A0 | Checks what needs attention | `/admin` (Overview) | `adminOverview` | *Needs attention* lists only real problems, each with a link to fix it: failed emails, emails stuck in the queue for more than 15 minutes (the worker is down), active courses with no instructor or TA, and invites not accepted after 7 days. Below that, platform numbers (users, activation, courses, demos in the next 7 days, email) and recent activity. |
+| A1 | Finds a person | `/admin/users` | `adminListUsers` | Search plus filters: active, awaiting activation, invite older than 7 days, disabled, admins, not in any course. |
+| A1b | Helps a person | `/admin/users/[id]` | `adminGetUser`, `adminSendAccessEmail`, `adminUpdateUser`, `adminSetUserDisabled`, `adminSetAdmin` | Account status, last sign-in or invite age, courses and roles, upcoming demos, history (done to them and by them). *Resend invite* or *Send password reset*. Fix the name, or a mistyped email while the account is still invited (a new invite goes to the corrected address). Disable (ends sessions and can release upcoming bookings) or enable. Make or remove admin. Admins can't disable themselves or remove their own admin rights. |
+| A2 | Keeps courses staffed | `/admin/courses` | `adminListCourses`, `adminAssignStaff`, `adminSetCourseArchived` | Filters: active, no staff, archived. Each course shows its staff, students, open assignments and upcoming demos. *Assign staff* adds an instructor or TA by email without the admin joining the course: new people get an invite, existing ones a notification. Archive or restore. Opening a course shows its manage pages as an instructor ("Viewing as admin"). |
+| A3 | Fixes email delivery | `/admin/email` (badge = failed count) | `adminEmailQueue`, `adminRetryEmails` | Failed, waiting and sent emails with the SMTP error. Retry one, or all after fixing the cause. |
+| A4 | Audits | `/admin/audit` | `adminAuditLog` | Readable sentences ("Ada Admin assigned staff to MATH 210") with links to users and courses, filtered by area or person, 100 per page, with before/after details on demand. |
 
 ---
 

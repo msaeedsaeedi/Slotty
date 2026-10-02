@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { CalendarClock, CalendarPlus, ExternalLink, MapPin, Plus, Users } from "lucide-react";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { DemoDaySummary } from "@/components/demo-day";
@@ -18,6 +19,8 @@ export default async function DashboardPage() {
   const user = await requireUser();
   const now = new Date();
   const [courses, bookings] = await Promise.all([listMyCourses(user), listMyBookings(user)]);
+  // Admins manage the platform without joining courses; their home is the console.
+  if (user.isAdmin && courses.length === 0) redirect("/admin");
   // Staff land here too: lead with today's demos.
   const demoDay = courses.some((c) => c.role !== "STUDENT" && !c.archived) ? await getDemoDay(user, { now }) : null;
   const upcoming = bookings

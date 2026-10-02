@@ -59,7 +59,7 @@ export async function listMyCourses(actor: Actor) {
 export async function myRoleKinds(actor: Actor) {
   const roles = await db.enrollment.findMany({ where: { userId: actor.id, course: { archived: false } }, select: { role: true }, distinct: ["role"] });
   const hasBookings = roles.some((r) => r.role === "STUDENT") || (await db.booking.count({ where: { studentId: actor.id }, take: 1 })) > 0;
-  return { staff: roles.some((r) => r.role !== "STUDENT"), student: hasBookings };
+  return { staff: roles.some((r) => r.role !== "STUDENT"), student: hasBookings, enrolled: roles.length > 0 };
 }
 
 /** Course + the actor's role in it; throws NOT_FOUND when the actor has no access. */

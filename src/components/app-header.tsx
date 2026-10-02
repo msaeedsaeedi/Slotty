@@ -7,17 +7,21 @@ import { unreadCount } from "@/server/services/inbox";
 
 export async function AppHeader({ user }: { user: Actor }) {
   const [unread, roles] = await Promise.all([unreadCount(user), myRoleKinds(user)]);
+  // An admin who isn't in any course has nothing on the course dashboard: the console is home.
+  const adminOnly = user.isAdmin && !roles.enrolled;
   return (
     <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4">
-        <Link href="/dashboard" className="mr-2 flex items-center gap-2 font-semibold">
+        <Link href={adminOnly ? "/admin" : "/dashboard"} className="mr-2 flex items-center gap-2 font-semibold">
           <CalendarCheck className="size-5 text-primary" />
           Slotty
         </Link>
         <nav className="flex items-center gap-1 text-sm">
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/dashboard">Courses</Link>
-          </Button>
+          {!adminOnly && (
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/dashboard">Courses</Link>
+            </Button>
+          )}
           {roles.staff && (
             <Button asChild variant="ghost" size="sm">
               <Link href="/today">
@@ -33,7 +37,7 @@ export async function AppHeader({ user }: { user: Actor }) {
           {user.isAdmin && (
             <Button asChild variant="ghost" size="sm">
               <Link href="/admin">
-                <Shield /> Admin
+                <Shield /> {adminOnly ? "Administration" : "Admin"}
               </Link>
             </Button>
           )}
