@@ -206,9 +206,8 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
           <div>
             <h2 className="text-lg font-semibold">{rescheduling ? "Pick a new slot" : "Book a slot"}</h2>
             <p className="text-sm text-muted-foreground">
-              {policy.slotDurationMin}-minute demos · times in {tz}
-              {policy.freezeHours > 0 && ` · changes lock ${policy.freezeHours}h before your slot`}
-              {fullSlots > 0 && ` · ${fullSlots} full slot${fullSlots === 1 ? "" : "s"} hidden`}
+              Each demo takes {policy.slotDurationMin} minutes.
+              {policy.freezeHours > 0 && ` You can change your booking until ${policy.freezeHours} hours before it starts.`}
             </p>
           </div>
           {(dayOptions.length > 1 || hostOptions.length > 1) && (

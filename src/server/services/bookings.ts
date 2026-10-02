@@ -10,6 +10,7 @@ import {
   type Allowance,
   type PolicyRules,
 } from "@/domain/booking-rules";
+import { canChangeMarkedBooking } from "@/domain/evaluation";
 import { assertRule, DomainError } from "@/domain/result";
 import { overlaps } from "@/domain/slots";
 import { fmtRange } from "@/lib/time";
@@ -145,6 +146,7 @@ async function loadOwnBooking(tx: Tx, actor: Actor, bookingId: string) {
 export async function cancelBooking(actor: Actor, bookingId: string, now = new Date()) {
   return db.$transaction(async (tx) => {
     const booking = await loadOwnBooking(tx, actor, bookingId);
+    await assertNotMarked(tx, booking.assignmentId, actor.id, "student");
     const slot = (await lockSlots(tx, [booking.slotId]))(booking.slotId);
     assertCourseWritable(slot.assignment.course);
     const policy = slot.assignment.policy!;
@@ -176,6 +178,7 @@ export async function rescheduleBooking(actor: Actor, bookingId: string, newSlot
     return await db.$transaction(async (tx) => {
       const booking = await loadOwnBooking(tx, actor, bookingId);
       if (booking.slotId === newSlotId) throw new DomainError("You're already booked into that slot.");
+      await assertNotMarked(tx, booking.assignmentId, actor.id, "student");
       const get = await lockSlots(tx, [booking.slotId, newSlotId]);
       const from = get(booking.slotId);
       const to = get(newSlotId);
@@ -235,6 +238,16 @@ export async function listMyBookings(actor: Actor, filter?: { assignmentId?: str
   });
 }
 
+/** Refuse to cancel or move a booking whose demo already has marks (see `canChangeMarkedBooking`). */
+async function assertNotMarked(tx: Tx, assignmentId: string, studentId: string, who: "staff" | "student", name = "This student") {
+  const evaluation = await tx.evaluation.findUnique({
+    where: { assignmentId_studentId: { assignmentId, studentId } },
+    select: { status: true, totalMarks: true },
+  });
+  const rule = canChangeMarkedBooking(evaluation, who);
+  if (!rule.ok) throw new DomainError(who === "staff" ? `Can't change ${name}'s booking: ${rule.reason}` : rule.reason, "CONFLICT");
+}
+
 // ─── Staff operations ────────────────────────────────────────────────────────
 
 async function loadBookingForStaff(tx: Tx, actor: Actor, bookingId: string) {
@@ -283,6 +296,7 @@ export async function staffCancelBooking(actor: Actor, bookingId: string, reason
   return db.$transaction(async (tx) => {
     const booking = await loadBookingForStaff(tx, actor, bookingId);
     if (booking.status !== "BOOKED") throw new DomainError("Only upcoming bookings can be cancelled.");
+    await assertNotMarked(tx, booking.assignmentId, booking.studentId, "staff");
     await tx.booking.update({
       where: { id: bookingId },
       data: { status: "CANCELLED", cancelledAt: new Date(), cancelledById: actor.id },
@@ -332,6 +346,7 @@ export async function staffPlaceStudent(
     });
     if (current?.status === "COMPLETED") throw new DomainError(`${enrollment.user.name} has already completed this demo.`);
     if (current?.slotId === slot.id) throw new DomainError(`${enrollment.user.name} is already booked into that slot.`);
+    if (current) await assertNotMarked(tx, assignment.id, args.studentId, "staff", enrollment.user.name);
     await assertNoTimeClash(tx, args.studentId, slot, current?.id, `${enrollment.user.name} has another demo booked at that time.`);
 
     if (current) {

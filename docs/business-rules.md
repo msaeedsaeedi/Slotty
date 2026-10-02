@@ -132,6 +132,9 @@ DRAFT ──submit──► SUBMITTED ──finalize──► FINALIZED ──un
 
 - `submit` with no instructor in the course → `FINALIZED` directly.
 - Only `DRAFT` and `RETURNED` can be edited. Every rubric row must be scored to submit, and the total must be between 0 and `maxMarks`.
+- What an **instructor** (or admin) submits is final: they are the reviewer, so it skips `SUBMITTED`.
+- Marking **before the demo starts** needs a reason (`earlyMarkReason`, audited as `evaluation.early`).
+- **Recorded marks pin the booking.** A booking with marks (any total, or submitted/final) can't be cancelled or moved by the student or staff, and its slot can't be cancelled. Staff *Clear marks* first (draft only, with a reason, audited as `evaluation.clear`; submitted or final marks are unlocked first).
 - The marking sheet autosaves drafts (`saveDraft`); the evaluation is created on the first save, never just by viewing. A score for a booked student whose demo has started records them as present. A no-show can't be marked until the no-show is undone.
 - Marking a student **with no booking** needs a reason. It's stored on the evaluation (`noBookingReason`), flagged in lists, and audited as `evaluation.no_booking`.
 - A total override needs a note. Attendance locks once the evaluation is `SUBMITTED` or `FINALIZED`.
@@ -141,6 +144,7 @@ DRAFT ──submit──► SUBMITTED ──finalize──► FINALIZED ──un
 ## Access (`services/access.ts`)
 
 - Every service takes an `Actor` and checks the role itself: `assertCourseRole`, `assertStaff`, `assertAdmin`.
+- **One kind of staff per person.** A TA can be a student elsewhere, but an instructor is never a TA in another course and a TA never an instructor (`domain/roles.ts`). Imports skip such rows with a reason; other paths refuse.
 - **Admins are only admins.** They count as instructors in any course (to manage it), but are never enrolled: roster imports skip admin emails, *Assign staff* and *Add someone* refuse them, they can't create a course for themselves (they create it from the console and name its instructor or TA), and a course member can't be made admin.
 - Only instructors can add or remove instructors. Nobody can remove themselves or demote themselves through a CSV import.
 - **Archived courses are read-only.** Mutations pass `{ write: true }` to `assertCourseRole` / `assertStaff` / `assertAssignmentRole`, or call `assertCourseWritable`. Only restoring the course is allowed.
@@ -160,13 +164,15 @@ The account page (`/account`) shows only what applies to the user's roles: name,
 
 ## Notifications (`services/notify.ts`)
 
-Each notification creates an in-app entry and an email (outbox). Both are written in the **same transaction** as the change. The worker (`bun run worker`) sends emails and queues reminders.
+Each notification creates an in-app entry and, for people who have activated their account, an email (outbox). Invited people get only their invite email; everything else waits in-app for when they join. Both are written in the **same transaction** as the change. The worker (`bun run worker`) sends emails and queues reminders.
 
 | Type | Sent to | When |
 |---|---|---|
 | `course.enrolled` | existing user | Added to a course (new users get an invite email instead). Students are also told which demos are already open. |
 | `course.removed` | student | Removed from a course while holding upcoming bookings |
 | `assignment.opens_soon` | all students | Published with a future `bookingOpensAt` |
+| `assignment.opening_moved` | all students | The future opening time was changed |
+| `slots.added` | students without a booking (not waitlisted) | Slots added while booking is open |
 | `assignment.published` | students without a booking | Booking is open: on publish or reopen, or by the worker at `bookingOpensAt` |
 | `assignment.rules_changed` | booked students | Freeze window, changes allowed or cancel permission changed |
 | `booking.confirmed` | student | Booked |
@@ -187,7 +193,8 @@ Each notification creates an in-app entry and an email (outbox). Both are writte
 | `assignment.book_soon` | unbooked students | 48h before the demo window ends |
 | `agenda.daily` | host (email only) | Morning list of today's demos |
 | `evaluation.returned` | evaluator (TA) | Instructor returned an evaluation |
-| `evaluation.finalized` | student | Marks released |
+| `evaluation.finalized` | student | Marks released; the body has the total, each rubric row and the feedback |
+| `evaluation.updated` | student | Corrected marks released after an unlock, with the old total |
 
 ## Time
 

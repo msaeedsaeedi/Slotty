@@ -7,7 +7,10 @@ import { listAssignmentRoster } from "./evaluations";
 export interface AssignmentProgress {
   id: string;
   title: string;
-  status: string;
+  status: "DRAFT" | "PUBLISHED" | "CLOSED";
+  /** When booking opens, if set. */
+  opensAt: Date | null;
+  timezone: string;
   students: number;
   booked: number;
   completed: number;
@@ -27,7 +30,7 @@ export async function courseProgress(actor: Actor, courseId: string, now = new D
   await assertCourseRole(db, actor, courseId, STAFF);
   const [students, assignments, bookingGroups, evalGroups, overdueGroups, slotGroups] = await Promise.all([
     db.enrollment.count({ where: { courseId, role: "STUDENT" } }),
-    db.assignment.findMany({ where: { courseId }, orderBy: { createdAt: "asc" } }),
+    db.assignment.findMany({ where: { courseId }, include: { policy: { select: { bookingOpensAt: true } }, course: { select: { timezone: true } } }, orderBy: { createdAt: "asc" } }),
     db.booking.groupBy({ by: ["assignmentId", "status"], where: { assignment: { courseId } }, _count: true }),
     db.evaluation.groupBy({ by: ["assignmentId", "status"], where: { assignment: { courseId } }, _count: true }),
     db.booking.groupBy({
@@ -51,6 +54,8 @@ export async function courseProgress(actor: Actor, courseId: string, now = new D
       id: a.id,
       title: a.title,
       status: a.status,
+      opensAt: a.policy?.bookingOpensAt ?? null,
+      timezone: a.course.timezone,
       students,
       booked,
       completed,

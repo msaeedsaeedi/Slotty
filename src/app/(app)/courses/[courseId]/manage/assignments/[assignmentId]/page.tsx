@@ -2,7 +2,9 @@ import Link from "next/link";
 import { CalendarRange, Clock, PenLine, Repeat, Settings2, Target } from "lucide-react";
 import { closeAssignmentAction, publishAssignmentAction } from "@/app/actions/scheduling";
 import { ActionForm, SubmitButton } from "@/components/action-form";
+import { BookingStageBadge } from "@/components/booking-stage";
 import { markHref } from "@/components/demo-day";
+import { bookingStage } from "@/domain/booking-rules";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,12 +20,6 @@ import { waitlistCount } from "@/server/services/waitlist";
 import { AvailabilityPlanner } from "./availability-planner";
 import { SlotTable, type SlotRow } from "./slot-table";
 import { StudentsTable, type StudentRow } from "./students-table";
-
-const STATE = {
-  DRAFT: { label: "Not open yet", className: "bg-muted text-muted-foreground" },
-  PUBLISHED: { label: "Booking open", className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200" },
-  CLOSED: { label: "Booking closed", className: "bg-muted text-muted-foreground" },
-} as const;
 
 export default async function ManageAssignmentPage({ params, searchParams }: PageProps<"/courses/[courseId]/manage/assignments/[assignmentId]">) {
   const { courseId, assignmentId } = await params;
@@ -45,10 +41,11 @@ export default async function ManageAssignmentPage({ params, searchParams }: Pag
   const base = `/courses/${courseId}/manage/assignments/${assignmentId}`;
   const liveSlots = slots.filter((s) => s.status !== "CANCELLED");
   const hiddenSlots = slots.filter((s) => s.status === "DRAFT").length;
-  const capacity = liveSlots.filter((s) => s.endsAt > now).reduce((n, s) => n + s.capacity, 0);
+  const upcoming = liveSlots.filter((s) => s.startsAt > now);
+  const freePlaces = upcoming.reduce((n, s) => n + Math.max(0, s.capacity - s.bookings.length), 0);
   const booked = roster.filter((r) => r.booking).length;
   const hasBookings = booked > 0;
-  const state = STATE[assignment.status];
+  const stage = bookingStage(assignment.status, policy.bookingOpensAt, now);
   const instructor = role === "INSTRUCTOR";
 
   // Every day of the demo window, for the slot planner.
@@ -108,7 +105,7 @@ export default async function ManageAssignmentPage({ params, searchParams }: Pag
         title={
           <span className="flex flex-wrap items-center gap-2">
             {assignment.title}
-            <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", state.className)}>{state.label}</span>
+            <BookingStageBadge stage={stage} opensAt={policy.bookingOpensAt} timezone={tz} />
           </span>
         }
         back={{ href: `/courses/${courseId}/manage`, label: "Assignments" }}
@@ -148,7 +145,7 @@ export default async function ManageAssignmentPage({ params, searchParams }: Pag
           status={assignment.status}
           slots={liveSlots.length}
           hiddenSlots={hiddenSlots}
-          capacity={capacity}
+          capacity={freePlaces}
           students={roster.length}
           booked={booked}
           waiting={waiting}
@@ -201,9 +198,20 @@ export default async function ManageAssignmentPage({ params, searchParams }: Pag
                   timezone={tz}
                   timezoneLabel={tzLabel(tz)}
                   clock={currentClock()}
-                  policy={{ windowStart: policy.windowStart.toISOString(), windowEnd: policy.windowEnd.toISOString(), slotDurationMin: policy.slotDurationMin, bufferMin: policy.bufferMin }}
+                  policy={{
+                    windowStart: policy.windowStart.toISOString(),
+                    windowEnd: policy.windowEnd.toISOString(),
+                    slotDurationMin: policy.slotDurationMin,
+                    bufferMin: policy.bufferMin,
+                    capacityPerSlot: policy.capacityPerSlot,
+                  }}
+                  coverage={{ students: roster.length, booked, freePlaces }}
                   days={days}
-                  hosts={instructor ? staff.map((s) => ({ id: s.userId, name: s.user.name })) : [{ id: user.id, name: user.name }]}
+                  hosts={
+                    instructor
+                      ? [...staff].sort((a, b) => Number(a.role === "INSTRUCTOR") - Number(b.role === "INSTRUCTOR")).map((s) => ({ id: s.userId, name: s.role === "INSTRUCTOR" ? `${s.user.name} (instructor)` : s.user.name }))
+                      : [{ id: user.id, name: user.name }]
+                  }
                   me={user.id}
                   venues={venues.map((v) => ({ id: v.id, name: v.name }))}
                   busy={busy.map((b) => ({ taId: b.taId, startsAt: b.startsAt.toISOString(), endsAt: b.endsAt.toISOString() }))}

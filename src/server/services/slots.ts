@@ -105,7 +105,30 @@ export async function addAvailability(actor: Actor, assignmentId: string, input:
       throw new DomainError(`${host.user.name} already has slots at all of those times, so nothing new was added.`, "CONFLICT");
     }
     await audit(tx, actor, { action: "availability.add", entityType: "Assignment", entityId: assignmentId, after: { ...data, slots: created, skipped } });
-    if (status === "PUBLISHED") await notifyWaitlist(tx, assignmentId);
+    if (status === "PUBLISHED") {
+      await notifyWaitlist(tx, assignmentId);
+      // While booking is open, students still without a demo hear about new times
+      // (waitlisted students were just told separately).
+      if (!policy.bookingOpensAt || policy.bookingOpensAt <= new Date()) {
+        const [booked, waiting, students] = await Promise.all([
+          tx.booking.findMany({ where: { assignmentId, status: { not: "CANCELLED" } }, select: { studentId: true } }),
+          tx.waitlistEntry.findMany({ where: { assignmentId }, select: { studentId: true } }),
+          tx.enrollment.findMany({ where: { courseId: assignment.courseId, role: "STUDENT" }, select: { userId: true } }),
+        ]);
+        const skip = new Set([...booked, ...waiting].map((r) => r.studentId));
+        const days = [...new Set(data.blocks.map((b) => fmt(b.startsAt, tz, "EEE d MMM")))].join(", ");
+        await notify(
+          tx,
+          students.map((s) => s.userId).filter((id) => !skip.has(id)),
+          {
+            type: "slots.added",
+            title: `More demo times: ${assignment.title}`,
+            body: `${created} new slot${created === 1 ? " was" : "s were"} added for ${assignment.course.code} — ${assignment.title} (${days}). You haven't booked yet, so pick one that suits you.`,
+            link: `/courses/${assignment.courseId}/assignments/${assignmentId}`,
+          },
+        );
+      }
+    }
     return { slots: created, skipped, status };
   });
 }
@@ -133,8 +156,16 @@ export async function cancelSlot(actor: Actor, slotId: string, reason: string) {
     await assertCourseRole(tx, actor, slot.assignment.courseId, STAFF, { write: true });
     if (slot.status === "CANCELLED") return;
     await tx.$queryRaw`SELECT id FROM "Slot" WHERE id = ${slotId} FOR UPDATE`;
-    const booked = await tx.booking.findMany({ where: { slotId, status: "BOOKED" } });
+    const booked = await tx.booking.findMany({ where: { slotId, status: "BOOKED" }, include: { student: { select: { name: true } } } });
     if (booked.length > 0 && !reason.trim()) throw new DomainError("Give a reason — it's sent to the booked students.");
+    const marked = await tx.evaluation.findMany({
+      where: { assignmentId: slot.assignmentId, studentId: { in: booked.map((b) => b.studentId) }, OR: [{ totalMarks: { not: null } }, { status: { not: "DRAFT" } }] },
+      select: { studentId: true },
+    });
+    if (marked.length) {
+      const names = booked.filter((b) => marked.some((m) => m.studentId === b.studentId)).map((b) => b.student.name);
+      throw new DomainError(`${names.join(", ")} already ${names.length === 1 ? "has" : "have"} marks for this slot. Clear those marks first, then cancel the slot.`, "CONFLICT");
+    }
     await tx.booking.updateMany({
       where: { slotId, status: "BOOKED" },
       data: { status: "CANCELLED", cancelledAt: new Date(), cancelledById: actor.id },

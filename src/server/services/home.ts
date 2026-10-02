@@ -124,8 +124,8 @@ async function teachingTasks(actor: Actor, courses: { id: string; code: string; 
   for (const [courseId, group] of groupBy(review, (r) => r.assignment.courseId)) {
     tasks.push({
       key: `review-${courseId}`,
-      tone: "info",
-      title: `Review ${plural(group.length, "submitted mark")}`,
+      tone: "warning",
+      title: `Final check: ${plural(group.length, "submitted mark")} to review`,
       detail: group[0].assignment.course.code,
       href: `/courses/${courseId}/manage/review`,
       action: "Review",

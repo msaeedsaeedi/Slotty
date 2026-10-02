@@ -367,25 +367,27 @@ enum EvaluationStatus {
 }
 
 model Evaluation {
-  id            String           @id @default(cuid())
-  assignmentId  String
-  studentId     String
-  bookingId     String?          @unique
-  evaluatorId   String
-  totalMarks    Float?
-  totalOverride Boolean          @default(false)
-  overrideNote  String?
-  feedback      String?
-  privateNotes  String?
+  id              String           @id @default(cuid())
+  assignmentId    String
+  studentId       String
+  bookingId       String?          @unique
+  evaluatorId     String
+  totalMarks      Float?
+  totalOverride   Boolean          @default(false)
+  overrideNote    String?
+  feedback        String?
+  privateNotes    String?
   /// Why staff marked a student who had no demo booking (unusual, so it's recorded).
   noBookingReason String?
-  status        EvaluationStatus @default(DRAFT)
-  submittedAt   DateTime?
-  reviewedById  String?
-  reviewedAt    DateTime?
-  reviewComment String?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  /// Why staff marked the demo before it started (also unusual, also recorded).
+  earlyMarkReason String?
+  status          EvaluationStatus @default(DRAFT)
+  submittedAt     DateTime?
+  reviewedById    String?
+  reviewedAt      DateTime?
+  reviewComment   String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   assignment Assignment        @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   student    User              @relation("EvaluationStudent", fields: [studentId], references: [id])

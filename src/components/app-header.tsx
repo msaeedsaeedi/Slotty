@@ -22,7 +22,7 @@ export async function AppHeader({ user }: { user: Actor }) {
               <Link href="/dashboard">Home</Link>
             </Button>
           )}
-          {!admin && roles.staff && (
+          {!admin && roles.hosts && (
             <Button asChild variant="ghost" size="sm">
               <Link href="/today">
                 <CalendarClock /> Demo day

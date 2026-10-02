@@ -17,7 +17,7 @@ describe("admins are only admins", () => {
     const { course } = await setupCourse(ta);
 
     await expect(createCourse(admin, { code: "X1", title: "X", term: "T", timezone: "Asia/Karachi", myRole: "TA" })).rejects.toThrow(/admin console/);
-    await expect(adminAssignStaff(admin, course.id, { email: admin.email, role: "TA" })).rejects.toThrow(/is an admin/);
+    await expect(adminAssignStaff(admin, course.id, { email: admin.email, role: "TA" })).rejects.toThrow(/Slotty admin/);
 
     const r = await importRoster(ta, course.id, `email,role\n${admin.email},ta\nnew@test.edu,student`);
     expect(r.enrolled).toBe(1);

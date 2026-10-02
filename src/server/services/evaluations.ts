@@ -148,7 +148,7 @@ export async function saveDraft(
   actor: Actor,
   assignmentId: string,
   studentId: string,
-  input: z.input<typeof evaluationInput> & { noBookingReason?: string },
+  input: z.input<typeof evaluationInput> & { noBookingReason?: string; earlyMarkReason?: string },
   now = new Date(),
 ) {
   const data = evaluationInput.parse(input);
@@ -171,6 +171,13 @@ export async function saveDraft(
       }
     } else if (booking && evaluation.bookingId !== booking.id) {
       await tx.evaluation.update({ where: { id: evaluation.id }, data: { bookingId: booking.id } });
+    }
+    // Marking before the demo has happened is unusual: it needs a reason, kept with the marks.
+    if (booking && booking.slot.startsAt > now && !evaluation.earlyMarkReason) {
+      const reason = input.earlyMarkReason?.trim();
+      if (!reason) throw new DomainError("This demo hasn't started yet. Say why you're marking it early — it's recorded.");
+      evaluation = await tx.evaluation.update({ where: { id: evaluation.id }, data: { earlyMarkReason: reason } });
+      await audit(tx, actor, { action: "evaluation.early", entityType: "Evaluation", entityId: evaluation.id, after: { studentId, reason, demoAt: booking.slot.startsAt } });
     }
 
     const criteria = await tx.rubricCriterion.findMany({ where: { assignmentId } });
@@ -259,6 +266,7 @@ export async function getMarkingSheet(
           feedback: e.feedback,
           privateNotes: e.privateNotes,
           noBookingReason: e.noBookingReason,
+          earlyMarkReason: e.earlyMarkReason,
           reviewComment: e.reviewComment,
           scores: e.scores.map((s) => ({ criterionId: s.criterionId, points: s.points, comment: s.comment })),
         },
@@ -277,7 +285,7 @@ export async function submitEvaluations(actor: Actor, evaluationIds: string[]) {
   return db.$transaction(async (tx) => {
     const results: { id: string; status: string }[] = [];
     for (const id of evaluationIds) {
-      const { evaluation } = await loadForStaff(tx, actor, id);
+      const { evaluation, role } = await loadForStaff(tx, actor, id);
       assertRule(canTransition(evaluation.status, "submit"));
       const scores = await tx.evaluationScore.findMany({ where: { evaluationId: id } });
       const check = canSubmit({
@@ -290,8 +298,9 @@ export async function submitEvaluations(actor: Actor, evaluationIds: string[]) {
         const student = await tx.user.findUniqueOrThrow({ where: { id: evaluation.studentId } });
         throw new DomainError(`${student.name}: ${check.reason}`);
       }
-      const hasInstructor = await courseHasInstructor(tx, evaluation.assignment.courseId);
-      const status = nextStatus(evaluation.status, "submit", { courseHasInstructor: hasInstructor });
+      // Instructors (and admins) review marks, so what they submit is final.
+      const needsReview = role !== "INSTRUCTOR" && (await courseHasInstructor(tx, evaluation.assignment.courseId));
+      const status = nextStatus(evaluation.status, "submit", { courseHasInstructor: needsReview });
       await tx.evaluation.update({
         where: { id },
         data: {
@@ -308,12 +317,54 @@ export async function submitEvaluations(actor: Actor, evaluationIds: string[]) {
   });
 }
 
-async function announceMarks(tx: Tx, evaluation: { studentId: string; assignmentId: string; assignment: { title: string; courseId: string } }) {
-  await notify(tx, [evaluation.studentId], {
-    type: "evaluation.finalized",
-    title: `Marks released: ${evaluation.assignment.title}`,
-    body: `Your demo for ${evaluation.assignment.title} has been marked. Open Slotty to see your result and feedback.`,
-    link: `/courses/${evaluation.assignment.courseId}/assignments/${evaluation.assignmentId}`,
+/**
+ * Tell the student their marks, with the full breakdown so the email stands on
+ * its own. Marks released again after a correction say so and show the change.
+ */
+async function announceMarks(tx: Tx, evaluation: { id: string; studentId: string; assignmentId: string; assignment: { title: string; courseId: string } }) {
+  const ev = await tx.evaluation.findUniqueOrThrow({
+    where: { id: evaluation.id },
+    include: { scores: { include: { criterion: true } }, assignment: { include: { course: { select: { code: true } } } } },
+  });
+  const unlock = await tx.auditLog.findFirst({ where: { action: "evaluation.unlock", entityId: ev.id }, orderBy: { createdAt: "desc" } });
+  const before = (unlock?.before as { totalMarks?: number | null } | null)?.totalMarks;
+  const { title, maxMarks, course } = ev.assignment;
+  const rubric = ev.scores
+    .sort((a, b) => a.criterion.order - b.criterion.order)
+    .map((s) => `• ${s.criterion.label}: ${s.points}/${s.criterion.maxPoints}${s.comment ? ` — ${s.comment}` : ""}`);
+  const summary = [
+    `Total: ${ev.totalMarks ?? "–"} / ${maxMarks}${unlock && before != null && before !== ev.totalMarks ? ` (was ${before})` : ""}`,
+    ...(rubric.length ? ["", ...rubric] : []),
+    ...(ev.feedback ? ["", `Feedback: ${ev.feedback}`] : []),
+  ].join("\n");
+  await notify(tx, [ev.studentId], {
+    type: unlock ? "evaluation.updated" : "evaluation.finalized",
+    title: unlock ? `Marks updated: ${title}` : `Marks released: ${title}`,
+    body: unlock
+      ? `Your marks for ${course.code} — ${title} were corrected.\n\n${summary}`
+      : `Your ${course.code} demo for ${title} has been marked.\n\n${summary}`,
+    link: `/courses/${ev.assignment.courseId}/assignments/${ev.assignmentId}`,
+  });
+}
+
+/**
+ * Remove draft marks entirely (e.g. so a marked booking can be moved). Submitted
+ * or final marks must be unlocked first. The old marks stay in the audit log.
+ */
+export async function clearMarks(actor: Actor, evaluationId: string, reason: string) {
+  if (!reason.trim()) throw new DomainError("Say why the marks are being cleared.");
+  return db.$transaction(async (tx) => {
+    const { evaluation } = await loadForStaff(tx, actor, evaluationId);
+    if (evaluation.status === "SUBMITTED" || evaluation.status === "FINALIZED") throw new DomainError("Unlock these marks before clearing them.", "CONFLICT");
+    const scores = await tx.evaluationScore.findMany({ where: { evaluationId } });
+    await tx.evaluation.delete({ where: { id: evaluationId } });
+    await audit(tx, actor, {
+      action: "evaluation.clear",
+      entityType: "Evaluation",
+      entityId: evaluationId,
+      before: { studentId: evaluation.studentId, totalMarks: evaluation.totalMarks, feedback: evaluation.feedback, scores: scores.map((s) => ({ criterionId: s.criterionId, points: s.points })) },
+      after: { reason: reason.trim() },
+    });
   });
 }
 
@@ -355,7 +406,13 @@ export async function unlockEvaluation(actor: Actor, evaluationId: string, reaso
     if (!reason.trim()) throw new DomainError("Give a reason for unlocking.");
     const status = nextStatus(evaluation.status, "unlock", { courseHasInstructor: true });
     await tx.evaluation.update({ where: { id: evaluationId }, data: { status, reviewComment: reason.trim() } });
-    await audit(tx, actor, { action: "evaluation.unlock", entityType: "Evaluation", entityId: evaluationId, before: "FINALIZED", after: { reason } });
+    await audit(tx, actor, {
+      action: "evaluation.unlock",
+      entityType: "Evaluation",
+      entityId: evaluationId,
+      before: { status: "FINALIZED", totalMarks: evaluation.totalMarks },
+      after: { reason },
+    });
   });
 }
 

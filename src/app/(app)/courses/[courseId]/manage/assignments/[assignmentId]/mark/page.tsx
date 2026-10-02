@@ -84,6 +84,7 @@ export default async function MarkPage({ params, searchParams }: PageProps<"/cou
       criteria={sheet.criteria.map((c) => ({ id: c.id, label: c.label, maxPoints: c.maxPoints }))}
       rows={rows}
       hasInstructor={sheet.hasInstructor}
+      finalOnSubmit={!sheet.hasInstructor || sheet.role === "INSTRUCTOR"}
       mode={mode}
       isToday={mode === "day" && shownDay === today}
       title={title}

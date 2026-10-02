@@ -47,6 +47,9 @@ test("TA runs the whole loop alone: roster → slots → booking → marking →
   await open(ta, `/courses/${courseId}/manage/assignments/${assignmentId}?tab=students`);
   await ta.getByRole("link", { name: "Mark", exact: true }).click();
   await expect(ta.getByText("Attendance can be recorded once the demo starts")).toBeVisible();
+  // The demo is days away, so marking now needs a reason (it's recorded).
+  await ta.getByLabel("Reason for marking before the demo").fill("Demoed early by arrangement");
+  await ta.getByRole("button", { name: "Start marking" }).click();
   await ta.getByLabel("Functionality").fill("5");
   await ta.getByLabel("Code quality").fill("3.5");
   await expect(ta.getByLabel("Total marks")).toHaveText("8.5");
@@ -79,7 +82,8 @@ test("with an instructor, TA submissions wait for review and the instructor fina
   const prof = await login(browser, "prof@e2e.test");
   const courseId = await createCourse(prof, "REV200", "Instructor");
   await importRoster(prof, "email,role\nta@e2e.test,ta\nsam@e2e.test,student");
-  const assignmentId = await createPublishedAssignment(prof, courseId, "Viva");
+  // The TA hosts by default and already has 09:00 slots in another e2e course.
+  const assignmentId = await createPublishedAssignment(prof, courseId, "Viva", { from: "11:00", to: "12:00" });
 
   const student = await login(browser, "sam@e2e.test");
   await open(student, `/courses/${courseId}/assignments/${assignmentId}`);
@@ -89,6 +93,8 @@ test("with an instructor, TA submissions wait for review and the instructor fina
   const ta = await login(browser, "ta@e2e.test");
   await open(ta, `/courses/${courseId}/manage/assignments/${assignmentId}?tab=students`);
   await ta.getByRole("link", { name: "Mark", exact: true }).click();
+  await ta.getByLabel("Reason for marking before the demo").fill("Demoed early by arrangement");
+  await ta.getByRole("button", { name: "Start marking" }).click();
   await ta.getByLabel("Functionality").fill("6");
   await ta.getByLabel("Code quality").fill("4");
   await expect(ta.getByText("Draft saved")).toBeVisible();

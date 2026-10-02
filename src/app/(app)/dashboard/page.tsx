@@ -13,6 +13,7 @@ import { fmt, fmtTimeRange } from "@/lib/time";
 import { requireUser } from "@/server/auth/session";
 import { bookingCalendarOptions } from "@/server/services/calendar";
 import { getDemoDay } from "@/server/services/demo-day";
+import { myRoleKinds } from "@/server/services/courses";
 import { getHome, type Home } from "@/server/services/home";
 
 export const metadata = { title: "Home" };
@@ -23,7 +24,8 @@ export default async function DashboardPage() {
   if (user.isAdmin) redirect("/admin");
   const now = new Date();
   const home = await getHome(user, now);
-  const demoDay = home.teaching ? await getDemoDay(user, { now }) : null;
+  const roles = home.teaching ? await myRoleKinds(user) : null;
+  const demoDay = roles?.hosts ? await getDemoDay(user, { now }) : null;
   const both = Boolean(home.teaching && home.studying);
   const firstName = user.name.split(" ")[0];
 

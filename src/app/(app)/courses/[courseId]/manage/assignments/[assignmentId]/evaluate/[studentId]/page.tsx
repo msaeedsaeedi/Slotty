@@ -1,19 +1,18 @@
 import Link from "next/link";
-import { AlertTriangle, PenLine } from "lucide-react";
-import { reviewAction, unlockAction } from "@/app/actions/evaluations";
+import { AlertTriangle } from "lucide-react";
+import { clearMarksAction, reviewAction, unlockAction } from "@/app/actions/evaluations";
 import { ActionForm, SubmitButton } from "@/components/action-form";
-import { markHref } from "@/components/demo-day";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { fmtRange } from "@/lib/time";
+import { fmt, fmtRange, fmtTimeRange, tzLabel } from "@/lib/time";
 import { requireUser } from "@/server/auth/session";
 import { load } from "@/server/page-utils";
 import { getStudentBookingControls } from "@/server/services/bookings";
-import { getStudentRecord } from "@/server/services/evaluations";
+import { getMarkingSheet, getStudentRecord } from "@/server/services/evaluations";
+import { MarkingSheet } from "../../mark/marking-sheet";
 import { BookingControls } from "./booking-controls";
 
 export const metadata = { title: "Student" };
@@ -34,7 +33,10 @@ export default async function StudentRecordPage({ params, searchParams }: PagePr
   const editable = !ev || ev.status === "DRAFT" || ev.status === "RETURNED";
   const canUnlock = ev?.status === "FINALIZED" && (rec.role === "INSTRUCTOR" || !rec.hasInstructor);
   const scoreBy = new Map(ev?.scores.map((s) => [s.criterionId, s]) ?? []);
-  const sheet = markHref({ id: assignmentId, courseId }, booking ? { bookingId: booking.id, back: `/courses/${courseId}/manage/assignments/${assignmentId}/evaluate/${studentId}` } : { studentId });
+  // Marks are entered right here, with the same editor as the marking sheet.
+  const inline = editable && !assignment.course.archived && booking?.status !== "NO_SHOW";
+  const sheet = inline ? await getMarkingSheet(user, assignmentId, { studentId }) : null;
+  const row = sheet?.rows[0];
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -85,6 +87,54 @@ export default async function StudentRecordPage({ params, searchParams }: PagePr
         </Alert>
       )}
 
+      {inline && sheet && row && (
+        <section aria-label="Marks" className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-semibold">Marks</h2>
+            {ev && ev.totalMarks !== null && (
+              <ActionForm action={clearMarksAction} compact className="flex items-center gap-2" confirmLabel="Clear marks" confirm={`Clear ${student.name}'s marks? They're kept in the audit log, and the booking can then be moved or cancelled.`}>
+                <input type="hidden" name="evaluationId" value={ev.id} />
+                <Input name="reason" required placeholder="Why clear them?" aria-label="Reason for clearing the marks" className="h-7 w-44" />
+                <SubmitButton size="sm" variant="ghost">
+                  Clear marks
+                </SubmitButton>
+              </ActionForm>
+            )}
+          </div>
+          <MarkingSheet
+            key={`${ev?.status}:${row.booking?.status}`}
+            embedded
+            assignment={{ id: assignmentId, title: assignment.title, maxMarks: assignment.maxMarks, courseId, courseCode: assignment.course.code }}
+            criteria={sheet.criteria.map((c) => ({ id: c.id, label: c.label, maxPoints: c.maxPoints }))}
+            rows={[
+              {
+                student: row.student,
+                booking: row.booking && {
+                  id: row.booking.id,
+                  status: row.booking.status,
+                  startsAt: row.booking.startsAt.toISOString(),
+                  endsAt: row.booking.endsAt.toISOString(),
+                  time: fmtTimeRange(row.booking.startsAt, row.booking.endsAt, tz),
+                  day: fmt(row.booking.startsAt, tz, "EEE d MMM"),
+                  venue: row.booking.venue,
+                  host: row.booking.host,
+                },
+                evaluation: row.evaluation,
+              },
+            ]}
+            hasInstructor={sheet.hasInstructor}
+            finalOnSubmit={!sheet.hasInstructor || sheet.role === "INSTRUCTOR"}
+            mode="student"
+            isToday={false}
+            title={student.name}
+            timezoneLabel={tzLabel(tz)}
+            now={new Date().toISOString()}
+            links={{ back, course: `/courses/${courseId}/manage`, assignment: `/courses/${courseId}/manage/assignments/${assignmentId}`, details: `/courses/${courseId}/manage/assignments/${assignmentId}/evaluate` }}
+          />
+        </section>
+      )}
+
+      {!inline && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-baseline justify-between gap-2">
@@ -129,13 +179,6 @@ export default async function StudentRecordPage({ params, searchParams }: PagePr
             </p>
           )}
 
-          {editable && !assignment.course.archived && booking?.status !== "NO_SHOW" && (
-            <Button asChild>
-              <Link href={sheet}>
-                <PenLine /> {ev ? "Edit marks" : booking ? "Mark" : "Mark without a booking"}
-              </Link>
-            </Button>
-          )}
           {ev?.status === "SUBMITTED" && rec.role === "INSTRUCTOR" && (
             <div className="flex flex-wrap gap-2 border-t pt-3">
               <ActionForm action={reviewAction} compact>
@@ -165,6 +208,8 @@ export default async function StudentRecordPage({ params, searchParams }: PagePr
           )}
         </CardContent>
       </Card>
+
+      )}
 
       {!assignment.course.archived && (
         <BookingControls

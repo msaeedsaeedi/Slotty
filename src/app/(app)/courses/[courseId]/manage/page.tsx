@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ChevronRight, Plus } from "lucide-react";
+import { BookingStageBadge } from "@/components/booking-stage";
 import { EmptyState } from "@/components/page-header";
+import { bookingStage } from "@/domain/booking-rules";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -8,14 +10,9 @@ import { requireUser } from "@/server/auth/session";
 import { load } from "@/server/page-utils";
 import { courseProgress, type AssignmentProgress } from "@/server/services/reports";
 
-const STATE = {
-  DRAFT: { label: "Not open yet", className: "bg-muted text-muted-foreground" },
-  PUBLISHED: { label: "Booking open", className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200" },
-  CLOSED: { label: "Booking closed", className: "bg-muted text-muted-foreground" },
-} as Record<string, { label: string; className: string }>;
-
 /** The single most useful thing to do next for an assignment, and how urgent it is. */
 function nextStep(a: AssignmentProgress): { text: string; tone: "danger" | "warning" | "info" | "done" } {
+  if (a.opensAt && a.opensAt > new Date() && a.status === "PUBLISHED") return { text: "Students are told when booking opens", tone: "info" };
   if (a.status === "DRAFT") return a.slots ? { text: `${a.slots} slots ready — open booking when you're set`, tone: "info" } : { text: "Add slots, then open booking", tone: "info" };
   if (a.needsAttendance) return { text: `${a.needsAttendance} past demo${a.needsAttendance === 1 ? " needs" : "s need"} attendance`, tone: "danger" };
   const toMark = a.completed - a.submitted - a.finalized;
@@ -37,6 +34,7 @@ export default async function ManageCoursePage({ params }: PageProps<"/courses/[
   const { courseId } = await params;
   const user = await requireUser();
   const progress = await load(courseProgress(user, courseId));
+  const now = new Date();
 
   return (
     <div className="space-y-4">
@@ -56,13 +54,13 @@ export default async function ManageCoursePage({ params }: PageProps<"/courses/[
             const step = nextStep(a);
             const bookedAny = a.booked + a.completed + a.noShow;
             const marked = a.submitted + a.finalized;
-            const state = STATE[a.status];
+
             return (
               <Link key={a.id} href={`/courses/${courseId}/manage/assignments/${a.id}`} className="group">
                 <Card className="h-full gap-3 p-4 transition-colors group-hover:border-primary/40">
                   <div className="flex items-start justify-between gap-2">
                     <p className="font-semibold">{a.title}</p>
-                    <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-xs font-medium", state.className)}>{state.label}</span>
+                    <BookingStageBadge stage={bookingStage(a.status, a.opensAt, now)} opensAt={a.opensAt} timezone={a.timezone} />
                   </div>
                   <p className={cn("flex items-center gap-1 text-sm font-medium", TONE[step.tone])}>
                     {step.text}

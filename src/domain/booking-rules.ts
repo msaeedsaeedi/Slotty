@@ -166,3 +166,16 @@ export function canMarkAttendance(args: {
   if (args.target !== "BOOKED" && args.now < args.slotStartsAt) return deny("You can record attendance once the demo has started.");
   return allow;
 }
+
+/**
+ * Where booking stands for students: not open yet (staff still preparing),
+ * opening at a set time, open, or closed. "Published" alone isn't enough: an
+ * assignment can be published with booking starting later.
+ */
+export type BookingStage = "preparing" | "scheduled" | "open" | "closed";
+
+export function bookingStage(status: "DRAFT" | "PUBLISHED" | "CLOSED", opensAt: Date | null | undefined, now: Date): BookingStage {
+  if (status === "DRAFT") return "preparing";
+  if (status === "CLOSED") return "closed";
+  return opensAt && opensAt > now ? "scheduled" : "open";
+}

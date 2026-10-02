@@ -2,7 +2,8 @@ import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { DomainError } from "@/domain/result";
 import { db, type Tx } from "@/server/db";
-import { courseInput } from "./courses";
+import { canTakeRole } from "@/domain/roles";
+import { courseInput, rolesElsewhere } from "./courses";
 import { signalOutbox } from "@/server/outbox-signal";
 import { issueInvite, requestPasswordReset } from "./accounts";
 import { assertAdmin, STAFF, type Actor } from "./access";
@@ -327,7 +328,11 @@ async function assignStaff(tx: Tx, actor: Actor, course: { id: string; code: str
   const courseId = course.id;
   let user = await tx.user.findUnique({ where: { email: data.email } });
   if (user?.status === "DISABLED") throw new DomainError("That account is disabled. Enable it first.");
-  if (user?.isAdmin) throw new DomainError(`${user.name} is an admin. Admins already manage every course and can't also be its staff.`);
+  if (user?.isAdmin) throw new DomainError(`${user.name} is a Slotty admin, so can't be course staff.`);
+  if (user) {
+    const fits = canTakeRole(data.role, await rolesElsewhere(tx, user.id, courseId));
+    if (!fits.ok) throw new DomainError(`${user.name} ${fits.reason}`);
+  }
   if (!user) {
     if (!data.name) throw new DomainError("This email has no account yet. Add their name so we can invite them.");
     user = await tx.user.create({ data: { email: data.email, name: data.name, status: "INVITED" } });
@@ -348,6 +353,35 @@ async function assignStaff(tx: Tx, actor: Actor, course: { id: string; code: str
     after: { userId: user.id, email: user.email, role: data.role },
   });
   return { invited: user.status === "INVITED", name: user.name };
+}
+
+const inviteInput = z.object({
+  email: z.string().trim().toLowerCase().email("Enter a valid email address."),
+  name: z.string().trim().min(1, "Enter their name.").max(120),
+  isAdmin: z.boolean().default(false),
+});
+
+/**
+ * Bring someone onto Slotty without putting them in a course, e.g. an
+ * instructor who will set up their own course, or another admin.
+ */
+export async function adminInviteUser(actor: Actor, input: z.input<typeof inviteInput>) {
+  assertAdmin(actor);
+  const data = inviteInput.parse(input);
+  return db.$transaction(async (tx) => {
+    const existing = await tx.user.findUnique({ where: { email: data.email } });
+    if (existing) throw new DomainError(`${existing.name} already has an account (${existing.status.toLowerCase()}).`, "CONFLICT");
+    const user = await tx.user.create({ data: { email: data.email, name: data.name, isAdmin: data.isAdmin, status: "INVITED" } });
+    await issueInvite(
+      tx,
+      user,
+      data.isAdmin
+        ? `${actor.name} invited you to help run Slotty as an administrator.`
+        : `${actor.name} invited you to Slotty, where course demos are booked and marked. Once you're in, you can create your course or be added to one.`,
+    );
+    await audit(tx, actor, { action: "user.invite", entityType: "User", entityId: user.id, after: { email: data.email, isAdmin: data.isAdmin } });
+    return user;
+  });
 }
 
 const newCourseInput = courseInput.extend({ staff: staffInput });

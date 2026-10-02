@@ -34,6 +34,7 @@ export interface SheetRow {
     feedback: string | null;
     privateNotes: string | null;
     noBookingReason: string | null;
+    earlyMarkReason: string | null;
     reviewComment: string | null;
     scores: { criterionId: string; points: number; comment: string | null }[];
   } | null;
@@ -50,6 +51,10 @@ interface Props {
   criteria: Criterion[];
   rows: SheetRow[];
   hasInstructor: boolean;
+  /** What this user submits is final (an instructor, or a course without one). */
+  finalOnSubmit: boolean;
+  /** One student inside their student page: no day sheet, progress or next/back. */
+  embedded?: boolean;
   mode: "day" | "todo" | "student";
   isToday: boolean;
   title: string;
@@ -74,6 +79,7 @@ interface Draft {
   privateNotes: string;
   total: string;
   noBookingReason: string;
+  earlyMarkReason: string;
 }
 
 type SaveState = { kind: "idle" } | { kind: "dirty" } | { kind: "saving" } | { kind: "saved"; at: string } | { kind: "error"; message: string };
@@ -83,6 +89,8 @@ interface RowState {
   evaluationId: string | null;
   evalStatus: NonNullable<SheetRow["evaluation"]>["status"] | null;
   totalMarks: number | null;
+  /** A reason is on record for marking this demo before it started. */
+  earlyOk: boolean;
   save: SaveState;
 }
 
@@ -97,6 +105,7 @@ function draftOf(r: SheetRow): Draft {
     privateNotes: e?.privateNotes ?? "",
     total: e?.totalMarks?.toString() ?? "",
     noBookingReason: "",
+    earlyMarkReason: "",
   };
 }
 
@@ -118,7 +127,7 @@ function problems(d: Draft, criteria: Criterion[], maxMarks: number): Record<str
   return out;
 }
 
-export function MarkingSheet({ assignment, criteria, rows, hasInstructor, mode, isToday, title, timezoneLabel, initialBookingId, now: serverNow, links }: Props) {
+export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, embedded, mode, isToday, title, timezoneLabel, initialBookingId, now: serverNow, links }: Props) {
   const online = useOnline();
   const [now, setNow] = useState(() => new Date(serverNow).getTime());
   const [drafts, setDrafts] = useState<Draft[]>(() => rows.map(draftOf));
@@ -128,6 +137,7 @@ export function MarkingSheet({ assignment, criteria, rows, hasInstructor, mode, 
       evaluationId: r.evaluation?.id ?? null,
       evalStatus: r.evaluation?.status ?? null,
       totalMarks: r.evaluation?.totalMarks ?? null,
+      earlyOk: Boolean(r.evaluation?.earlyMarkReason),
       save: { kind: "idle" },
     })),
   );
@@ -195,6 +205,7 @@ export function MarkingSheet({ assignment, criteria, rows, hasInstructor, mode, 
             feedback: d.feedback,
             privateNotes: d.privateNotes,
             noBookingReason: d.noBookingReason || undefined,
+            earlyMarkReason: d.earlyMarkReason || undefined,
           }).catch(() => ({ ok: false as const, error: "Couldn't reach Slotty. Your marks are kept here — they'll save when you're back online." }));
           if (r.ok) {
             patchState(i, {
@@ -202,6 +213,7 @@ export function MarkingSheet({ assignment, criteria, rows, hasInstructor, mode, 
               evalStatus: r.value.status,
               totalMarks: r.value.totalMarks,
               bookingStatus: r.value.bookingStatus ?? stateRef.current[i].bookingStatus,
+              earlyOk: stateRef.current[i].earlyOk || Boolean(d.earlyMarkReason.trim()),
               // More typing may already be waiting to save.
               save: timers.current.has(i) ? { kind: "dirty" } : { kind: "saved", at: r.value.savedAt },
             });
@@ -340,15 +352,17 @@ export function MarkingSheet({ assignment, criteria, rows, hasInstructor, mode, 
   const bad = problems(d, criteria, assignment.maxMarks);
   const phase = phaseOf(row);
   const needsReason = !row.booking && !st.evaluationId;
+  const needsEarlyReason = Boolean(row.booking) && phase === "future" && !st.earlyOk && !locked(current);
   const noShow = st.bookingStatus === "NO_SHOW";
-  const readOnly = locked(current) || noShow || needsReason;
+  const readOnly = locked(current) || noShow || needsReason || needsEarlyReason;
+  const canSubmitThis = embedded && st.evaluationId && (st.evalStatus === "DRAFT" || st.evalStatus === "RETURNED") && complete(current) && st.save.kind !== "error";
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
-      <TopBar links={links} assignment={assignment} title={title} />
+    <div className={cn("space-y-4", !embedded && "mx-auto max-w-5xl")}>
+      {!embedded && <TopBar links={links} assignment={assignment} title={title} />}
 
       {/* Progress: one segment per demo, coloured by state; the live one fills as time passes. */}
-      <div className="space-y-1.5">
+      <div className={cn("space-y-1.5", embedded && "hidden")}>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="font-medium text-foreground tabular-nums">
             {current + 1} / {rows.length}
@@ -392,7 +406,7 @@ export function MarkingSheet({ assignment, criteria, rows, hasInstructor, mode, 
       {/* The student being marked */}
       <section aria-label={`Marking ${row.student.name}`} className="space-y-4 rounded-xl border bg-card p-4">
         <div className="flex flex-wrap items-start gap-3">
-          <div className="min-w-0 flex-1">
+          <div className={cn("min-w-0 flex-1", embedded && "hidden")}>
             <h2 className="text-xl font-semibold leading-tight">{row.student.name}</h2>
             <p className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
               <span>{row.student.email}</span>
@@ -409,6 +423,19 @@ export function MarkingSheet({ assignment, criteria, rows, hasInstructor, mode, 
           </div>
           <SaveIndicator state={st.save} online={online} />
         </div>
+
+        {needsEarlyReason && (
+          <ReasonPrompt
+            title="This demo hasn't happened yet."
+            body="Marking before the demo is unusual, so your reason is kept with the marks and in the audit log."
+            placeholder="Why? e.g. demo taken early by arrangement"
+            label="Reason for marking before the demo"
+            value={d.earlyMarkReason}
+            onChange={(v) => setDrafts((ds) => ds.map((x, j) => (j === current ? { ...x, earlyMarkReason: v } : x)))}
+            onStart={() => void save(current)}
+          />
+        )}
+        {row.evaluation?.earlyMarkReason && <p className="text-xs text-muted-foreground">Marked before the demo: “{row.evaluation.earlyMarkReason}”</p>}
 
         {row.booking ? (
           <Attendance
@@ -430,19 +457,13 @@ export function MarkingSheet({ assignment, criteria, rows, hasInstructor, mode, 
               ) : (
                 <>
                   <p>Marking without a booking is unusual, so it&apos;s recorded with your reason in the audit log.</p>
-                  <div className="flex flex-wrap gap-2">
-                    <Input
-                      value={d.noBookingReason}
-                      onChange={(e) => setDrafts((ds) => ds.map((x, j) => (j === current ? { ...x, noBookingReason: e.target.value } : x)))}
-                      placeholder="Why? e.g. demo taken in class on 3 Oct"
-                      aria-label="Reason for marking without a booking"
-                      className="min-w-0 flex-1 bg-background"
-                      maxLength={300}
-                    />
-                    <Button type="button" size="sm" disabled={d.noBookingReason.trim().length < 3} onClick={() => void save(current)}>
-                      Start marking
-                    </Button>
-                  </div>
+                  <ReasonInput
+                    placeholder="Why? e.g. demo taken in class on 3 Oct"
+                    label="Reason for marking without a booking"
+                    value={d.noBookingReason}
+                    onChange={(v) => setDrafts((ds) => ds.map((x, j) => (j === current ? { ...x, noBookingReason: v } : x)))}
+                    onStart={() => void save(current)}
+                  />
                 </>
               )}
             </div>
@@ -451,10 +472,10 @@ export function MarkingSheet({ assignment, criteria, rows, hasInstructor, mode, 
 
         {row.evaluation?.reviewComment && st.evalStatus === "RETURNED" && (
           <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-            <span className="font-medium">Returned by the instructor:</span> {row.evaluation.reviewComment}
+            <span className="font-medium">Reopened for changes:</span> {row.evaluation.reviewComment}
           </p>
         )}
-        {locked(current) && (
+        {locked(current) && !embedded && (
           <p className="text-sm text-muted-foreground">
             {st.evalStatus === "FINALIZED" ? "Marks are final and released to the student." : "Submitted — waiting for the instructor's review."} Open{" "}
             <Link className="underline" href={`${links.details}/${row.student.id}`}>
@@ -489,7 +510,23 @@ export function MarkingSheet({ assignment, criteria, rows, hasInstructor, mode, 
           </div>
         </fieldset>
 
-        <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+        {embedded && !locked(current) && (
+          <ActionForm action={submitManyAction} compact className="flex flex-wrap items-center gap-3 border-t pt-3 text-sm">
+            <input type="hidden" name="evaluationId" value={st.evaluationId ?? ""} />
+            <span className="flex-1 text-muted-foreground">
+              {!canSubmitThis
+                ? "Marks save as you type. Score every row to submit."
+                : finalOnSubmit
+                  ? "The student sees the marks as soon as you release them."
+                  : "The instructor reviews the marks before the student sees them."}
+            </span>
+            <SubmitButton disabled={!canSubmitThis || unsaved}>
+              {finalOnSubmit ? (st.evalStatus === "RETURNED" ? "Release corrected marks" : "Release marks") : "Submit for review"}
+            </SubmitButton>
+          </ActionForm>
+        )}
+
+        <div className={cn("flex flex-wrap items-center gap-2 border-t pt-3", embedded && "hidden")}>
           <Button type="button" variant="outline" onClick={() => go(current - 1)} disabled={current === 0}>
             <ChevronLeft /> Back
           </Button>
@@ -511,7 +548,7 @@ export function MarkingSheet({ assignment, criteria, rows, hasInstructor, mode, 
       </section>
 
       {/* The whole day at a glance, spreadsheet-style. */}
-      <section aria-label="All demos" className="space-y-2">
+      <section aria-label="All demos" className={cn("space-y-2", embedded && "hidden")}>
         <div className="overflow-x-auto rounded-xl border bg-card">
           <table className="w-full text-xs">
             <thead className="border-b bg-muted/50 text-left text-muted-foreground">
@@ -557,7 +594,7 @@ export function MarkingSheet({ assignment, criteria, rows, hasInstructor, mode, 
 
         {/* Submitting is a separate step, once the demos are over. */}
         {stillRunning ? (
-          <p className="text-xs text-muted-foreground">Marks save as you type. Submit them {hasInstructor ? "for review" : ""} once today&apos;s demos are over.</p>
+          <p className="text-xs text-muted-foreground">Marks save as you type. {finalOnSubmit ? "Release" : "Submit"} them once today&apos;s demos are over.</p>
         ) : ready.length > 0 ? (
           <ActionForm action={submitManyAction} compact className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3 text-sm">
             {ready.map((id) => (
@@ -565,12 +602,37 @@ export function MarkingSheet({ assignment, criteria, rows, hasInstructor, mode, 
             ))}
             <span className="flex-1">
               {ready.length} complete mark{ready.length === 1 ? "" : "s"} ready.{" "}
-              {hasInstructor ? "The instructor reviews them before students see them." : "Students see them as soon as you submit."}
+              {finalOnSubmit ? "Students see them as soon as you release them." : "The instructor reviews them before students see them."}
             </span>
-            <SubmitButton disabled={unsaved}>{hasInstructor ? `Submit ${ready.length} for review` : `Release ${ready.length} mark${ready.length === 1 ? "" : "s"}`}</SubmitButton>
+            <SubmitButton disabled={unsaved}>{finalOnSubmit ? `Release ${ready.length} mark${ready.length === 1 ? "" : "s"}` : `Submit ${ready.length} for review`}</SubmitButton>
           </ActionForm>
         ) : null}
       </section>
+    </div>
+  );
+}
+
+function ReasonInput({ value, onChange, onStart, placeholder, label }: { value: string; onChange: (v: string) => void; onStart: () => void; placeholder: string; label: string }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label={label} className="min-w-0 flex-1 bg-background" maxLength={300} />
+      <Button type="button" size="sm" disabled={value.trim().length < 3} onClick={onStart}>
+        Start marking
+      </Button>
+    </div>
+  );
+}
+
+function ReasonPrompt(props: { title: string; body: string } & React.ComponentProps<typeof ReasonInput>) {
+  const { title, body, ...input } = props;
+  return (
+    <div className="flex gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+      <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+      <div className="min-w-0 flex-1 space-y-2">
+        <p className="font-medium">{title}</p>
+        <p>{body}</p>
+        <ReasonInput {...input} />
+      </div>
     </div>
   );
 }
@@ -744,7 +806,7 @@ function Attendance({
     if (r.ok) onChange(r.value);
     else toast.error(r.error);
   };
-  if (!started) return <p className="text-sm text-muted-foreground">Attendance can be recorded once the demo starts. You can already note marks.</p>;
+  if (!started) return <p className="text-sm text-muted-foreground">Attendance can be recorded once the demo starts.</p>;
   return (
     <div className="flex flex-wrap items-center gap-2 text-sm">
       <span className="text-muted-foreground">Attendance</span>

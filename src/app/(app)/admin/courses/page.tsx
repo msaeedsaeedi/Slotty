@@ -49,7 +49,7 @@ export default async function AdminCoursesPage({ searchParams }: PageProps<"/adm
                 <option value="TA">TA</option>
               </select>
             </div>
-            <p className="text-xs text-muted-foreground">They get an invite (or a notification if they already use Slotty) and add the class list themselves. You don&apos;t join the course.</p>
+            <p className="text-xs text-muted-foreground">They get an invite, or a notification if they already use Slotty.</p>
           </fieldset>
           <SubmitButton>Create course</SubmitButton>
         </ActionForm>

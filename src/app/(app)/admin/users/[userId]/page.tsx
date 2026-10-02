@@ -77,9 +77,6 @@ export default async function AdminUserPage({ params }: PageProps<"/admin/users/
                 </SubmitButton>
               </ActionForm>
             )}
-            {!self && !user.isAdmin && user.enrollments.length > 0 && (
-              <p className="self-center text-xs text-muted-foreground">Can&apos;t be made admin while they&apos;re in a course.</p>
-            )}
             {!self && (user.isAdmin || user.enrollments.length === 0) && (
               <ActionForm
                 action={setAdminAction}
@@ -130,7 +127,7 @@ export default async function AdminUserPage({ params }: PageProps<"/admin/users/
         <CardContent>
           {user.enrollments.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Not in any course.{user.isAdmin ? " Admins manage courses without joining them." : " Course staff add people from a course's People page."}
+              Not in any course.
             </p>
           ) : (
             <ul className="divide-y text-sm">

@@ -2,6 +2,10 @@ import Link from "next/link";
 
 /** Plain-language verbs for audit actions; unknown actions fall back to the raw code. */
 const VERBS: Record<string, string> = {
+  "user.invite": "invited",
+  "evaluation.early": "marked a demo early for",
+  "evaluation.clear": "cleared marks for",
+  "evaluation.no_booking": "marked without a booking",
   "user.disable": "disabled",
   "user.enable": "re-enabled",
   "user.grant_admin": "made admin",

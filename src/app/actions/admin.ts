@@ -5,6 +5,7 @@ import { bool, run, str, type ActionState } from "@/server/action-utils";
 import {
   adminAssignStaff,
   adminCreateCourse,
+  adminInviteUser,
   adminRetryEmails,
   adminSendAccessEmail,
   adminSetAdmin,
@@ -22,6 +23,13 @@ export async function setDisabledAction(_: ActionState, fd: FormData): Promise<A
     });
     if (!disabled) return "User re-enabled.";
     return `User disabled${released ? `; ${released} upcoming booking${released === 1 ? "" : "s"} released` : ""}.`;
+  });
+}
+
+export async function inviteUserAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run(async () => {
+    const u = await adminInviteUser(await requireUser(), { email: str(fd, "email"), name: str(fd, "name"), isAdmin: bool(fd, "isAdmin") });
+    return `Invite sent to ${u.email}.`;
   });
 }
 

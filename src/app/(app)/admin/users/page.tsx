@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, UserPlus } from "lucide-react";
+import { inviteUserAction } from "@/app/actions/admin";
+import { ActionForm, SubmitButton } from "@/components/action-form";
 import { EmptyState } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { Card } from "@/components/ui/card";
@@ -30,6 +32,20 @@ export default async function AdminUsersPage({ searchParams }: PageProps<"/admin
 
   return (
     <div className="space-y-4">
+      <details className="rounded-xl border bg-card p-4" open={sp.invite === "1" || undefined}>
+        <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+          <UserPlus className="size-4" /> Invite someone
+        </summary>
+        <ActionForm action={inviteUserAction} resetOnSuccess className="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-center">
+          <Input name="email" type="email" required placeholder="Email" aria-label="Email" />
+          <Input name="name" required placeholder="Name" aria-label="Name" maxLength={120} />
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="isAdmin" /> Admin
+          </label>
+          <SubmitButton size="sm">Send invite</SubmitButton>
+        </ActionForm>
+      </details>
+
       <form className="flex max-w-md gap-2" role="search">
         <Input name="q" type="search" placeholder="Search name or email" aria-label="Search users" defaultValue={q} />
         {filter !== "all" && <input type="hidden" name="filter" value={filter} />}

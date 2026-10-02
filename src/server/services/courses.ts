@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { CourseRole } from "@/generated/prisma/client";
 import { DomainError } from "@/domain/result";
 import { parseRoster, type RosterError, type RosterRow } from "@/domain/csv-roster";
+import { canTakeRole } from "@/domain/roles";
 import { fmtRange, isValidTimezone } from "@/lib/time";
 import { db, type Tx } from "@/server/db";
 import { assertCourseRole, assertStaff, courseRoleOf, type Actor } from "./access";
@@ -21,6 +22,8 @@ export async function createCourse(actor: Actor, input: z.input<typeof courseInp
   const data = courseInput.parse(input);
   const myRole = input.myRole === "INSTRUCTOR" ? "INSTRUCTOR" : "TA";
   return db.$transaction(async (tx) => {
+    const fits = canTakeRole(myRole, await rolesElsewhere(tx, actor.id, ""));
+    if (!fits.ok) throw new DomainError(`You can't be ${myRole === "TA" ? "a TA" : "the instructor"} here: you ${fits.reason.replace(/^is /, "are ")}`);
     const course = await tx.course.create({ data: { ...data, createdById: actor.id } });
     await tx.enrollment.create({ data: { courseId: course.id, userId: actor.id, role: myRole } });
     await audit(tx, actor, { action: "course.create", entityType: "Course", entityId: course.id, after: data });
@@ -60,7 +63,11 @@ export async function listMyCourses(actor: Actor) {
 export async function myRoleKinds(actor: Actor) {
   const roles = await db.enrollment.findMany({ where: { userId: actor.id, course: { archived: false } }, select: { role: true }, distinct: ["role"] });
   const hasBookings = roles.some((r) => r.role === "STUDENT") || (await db.booking.count({ where: { studentId: actor.id }, take: 1 })) > 0;
-  return { staff: roles.some((r) => r.role !== "STUDENT"), student: hasBookings };
+  // Instructors usually review rather than take demos: "Demo day" is for TAs and anyone hosting slots.
+  const hosts =
+    roles.some((r) => r.role === "TA") ||
+    (roles.some((r) => r.role === "INSTRUCTOR") && (await db.slot.count({ where: { taId: actor.id, status: { not: "CANCELLED" }, endsAt: { gt: new Date() } }, take: 1 })) > 0);
+  return { staff: roles.some((r) => r.role !== "STUDENT"), student: hasBookings, hosts };
 }
 
 /** Course + the actor's role in it; throws NOT_FOUND when the actor has no access. */
@@ -96,23 +103,43 @@ export interface RosterPreviewRow extends RosterRow {
   currentRole?: CourseRole;
 }
 
-/** Admins manage the platform and are never course members, so their emails are skipped. */
-async function withoutAdmins(tx: Tx, parsed: { rows: RosterRow[]; errors: RosterError[] }) {
-  const admins = await tx.user.findMany({ where: { isAdmin: true, email: { in: parsed.rows.map((r) => r.email) } }, select: { email: true } });
-  const adminEmails = new Set(admins.map((a) => a.email));
-  if (adminEmails.size === 0) return parsed;
-  return {
-    rows: parsed.rows.filter((r) => !adminEmails.has(r.email)),
-    errors: [
-      ...parsed.errors,
-      ...parsed.rows.filter((r) => adminEmails.has(r.email)).map((r) => ({ line: r.line, message: `${r.email} is a Slotty admin. Admins manage every course already and can't be added to one.` })),
-    ].sort((a, b) => a.line - b.line),
-  };
+/** A person's roles in their other courses, for `canTakeRole`. */
+export async function rolesElsewhere(tx: Tx, userId: string, courseId: string) {
+  const rows = await tx.enrollment.findMany({ where: { userId, courseId: { not: courseId } }, select: { role: true, course: { select: { code: true } } } });
+  return rows.map((r) => ({ role: r.role, course: r.course.code }));
+}
+
+/**
+ * Rows that can't be added become skipped lines: admins (never course members)
+ * and people whose role would clash with their role in another course.
+ */
+async function screenRows(tx: Tx, courseId: string, parsed: { rows: RosterRow[]; errors: RosterError[] }) {
+  const users = await tx.user.findMany({
+    where: { email: { in: parsed.rows.map((r) => r.email) } },
+    select: { email: true, isAdmin: true, enrollments: { where: { courseId: { not: courseId } }, select: { role: true, course: { select: { code: true } } } } },
+  });
+  const byEmail = new Map(users.map((u) => [u.email, u]));
+  const rows: RosterRow[] = [];
+  const errors = [...parsed.errors];
+  for (const r of parsed.rows) {
+    const u = byEmail.get(r.email);
+    if (u?.isAdmin) {
+      errors.push({ line: r.line, message: `${r.email} is a Slotty admin, so can't be added to a course.` });
+      continue;
+    }
+    const fits = canTakeRole(r.role, (u?.enrollments ?? []).map((e) => ({ role: e.role, course: e.course.code })));
+    if (!fits.ok) {
+      errors.push({ line: r.line, message: `${r.email} ${fits.reason}` });
+      continue;
+    }
+    rows.push(r);
+  }
+  return { rows, errors: errors.sort((a, b) => a.line - b.line) };
 }
 
 export async function previewRoster(actor: Actor, courseId: string, csv: string) {
   await assertStaff(db, actor, courseId);
-  const { rows, errors } = await withoutAdmins(db, parseRoster(csv));
+  const { rows, errors } = await screenRows(db, courseId, parseRoster(csv));
   const users = await db.user.findMany({
     where: { email: { in: rows.map((r) => r.email) } },
     include: { enrollments: { where: { courseId } } },
@@ -159,7 +186,7 @@ export async function addMember(actor: Actor, courseId: string, input: z.input<t
 async function importRows(actor: Actor, courseId: string, parsed: { rows: RosterRow[]; errors: RosterError[] }) {
   return db.$transaction(
     async (tx) => {
-      const { rows, errors } = await withoutAdmins(tx, parsed);
+      const { rows, errors } = await screenRows(tx, courseId, parsed);
       if (rows.length === 0) throw new DomainError(errors[0]?.message ?? "The list has no valid rows.");
       const myRole = await assertStaff(tx, actor, courseId, { write: true });
       if (myRole !== "INSTRUCTOR" && rows.some((r) => r.role === "INSTRUCTOR")) {

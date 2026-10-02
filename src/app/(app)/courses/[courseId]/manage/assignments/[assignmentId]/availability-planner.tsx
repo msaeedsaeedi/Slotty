@@ -16,7 +16,9 @@ interface Props {
   timezone: string;
   timezoneLabel: string;
   clock: Clock;
-  policy: { windowStart: string; windowEnd: string; slotDurationMin: number; bufferMin: number };
+  policy: { windowStart: string; windowEnd: string; slotDurationMin: number; bufferMin: number; capacityPerSlot: number };
+  /** How many places are needed: students without a demo vs free places in upcoming slots. */
+  coverage: { students: number; booked: number; freePlaces: number };
   /** Every day of the demo window, in the course timezone. */
   days: { key: string; weekday: string; date: string; past: boolean }[];
   /** Who the user may add slots for (just themselves, for a TA). */
@@ -32,8 +34,9 @@ interface Props {
  * Add slots without keeping anything in your head: pick the days, the hours,
  * and see exactly what will be created (and what's already taken) before saving.
  */
-export function AvailabilityPlanner({ courseId, assignmentId, timezone, timezoneLabel, clock, policy, days, hosts, me, venues, busy, open }: Props) {
-  const [host, setHost] = useState(hosts.some((h) => h.id === me) ? me : hosts[0]?.id ?? "");
+export function AvailabilityPlanner({ courseId, assignmentId, timezone, timezoneLabel, clock, policy, coverage, days, hosts, me, venues, busy, open }: Props) {
+  // TAs default to themselves; instructors to the first TA (they usually review rather than host).
+  const [host, setHost] = useState(hosts.length === 1 ? hosts[0].id : (hosts[0]?.id ?? me));
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [from, setFrom] = useState("09:00");
   const [to, setTo] = useState("12:00");
@@ -66,6 +69,10 @@ export function AvailabilityPlanner({ courseId, assignmentId, timezone, timezone
       });
   }, [days, picked, from, to, timezone, policy, busyFor, timeError]);
   const total = preview.reduce((n, p) => n + p.fresh.length, 0);
+  const unbooked = Math.max(0, coverage.students - coverage.booked);
+  const needed = Math.max(0, unbooked - coverage.freePlaces);
+  const neededAfter = Math.max(0, needed - total * policy.capacityPerSlot);
+  const perSlot = policy.capacityPerSlot;
 
   const toggle = (key: string) =>
     setPicked((prev) => {
@@ -83,6 +90,22 @@ export function AvailabilityPlanner({ courseId, assignmentId, timezone, timezone
       {[...picked].map((d) => (
         <input key={d} type="hidden" name="date" value={d} />
       ))}
+
+      <div className={cn("rounded-lg border p-3 text-sm", needed > 0 ? "border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950" : "bg-muted/40")} aria-live="polite">
+        <p className="font-medium">
+          {needed > 0
+            ? `${Math.ceil(needed / perSlot)} more slot${Math.ceil(needed / perSlot) === 1 ? "" : "s"} needed`
+            : unbooked === 0
+              ? "Everyone has a demo booked"
+              : "Enough free places for everyone"}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {unbooked} of {coverage.students} student{coverage.students === 1 ? "" : "s"} still to book · {coverage.freePlaces} free place{coverage.freePlaces === 1 ? "" : "s"} in upcoming slots
+        </p>
+        {total > 0 && needed > 0 && (
+          <p className="mt-1 text-xs font-medium">{neededAfter > 0 ? `After adding these, ${Math.ceil(neededAfter / perSlot)} more still needed.` : "These cover everyone still to book."}</p>
+        )}
+      </div>
 
       {hosts.length > 1 ? (
         <div className="space-y-1.5">

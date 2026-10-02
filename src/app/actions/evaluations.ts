@@ -3,7 +3,7 @@
 import { requireUser } from "@/server/auth/session";
 import { attempt, run, str, type ActionState } from "@/server/action-utils";
 import { markAttendance } from "@/server/services/bookings";
-import { reviewEvaluation, saveDraft, submitEvaluations, unlockEvaluation, finalizeMany } from "@/server/services/evaluations";
+import { clearMarks, reviewEvaluation, saveDraft, submitEvaluations, unlockEvaluation, finalizeMany } from "@/server/services/evaluations";
 
 export async function submitManyAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return run(async () => {
@@ -49,6 +49,7 @@ export interface DraftInput {
   feedback?: string;
   privateNotes?: string;
   noBookingReason?: string;
+  earlyMarkReason?: string;
 }
 
 /** Autosave from the marking sheet (no page refresh). */
@@ -65,5 +66,12 @@ export async function sheetAttendanceAction(bookingId: string, status: "BOOKED" 
   return attempt(async () => {
     await markAttendance(await requireUser(), bookingId, status);
     return status;
+  });
+}
+
+export async function clearMarksAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run(async () => {
+    await clearMarks(await requireUser(), str(fd, "evaluationId"), str(fd, "reason"));
+    return "Marks cleared. The booking can be changed now.";
   });
 }
