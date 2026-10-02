@@ -15,6 +15,12 @@ enum UserStatus {
   DISABLED
 }
 
+/// How clock times are shown to this user (12-hour "2:30 PM" or 24-hour "14:30").
+enum TimeFormat {
+  H12
+  H24
+}
+
 model User {
   id             String     @id @default(cuid())
   email          String     @unique
@@ -27,6 +33,7 @@ model User {
   /// Email preferences (in-app notifications are always kept).
   emailReminders Boolean    @default(true)
   emailAgenda    Boolean    @default(true)
+  timeFormat     TimeFormat @default(H12)
   /// Last time the worker sent this staff member their daily agenda.
   agendaSentAt   DateTime?
   createdAt      DateTime   @default(now())
@@ -98,7 +105,7 @@ model Course {
   code        String
   title       String
   term        String
-  timezone    String   @default("UTC")
+  timezone    String   @default("Asia/Karachi")
   archived    Boolean  @default(false)
   createdById String
   createdAt   DateTime @default(now())
@@ -370,6 +377,8 @@ model Evaluation {
   overrideNote  String?
   feedback      String?
   privateNotes  String?
+  /// Why staff marked a student who had no demo booking (unusual, so it's recorded).
+  noBookingReason String?
   status        EvaluationStatus @default(DRAFT)
   submittedAt   DateTime?
   reviewedById  String?

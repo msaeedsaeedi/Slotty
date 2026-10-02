@@ -86,8 +86,8 @@ Each job records what it did, so running it twice sends nothing twice.
 
 ## Calendar
 
-- `/bookings/<id>/calendar`: one booking as an `.ics` file (the student's own, signed in).
-- `/calendar/<token>`: personal feed of the user's own demos plus demos they host, including the last 30 days. The token is the credential. Replacing it on the account page breaks old links.
+- *Add to calendar* on a booking: Google Calendar and Outlook links that open with the demo filled in, or `/bookings/<id>/calendar` as an `.ics` file (the student's own, signed in). Each adds a copy; when the booking changes the student is emailed and can add the new time.
+- Automatic sync is *coming soon* (see the roadmap). `/calendar/<token>` (a personal feed) still answers for links created earlier, but the account page no longer offers it.
 
 ## PWA
 
@@ -104,9 +104,10 @@ Limits: push arrives even when the app is closed, but the device needs a connect
 ## Scheduling rules (`src/domain/slots.ts`, `services/slots.ts`)
 
 - An availability block is split into `slotDurationMin` slots with `bufferMin` gaps and clipped to the demo window. A leftover shorter than one slot is dropped.
-- A host can't have overlapping non-cancelled slots in **any** assignment.
-- The host must be a TA or instructor of the course, and the venue must belong to the course.
-- Slots added before publish are `DRAFT`. Slots added after publish go live straight away.
+- Slots can be added for several days at once (same hours each day).
+- A host can't have overlapping non-cancelled slots in **any** assignment. Times that clash are **skipped** and reported; if every time clashes, nothing is added.
+- The host must be a TA or instructor of the course, and the venue must belong to the course. **TAs add slots only for themselves**; instructors (and admins) can add them for any staff member, and only they can hand slots to another host.
+- Slots added before booking opens are hidden (`DRAFT`). Slots added while booking is open can be booked straight away.
 - Only slots with no bookings at all can be deleted. Cancelling a slot releases its bookings and notifies the students.
 - A venue can't be deleted while active slots use it.
 
@@ -117,7 +118,7 @@ Limits: push arrives even when the app is closed, but the device needs a connect
 - The demo window can't be changed so that it no longer covers booked slots. Unbooked slots left outside the window are reported so staff can delete them.
 - Slot length, break and capacity only apply to slots added later.
 - Changing the freeze window, the number of changes allowed, or `allowStudentCancel` notifies students with a booking (`assignment.rules_changed`).
-- Publishing needs at least one non-cancelled slot. Reopening a closed assignment uses the same action. If `bookingOpensAt` is in the future, students are told the opening time (`assignment.opens_soon`), and the worker sends "Book your demo" when it arrives.
+- Opening booking (`publishAssignment`, *Open booking* in the UI) needs at least one non-cancelled slot, because every student is notified. Reopening a closed assignment uses the same action. If `bookingOpensAt` is in the future, students are told the opening time (`assignment.opens_soon`), and the worker sends "Book your demo" when it arrives.
 - Closing stops bookings and changes. Existing bookings and marking carry on.
 - An assignment with any booking can't be deleted. Close it instead.
 
@@ -130,7 +131,9 @@ DRAFT ──submit──► SUBMITTED ──finalize──► FINALIZED ──un
 ```
 
 - `submit` with no instructor in the course → `FINALIZED` directly.
-- Only `DRAFT` and `RETURNED` can be edited. Every rubric row must be scored, and the total must be between 0 and `maxMarks`.
+- Only `DRAFT` and `RETURNED` can be edited. Every rubric row must be scored to submit, and the total must be between 0 and `maxMarks`.
+- The marking sheet autosaves drafts (`saveDraft`); the evaluation is created on the first save, never just by viewing. A score for a booked student whose demo has started records them as present. A no-show can't be marked until the no-show is undone.
+- Marking a student **with no booking** needs a reason. It's stored on the evaluation (`noBookingReason`), flagged in lists, and audited as `evaluation.no_booking`.
 - A total override needs a note. Attendance locks once the evaluation is `SUBMITTED` or `FINALIZED`.
 - Only instructors review. Unlocking needs a reason (in a course without an instructor, the TA can unlock).
 - Students see `FINALIZED` results only, never `privateNotes`.
@@ -138,7 +141,7 @@ DRAFT ──submit──► SUBMITTED ──finalize──► FINALIZED ──un
 ## Access (`services/access.ts`)
 
 - Every service takes an `Actor` and checks the role itself: `assertCourseRole`, `assertStaff`, `assertAdmin`.
-- Admins count as instructors in any course (for moderation).
+- **Admins are only admins.** They count as instructors in any course (to manage it), but are never enrolled: roster imports skip admin emails, *Assign staff* and *Add someone* refuse them, they can't create a course for themselves (they create it from the console and name its instructor or TA), and a course member can't be made admin.
 - Only instructors can add or remove instructors. Nobody can remove themselves or demote themselves through a CSV import.
 - **Archived courses are read-only.** Mutations pass `{ write: true }` to `assertCourseRole` / `assertStaff` / `assertAssignmentRole`, or call `assertCourseWritable`. Only restoring the course is allowed.
 - Removing a student cancels their upcoming bookings and notifies them. Removing staff is refused while they host upcoming slots.
@@ -146,7 +149,7 @@ DRAFT ──submit──► SUBMITTED ──finalize──► FINALIZED ──un
 
 ## Accounts
 
-The account page (`/account`) covers name, password (checks the current one and signs out other devices), email preferences (`emailReminders`, `emailAgenda`), the calendar link, and "sign out other devices". Confirmation, change and marks emails can't be turned off.
+The account page (`/account`) shows only what applies to the user's roles: name, clock (`timeFormat`: 12 or 24 hour), password (checks the current one and signs out other devices), "sign out other devices"; reminder emails (`emailReminders`) for students, the morning agenda (`emailAgenda`) for staff, and device notifications for both. Admins see none of the demo settings. Confirmation, change and marks emails can't be turned off.
 
 | Item | Value |
 |---|---|
@@ -188,7 +191,7 @@ Each notification creates an in-app entry and an email (outbox). Both are writte
 
 ## Time
 
-Times are stored in UTC. They're shown and entered in the **course timezone** (`lib/time.ts`: `fmt`, `fmtRange`, `fromLocalInput`).
+Times are stored in UTC. They're shown and entered in the **course timezone** (`lib/time.ts`: `fmt`, `fmtTimeRange`, `fromLocalInput`). Courses can use Pakistan time only for now (`SUPPORTED_TIMEZONES`). Each user picks a 12- or 24-hour clock; `fmt` reads it for the current request (`server/clock.ts`), while data formats (CSV, form values) stay 24-hour via `fmtData`. Emails sent by the worker use the 12-hour clock.
 
 ## Audit
 

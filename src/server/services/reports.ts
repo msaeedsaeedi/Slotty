@@ -1,5 +1,5 @@
 import Papa from "papaparse";
-import { fmt } from "@/lib/time";
+import { fmtData } from "@/lib/time";
 import { db } from "@/server/db";
 import { assertAssignmentRole, assertCourseRole, STAFF, type Actor } from "./access";
 import { listAssignmentRoster } from "./evaluations";
@@ -18,12 +18,14 @@ export interface AssignmentProgress {
   evaluated: number;
   submitted: number;
   finalized: number;
+  /** Slots that aren't cancelled. */
+  slots: number;
 }
 
 /** Per-assignment counts for the course overview. */
 export async function courseProgress(actor: Actor, courseId: string, now = new Date()): Promise<AssignmentProgress[]> {
   await assertCourseRole(db, actor, courseId, STAFF);
-  const [students, assignments, bookingGroups, evalGroups, overdueGroups] = await Promise.all([
+  const [students, assignments, bookingGroups, evalGroups, overdueGroups, slotGroups] = await Promise.all([
     db.enrollment.count({ where: { courseId, role: "STUDENT" } }),
     db.assignment.findMany({ where: { courseId }, orderBy: { createdAt: "asc" } }),
     db.booking.groupBy({ by: ["assignmentId", "status"], where: { assignment: { courseId } }, _count: true }),
@@ -33,6 +35,7 @@ export async function courseProgress(actor: Actor, courseId: string, now = new D
       where: { status: "BOOKED", assignment: { courseId }, slot: { endsAt: { lt: now } } },
       _count: true,
     }),
+    db.slot.groupBy({ by: ["assignmentId"], where: { assignment: { courseId }, status: { not: "CANCELLED" } }, _count: true }),
   ]);
   const count = (groups: { assignmentId: string; status: string; _count: number }[], id: string, status: string) =>
     groups.find((g) => g.assignmentId === id && g.status === status)?._count ?? 0;
@@ -57,6 +60,7 @@ export async function courseProgress(actor: Actor, courseId: string, now = new D
       evaluated: drafts + submitted + finalized,
       submitted,
       finalized,
+      slots: slotGroups.find((g) => g.assignmentId === a.id)?._count ?? 0,
     };
   });
 }
@@ -77,8 +81,8 @@ export async function exportAssignmentCsv(actor: Actor, assignmentId: string): P
       student_name: student.name,
       student_email: student.email,
       section: section ?? "",
-      slot_start: booking ? fmt(booking.slot.startsAt, tz, "yyyy-MM-dd HH:mm") : "",
-      slot_end: booking ? fmt(booking.slot.endsAt, tz, "yyyy-MM-dd HH:mm") : "",
+      slot_start: booking ? fmtData(booking.slot.startsAt, tz, "yyyy-MM-dd HH:mm") : "",
+      slot_end: booking ? fmtData(booking.slot.endsAt, tz, "yyyy-MM-dd HH:mm") : "",
       timezone: tz,
       ta: booking?.slot.ta.name ?? "",
       venue: booking?.slot.venue?.name ?? "",

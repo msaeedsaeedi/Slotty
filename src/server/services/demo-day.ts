@@ -1,12 +1,26 @@
 import { TZDate } from "@date-fns/tz";
 import { addDays, format } from "date-fns";
 import { buildTimeline } from "@/domain/demo-day";
-import { fmt } from "@/lib/time";
+import { fmt, fmtData } from "@/lib/time";
 import { db } from "@/server/db";
 import { assertStaff, STAFF, type Actor } from "./access";
 import { ACTIVE_BOOKING } from "./slots";
 
 export type DemoDayScope = "mine" | "everyone";
+
+/**
+ * A day on the calendar strip, by its most pressing state: demos that ended
+ * without attendance, then marks still to finish, then demos still to come,
+ * then everything done.
+ */
+export type DayState = "overdue" | "marking" | "scheduled" | "done" | "none";
+
+export function dayState(c: { overdue: number; toMark: number; upcoming: number; total: number }): DayState {
+  if (c.overdue) return "overdue";
+  if (c.toMark) return "marking";
+  if (c.upcoming) return "scheduled";
+  return c.total ? "done" : "none";
+}
 
 /**
  * Courses the actor runs demos in (enrolled as TA or instructor). Admin rights
@@ -21,7 +35,7 @@ export async function listStaffCourses(actor: Actor) {
   return rows.map((r) => ({ ...r.course, role: r.role }));
 }
 
-const dayKey = (d: Date, tz: string) => fmt(d, tz, "yyyy-MM-dd");
+const dayKey = (d: Date, tz: string) => fmtData(d, tz, "yyyy-MM-dd");
 
 function dayBounds(day: string, tz: string) {
   const [y, m, d] = day.split("-").map(Number);
@@ -56,8 +70,13 @@ export async function getDemoDay(
   const today = dayKey(now, timezone);
   const day = opts.day && /^\d{4}-\d{2}-\d{2}$/.test(opts.day) ? opts.day : today;
   const { start, end, startTz } = dayBounds(day, timezone);
-  const week = dayBounds(today, timezone);
-  const weekEnd = new Date(addDays(week.startTz, 7).getTime());
+  // The strip shows seven days counted from today, paged a week at a time so
+  // the selected day is always on it.
+  const todayStart = dayBounds(today, timezone);
+  const weekOffset = Math.floor(Math.round((startTz.getTime() - todayStart.startTz.getTime()) / 86_400_000) / 7) * 7;
+  const weekStartTz = addDays(todayStart.startTz, weekOffset);
+  const week = { start: new Date(weekStartTz.getTime()), startTz: weekStartTz };
+  const weekEnd = new Date(addDays(weekStartTz, 7).getTime());
 
   const host = scope === "mine" ? { taId: actor.id } : {};
   const inCourses = { assignment: { courseId: { in: courseIds } } };
@@ -68,7 +87,7 @@ export async function getDemoDay(
       include: {
         venue: true,
         ta: { select: { id: true, name: true } },
-        assignment: { select: { id: true, title: true, courseId: true, course: { select: { code: true, timezone: true } } } },
+        assignment: { select: { id: true, title: true, courseId: true, course: { select: { code: true, title: true, timezone: true } } } },
         bookings: {
           where: { status: { in: [...ACTIVE_BOOKING] } },
           include: {
@@ -82,7 +101,7 @@ export async function getDemoDay(
     }),
     db.booking.findMany({
       where: { ...inCourses, status: { in: [...ACTIVE_BOOKING] }, slot: { ...host, status: "PUBLISHED", startsAt: { gte: week.start, lt: weekEnd } } },
-      select: { slot: { select: { startsAt: true } } },
+      select: { status: true, slot: { select: { startsAt: true, endsAt: true } }, evaluation: { select: { status: true } } },
     }),
     db.booking.findFirst({
       where: { ...inCourses, status: "BOOKED", slot: { ...host, status: "PUBLISHED", startsAt: { gte: end } } },
@@ -116,12 +135,22 @@ export async function getDemoDay(
 
   const timeline = buildTimeline(slots, now, { gaps: scope === "mine" });
 
-  const perDay = new Map<string, number>();
-  for (const b of weekBookings) perDay.set(dayKey(b.slot.startsAt, timezone), (perDay.get(dayKey(b.slot.startsAt, timezone)) ?? 0) + 1);
+  const perDay = new Map<string, { total: number; overdue: number; toMark: number; upcoming: number }>();
+  for (const b of weekBookings) {
+    const key = dayKey(b.slot.startsAt, timezone);
+    const c = perDay.get(key) ?? { total: 0, overdue: 0, toMark: 0, upcoming: 0 };
+    c.total++;
+    if (b.status === "BOOKED") {
+      if (b.slot.endsAt < now) c.overdue++;
+      else c.upcoming++;
+    } else if (b.status === "COMPLETED" && (!b.evaluation || b.evaluation.status === "DRAFT" || b.evaluation.status === "RETURNED")) c.toMark++;
+    perDay.set(key, c);
+  }
   const weekDays = Array.from({ length: 7 }, (_, i) => {
     const d = addDays(week.startTz, i);
     const key = format(d, "yyyy-MM-dd");
-    return { day: key, label: i === 0 ? "Today" : format(d, "EEE"), date: format(d, "d MMM"), count: perDay.get(key) ?? 0 };
+    const c = perDay.get(key) ?? { total: 0, overdue: 0, toMark: 0, upcoming: 0 };
+    return { day: key, label: key === today ? "Today" : format(d, "EEE"), date: format(d, "d MMM"), count: c.total, state: dayState(c) };
   });
 
   const attendance = new Map<string, { day: string; label: string; count: number }>();
@@ -143,6 +172,8 @@ export async function getDemoDay(
     dayLabel: format(startTz, "EEEE d MMMM"),
     prevDay: format(addDays(startTz, -1), "yyyy-MM-dd"),
     nextDay: format(addDays(startTz, 1), "yyyy-MM-dd"),
+    prevWeek: format(addDays(startTz, -7), "yyyy-MM-dd"),
+    nextWeek: format(addDays(startTz, 7), "yyyy-MM-dd"),
     scope,
     slots,
     timeline,

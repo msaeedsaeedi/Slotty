@@ -1,16 +1,15 @@
 import Link from "next/link";
-import { CalendarClock, ChevronLeft, ChevronRight, ExternalLink, MapPin } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink, MapPin, PenLine } from "lucide-react";
 import { markAttendanceAction } from "@/app/actions/bookings";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Countdown, LiveRefresh } from "@/components/live";
 import { EmptyState } from "@/components/page-header";
-import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { Phase } from "@/domain/demo-day";
-import { fmt } from "@/lib/time";
+import { fmt, fmtTime, fmtTimeRange } from "@/lib/time";
 import { cn } from "@/lib/utils";
-import type { DemoDay, DemoDaySlot } from "@/server/services/demo-day";
+import type { DayState, DemoDay, DemoDaySlot } from "@/server/services/demo-day";
 
 type Booking = DemoDaySlot["bookings"][number];
 
@@ -23,12 +22,62 @@ interface ViewProps {
   scopeToggle?: boolean;
 }
 
+// ─── Status: one vocabulary (and one colour each) for rows, pills and the calendar ─
+
+type Tone = "danger" | "warning" | "info" | "live" | "success" | "muted";
+
+const TONE: Record<Tone, { pill: string; stripe: string; dot: string }> = {
+  danger: { pill: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200", stripe: "before:bg-red-500", dot: "bg-red-500" },
+  warning: { pill: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200", stripe: "before:bg-amber-500", dot: "bg-amber-500" },
+  info: { pill: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200", stripe: "before:bg-blue-500", dot: "bg-blue-500" },
+  live: { pill: "bg-primary text-primary-foreground", stripe: "before:bg-primary", dot: "bg-primary" },
+  success: { pill: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200", stripe: "before:bg-emerald-500", dot: "bg-emerald-500" },
+  muted: { pill: "bg-muted text-muted-foreground", stripe: "before:bg-muted-foreground/40", dot: "bg-muted-foreground/40" },
+};
+
+/** Where one booked demo stands, in words and colour. */
+function demoStatus(b: Booking, phase: Phase): { label: string; tone: Tone } {
+  if (b.status === "NO_SHOW") return { label: "No-show", tone: "muted" };
+  if (b.status === "BOOKED") {
+    if (phase === "done") return { label: "Attendance missing", tone: "danger" };
+    if (phase === "now") return { label: "In progress", tone: "live" };
+    return { label: "Booked", tone: "info" };
+  }
+  const ev = b.evaluation?.status;
+  if (ev === "FINALIZED") return { label: "Marked", tone: "success" };
+  if (ev === "SUBMITTED") return { label: "Marks submitted", tone: "success" };
+  if (ev === "RETURNED") return { label: "Marks returned", tone: "warning" };
+  return { label: ev === "DRAFT" ? "Marks in draft" : "To mark", tone: "warning" };
+}
+
+const DAY_STATE: Record<Exclude<DayState, "none">, { label: string; tone: Tone }> = {
+  overdue: { label: "Attendance missing", tone: "danger" },
+  marking: { label: "Marks to finish", tone: "warning" },
+  scheduled: { label: "Demos booked", tone: "info" },
+  done: { label: "All done", tone: "success" },
+};
+
+function Pill({ tone, children }: { tone: Tone; children: React.ReactNode }) {
+  return <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap", TONE[tone].pill)}>{children}</span>;
+}
+
+/** The focused marking page for one assignment, opened on a given student. */
+export function markHref(a: { id: string; courseId: string }, opts: { day?: string; bookingId?: string; studentId?: string; everyone?: boolean; back?: string } = {}) {
+  const q = new URLSearchParams();
+  if (opts.day) q.set("day", opts.day);
+  if (opts.bookingId) q.set("booking", opts.bookingId);
+  if (opts.studentId) q.set("student", opts.studentId);
+  if (opts.everyone) q.set("scope", "everyone");
+  if (opts.back) q.set("back", opts.back);
+  return `/courses/${a.courseId}/manage/assignments/${a.id}/mark?${q}`;
+}
+
 /**
- * The TA's demo day: who's on now and next, the day as a timeline, the week at a
- * glance, and loose ends to tidy up. Today's view refreshes itself.
+ * The TA's demo day: who's on now and next, the day's slots grouped by
+ * assignment, a colour-coded week, and loose ends. Today's view refreshes itself.
  */
 export function DemoDayView({ data, now, basePath, scopeToggle }: ViewProps) {
-  const { timeline, timezone, day, today } = data;
+  const { timeline, day, today } = data;
   const isToday = day === today;
   const href = (next: { day?: string; scope?: string }) => {
     const q = new URLSearchParams();
@@ -40,11 +89,20 @@ export function DemoDayView({ data, now, basePath, scopeToggle }: ViewProps) {
     return qs ? `${basePath}?${qs}` : basePath;
   };
   const dayHref = (d: string) => href({ day: d });
-  const returnTo = href({});
-  const multiCourse = data.courses.length > 1;
-  const everyone = data.scope === "everyone";
-  const ctx: RowContext = { now, timezone, returnTo, multiCourse, everyone };
+  const ctx: RowContext = { now, day, back: href({}), everyone: data.scope === "everyone" };
   const { stats } = timeline;
+
+  // Consecutive slots of one assignment share a header (course › assignment, venue).
+  const groups: { assignment: DemoDaySlot["assignment"]; items: typeof timeline.items }[] = [];
+  for (const item of timeline.items) {
+    const last = groups.at(-1);
+    if (item.kind === "gap") {
+      last?.items.push(item);
+      continue;
+    }
+    if (last && last.assignment.id === item.slot.assignment.id) last.items.push(item);
+    else groups.push({ assignment: item.slot.assignment, items: [item] });
+  }
 
   return (
     <div className="space-y-5">
@@ -56,7 +114,7 @@ export function DemoDayView({ data, now, basePath, scopeToggle }: ViewProps) {
             <ChevronLeft />
           </Link>
         </Button>
-        <h2 className="text-lg font-semibold">{isToday ? `Today · ${data.dayLabel}` : data.dayLabel}</h2>
+        <h2 className="min-w-0 text-lg font-semibold">{isToday ? `Today · ${data.dayLabel}` : data.dayLabel}</h2>
         <Button asChild variant="outline" size="icon-sm" aria-label="Next day">
           <Link href={href({ day: data.nextDay })}>
             <ChevronRight />
@@ -64,7 +122,7 @@ export function DemoDayView({ data, now, basePath, scopeToggle }: ViewProps) {
         </Button>
         {!isToday && (
           <Button asChild variant="ghost" size="sm">
-            <Link href={href({ day: today })}>Back to today</Link>
+            <Link href={href({ day: today })}>Today</Link>
           </Button>
         )}
         {scopeToggle && (
@@ -74,7 +132,7 @@ export function DemoDayView({ data, now, basePath, scopeToggle }: ViewProps) {
                 key={s}
                 href={href({ scope: s })}
                 aria-current={data.scope === s ? "true" : undefined}
-                className={cn("rounded-md px-3 py-1.5", data.scope === s ? "bg-muted font-medium" : "text-muted-foreground hover:text-foreground")}
+                className={cn("rounded-md px-3 py-1", data.scope === s ? "bg-muted font-medium" : "text-muted-foreground hover:text-foreground")}
               >
                 {s === "mine" ? "My demos" : "Everyone"}
               </Link>
@@ -83,56 +141,40 @@ export function DemoDayView({ data, now, basePath, scopeToggle }: ViewProps) {
         )}
       </div>
 
-      <WeekStrip week={data.week} selected={day} href={dayHref} />
+      <WeekStrip data={data} href={dayHref} />
 
-      <p className="text-sm text-muted-foreground">
-        {stats.demos === 0
-          ? "No demos booked"
-          : [
-              `${stats.demos} demo${stats.demos === 1 ? "" : "s"}`,
-              stats.completed && `${stats.completed} completed`,
-              stats.noShow && `${stats.noShow} no-show`,
-              stats.needsAttendance && `${stats.needsAttendance} need${stats.needsAttendance === 1 ? "s" : ""} attendance`,
-              stats.remaining && `${stats.remaining} to go`,
-            ]
-              .filter(Boolean)
-              .join(" · ")}{" "}
-        · times in {timezone}
-      </p>
+      {stats.demos > 0 && (
+        <p className="flex flex-wrap gap-1.5 text-sm" aria-label="Day summary">
+          <Pill tone="muted">{stats.demos} booked</Pill>
+          {stats.completed > 0 && <Pill tone="success">{stats.completed} attended</Pill>}
+          {stats.noShow > 0 && <Pill tone="muted">{stats.noShow} no-show</Pill>}
+          {stats.needsAttendance > 0 && <Pill tone="danger">{stats.needsAttendance} attendance missing</Pill>}
+          {stats.remaining > 0 && <Pill tone="info">{stats.remaining} to go</Pill>}
+        </p>
+      )}
 
       {isToday && <Focus data={data} ctx={ctx} dayHref={dayHref} />}
 
-      {timeline.items.length === 0 ? (
+      {groups.length === 0 ? (
         !isToday && (
           <EmptyState title="No demos on this day">
             <NextDemoHint data={data} dayHref={dayHref} />
           </EmptyState>
         )
       ) : (
-        <section aria-label="Timeline">
-          <Card className="gap-0 divide-y p-0">
-            {timeline.items.map((item) =>
-              item.kind === "gap" ? (
-                <div key={`gap-${item.from.getTime()}`} className="flex items-center gap-3 bg-muted/30 px-3 py-2 text-xs text-muted-foreground sm:px-4">
-                  <span className="w-14 shrink-0 tabular-nums sm:w-24">
-                    {fmt(item.from, timezone, "HH:mm")}–{fmt(item.to, timezone, "HH:mm")}
-                  </span>
-                  <span>Free · {duration(item.to.getTime() - item.from.getTime())}</span>
-                </div>
-              ) : (
-                <SlotRow key={item.slot.id} slot={item.slot} phase={item.phase} ctx={ctx} />
-              ),
-            )}
-          </Card>
+        <div className="space-y-4">
+          {groups.map((g, i) => (
+            <AssignmentGroup key={`${g.assignment.id}-${i}`} assignment={g.assignment} items={g.items} ctx={ctx} />
+          ))}
           {timeline.hiddenEmptyPast > 0 && (
-            <p className="mt-2 text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {timeline.hiddenEmptyPast} earlier slot{timeline.hiddenEmptyPast === 1 ? "" : "s"} had no bookings.
             </p>
           )}
-        </section>
+        </div>
       )}
 
-      <LooseEnds data={data} dayHref={dayHref} returnTo={returnTo} />
+      <LooseEnds data={data} dayHref={dayHref} back={ctx.back} />
     </div>
   );
 }
@@ -142,27 +184,21 @@ export function DemoDaySummary({ data, now }: { data: DemoDay; now: Date }) {
   const { stats } = data.timeline;
   const iso = now.toISOString();
   const who = (slot: DemoDaySlot) => `${slot.bookings.map((b) => b.student.name).join(", ")} (${slot.assignment.course.code})`;
-  const loose = [
-    data.toFinish.attendance.length > 0 && `${data.toFinish.attendance.reduce((n, a) => n + a.count, 0)} need attendance`,
-    data.toFinish.marking.length > 0 &&
-      `${data.toFinish.marking.length}${data.toFinish.marking.length === 100 ? "+" : ""} mark${data.toFinish.marking.length === 1 ? "" : "s"} to finish`,
-    data.toFinish.openRequests.length > 0 && `${data.toFinish.openRequests.reduce((n, r) => n + r.count, 0)} student requests`,
-  ].filter(Boolean);
+  const attendance = data.toFinish.attendance.reduce((n, a) => n + a.count, 0);
 
   const { focus } = data.timeline;
   let headline: React.ReactNode;
   if (focus.kind === "now") {
     headline = (
       <>
-        <span className="font-semibold">Now:</span> {focus.slots.map(who).join(" · ")} —{" "}
-        <Countdown to={focus.slots[0].endsAt.toISOString()} now={iso} mode="left" />
+        <span className="font-semibold">Now:</span> {focus.slots.map(who).join(" · ")} — <Countdown to={focus.slots[0].endsAt.toISOString()} now={iso} mode="left" />
       </>
     );
   } else if (focus.kind === "next") {
     const s = focus.slots[0];
     headline = (
       <>
-        <span className="font-semibold">Next:</span> {fmt(s.startsAt, s.assignment.course.timezone, "HH:mm")} {focus.slots.map(who).join(" · ")} —{" "}
+        <span className="font-semibold">Next:</span> {fmtTime(s.startsAt, s.assignment.course.timezone)} {focus.slots.map(who).join(" · ")} —{" "}
         <Countdown to={s.startsAt.toISOString()} now={iso} mode="until" />
       </>
     );
@@ -177,10 +213,10 @@ export function DemoDaySummary({ data, now }: { data: DemoDay; now: Date }) {
       <CalendarClock className="hidden size-8 shrink-0 text-primary sm:block" aria-hidden />
       <div className="min-w-0 flex-1 space-y-1 text-sm">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Today{stats.demos > 0 && ` · ${stats.demos} demo${stats.demos === 1 ? "" : "s"}, ${stats.remaining} to go`}
+          Demo day{stats.demos > 0 && ` · ${stats.demos} today, ${stats.remaining} to go`}
         </p>
         <p className="text-base">{headline}</p>
-        {loose.length > 0 && <p className="text-amber-700 dark:text-amber-400">To finish: {loose.join(" · ")}</p>}
+        {attendance > 0 && <p className="text-red-700 dark:text-red-400">{attendance} past demo{attendance === 1 ? " has" : "s have"} no attendance recorded</p>}
       </div>
       <Button asChild className="shrink-0">
         <Link href="/today">Open demo day</Link>
@@ -193,24 +229,15 @@ export function DemoDaySummary({ data, now }: { data: DemoDay; now: Date }) {
 
 interface RowContext {
   now: Date;
-  timezone: string;
-  returnTo: string;
-  multiCourse: boolean;
+  day: string;
+  /** Link back to this view (from the marking page). */
+  back: string;
   everyone: boolean;
 }
 
 function Focus({ data, ctx, dayHref }: { data: DemoDay; ctx: RowContext; dayHref: (day: string) => string }) {
   const { focus, stats, idleNow } = data.timeline;
   const iso = ctx.now.toISOString();
-
-  // What follows the demo(s) in focus, for the side list.
-  const focused = new Set(focus.kind === "now" || focus.kind === "next" ? focus.slots.map((s) => s.id) : []);
-  const queue = data.timeline.items.flatMap((i) =>
-    i.kind === "slot" && (i.phase === "next" || i.phase === "later") && i.slot.bookings.length > 0 && !focused.has(i.slot.id) ? [i.slot] : [],
-  );
-  const upcoming = queue.slice(0, 4);
-  const remainingAfter = queue.length - upcoming.length;
-
   if (focus.kind === "empty") {
     return (
       <EmptyState title="No demos today">
@@ -222,147 +249,157 @@ function Focus({ data, ctx, dayHref }: { data: DemoDay; ctx: RowContext; dayHref
     return (
       <div role="status" className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
         <p className="font-medium">That&apos;s all the demos for today.</p>
-        {stats.needsAttendance > 0 && <p>{stats.needsAttendance} still need attendance recorded — see the timeline below.</p>}
+        {stats.needsAttendance > 0 && <p>{stats.needsAttendance} still need attendance recorded — they&apos;re marked in red below.</p>}
       </div>
     );
   }
-
   return (
-    <div className="grid gap-3 lg:grid-cols-[3fr_2fr]">
-      {focus.kind === "now"
-        ? focus.slots.map((slot) => (
-            <FocusCard key={slot.id} slot={slot} ctx={ctx} label="Now" tone="now">
-              <Countdown to={slot.endsAt.toISOString()} now={iso} mode="left" />
-            </FocusCard>
-          ))
-        : focus.slots.map((slot) => (
-            <FocusCard key={slot.id} slot={slot} ctx={ctx} label={idleNow ? "Free now · up next" : "Up next"} tone="next">
+    <div className="grid gap-3 md:grid-cols-2">
+      {focus.slots.map((slot) => (
+        <FocusCard key={slot.id} slot={slot} ctx={ctx} live={focus.kind === "now"} label={focus.kind === "now" ? "Now" : idleNow ? "Free now · up next" : "Up next"}>
+          {focus.kind === "now" ? (
+            <Countdown to={slot.endsAt.toISOString()} now={iso} mode="left" />
+          ) : (
+            <>
               starts <Countdown to={slot.startsAt.toISOString()} now={iso} mode="until" />
-            </FocusCard>
-          ))}
-      {upcoming.length > 0 && (
-        <Card className="gap-2 p-4 text-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Coming up</p>
-          <ul className="space-y-1.5">
-            {upcoming.map((slot) => (
-              <li key={slot.id} className="flex gap-2">
-                <span className="w-12 shrink-0 font-semibold tabular-nums">{fmt(slot.startsAt, slot.assignment.course.timezone, "HH:mm")}</span>
-                <span className="min-w-0">
-                  {slot.bookings.map((b) => b.student.name).join(", ")}
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {ctx.multiCourse && `${slot.assignment.course.code} · `}
-                    {slot.assignment.title}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
-          {remainingAfter > 0 && <p className="text-xs text-muted-foreground">+{remainingAfter} more later today</p>}
-        </Card>
-      )}
+            </>
+          )}
+        </FocusCard>
+      ))}
     </div>
   );
 }
 
-function FocusCard({ slot, ctx, label, tone, children }: { slot: DemoDaySlot; ctx: RowContext; label: string; tone: "now" | "next"; children: React.ReactNode }) {
+function FocusCard({ slot, ctx, label, live, children }: { slot: DemoDaySlot; ctx: RowContext; label: string; live: boolean; children: React.ReactNode }) {
   const tz = slot.assignment.course.timezone;
   const venue = slot.venue;
   return (
-    <Card
-      className={cn("gap-3 p-4", tone === "now" ? "border-primary ring-1 ring-primary/30" : "border-blue-300 dark:border-blue-900")}
-      aria-label={`${label}: ${slot.bookings.map((b) => b.student.name).join(", ")}`}
-    >
+    <Card className={cn("gap-3 p-4", live ? "border-primary ring-1 ring-primary/30" : "border-blue-300 dark:border-blue-900")}>
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", tone === "now" ? "bg-primary text-primary-foreground" : "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200")}>
-          {label}
-        </span>
-        <span className="font-medium tabular-nums">
-          {fmt(slot.startsAt, tz, "HH:mm")}–{fmt(slot.endsAt, tz, "HH:mm")}
-        </span>
+        <Pill tone={live ? "live" : "info"}>{label}</Pill>
+        <span className="font-medium tabular-nums">{fmtTimeRange(slot.startsAt, slot.endsAt, tz)}</span>
         <span className="text-muted-foreground">{children}</span>
       </div>
-      <p className="text-sm text-muted-foreground">
-        {slot.assignment.course.code} · {slot.assignment.title}
-        {ctx.everyone && ` · host ${slot.ta.name}`}
-      </p>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-        <span className="flex items-center gap-1.5">
-          <MapPin className="size-4 text-muted-foreground" aria-hidden />
-          {venue ? [venue.name, venue.location].filter(Boolean).join(", ") : "No venue"}
+      {slot.bookings.map((b) => (
+        <div key={b.id} className="flex flex-wrap items-center gap-2">
+          <p className="mr-auto text-lg font-semibold leading-tight">{b.student.name}</p>
+          <BookingActions booking={b} slot={slot} ctx={ctx} started={live} prominent />
+        </div>
+      ))}
+      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+        <AssignmentLinks assignment={slot.assignment} />
+        <span className="flex items-center gap-1">
+          <MapPin className="size-3.5" aria-hidden />
+          {venue ? venue.name : "No venue"}
         </span>
         {venue?.meetingUrl && (
-          <Button asChild size="sm" variant="outline">
-            <a href={venue.meetingUrl} target="_blank" rel="noreferrer">
-              <ExternalLink /> Join meeting
-            </a>
-          </Button>
+          <a href={venue.meetingUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary underline">
+            <ExternalLink className="size-3.5" /> Join meeting
+          </a>
         )}
-      </div>
-      <ul className="space-y-3 border-t pt-3">
-        {slot.bookings.map((b) => (
-          <li key={b.id} className="flex flex-wrap items-center gap-2">
-            <div className="mr-auto min-w-0">
-              <p className="text-lg font-semibold leading-tight">{b.student.name}</p>
-              <p className="truncate text-xs text-muted-foreground">{b.student.email}</p>
-            </div>
-            <BookingActions booking={b} slot={slot} ctx={ctx} started={tone === "now"} prominent />
-          </li>
-        ))}
-      </ul>
+      </p>
     </Card>
   );
 }
 
-// ─── Timeline rows ───────────────────────────────────────────────────────────
+function AssignmentLinks({ assignment: a }: { assignment: DemoDaySlot["assignment"] }) {
+  return (
+    <span className="min-w-0 truncate">
+      <Link href={`/courses/${a.courseId}/manage`} className="font-medium hover:underline">
+        {a.course.code}
+      </Link>
+      {" › "}
+      <Link href={`/courses/${a.courseId}/manage/assignments/${a.id}`} className="hover:underline">
+        {a.title}
+      </Link>
+    </span>
+  );
+}
 
-const PHASE_STYLE: Record<Phase, string> = {
-  done: "text-muted-foreground",
-  now: "border-l-4 border-l-primary bg-primary/5",
-  next: "border-l-4 border-l-blue-400",
-  later: "",
-};
-const PHASE_LABEL: Partial<Record<Phase, string>> = { now: "Now", next: "Next" };
+// ─── The day, grouped by assignment ──────────────────────────────────────────
 
-function SlotRow({ slot, phase, ctx }: { slot: DemoDaySlot; phase: Phase; ctx: RowContext }) {
+function AssignmentGroup({ assignment, items, ctx }: { assignment: DemoDaySlot["assignment"]; items: DemoDay["timeline"]["items"]; ctx: RowContext }) {
+  const slots = items.flatMap((i) => (i.kind === "slot" ? [i.slot] : []));
+  const venues = [...new Set(slots.map((s) => s.venue?.name ?? "No venue"))];
+  const sharedVenue = venues.length === 1 ? venues[0] : null;
+  const hosts = [...new Set(slots.map((s) => s.ta.name))];
+  const firstBooking = slots.flatMap((s) => s.bookings)[0];
+  return (
+    <section aria-label={`${assignment.course.code} ${assignment.title}`} className="overflow-hidden rounded-xl border bg-card">
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b bg-muted/40 px-3 py-2 text-sm sm:px-4">
+        <AssignmentLinks assignment={assignment} />
+        {sharedVenue && (
+          <span className="flex items-center gap-1 text-muted-foreground">
+            <MapPin className="size-3.5" aria-hidden /> {sharedVenue}
+          </span>
+        )}
+        {ctx.everyone && hosts.length === 1 && <span className="text-muted-foreground">Host: {hosts[0]}</span>}
+        {firstBooking && (
+          <Button asChild size="sm" variant="outline" className="ml-auto">
+            <Link href={markHref(assignment, { day: ctx.day, everyone: ctx.everyone, back: ctx.back })}>
+              <PenLine /> Marking sheet
+            </Link>
+          </Button>
+        )}
+      </header>
+      <ol className="divide-y">
+        {items.map((item) =>
+          item.kind === "gap" ? (
+            <li key={`gap-${item.from.getTime()}`} className="px-3 py-1.5 text-xs text-muted-foreground sm:px-4">
+              Free {fmtTimeRange(item.from, item.to, assignment.course.timezone)}
+            </li>
+          ) : (
+            <SlotRow key={item.slot.id} slot={item.slot} phase={item.phase} ctx={ctx} showVenue={!sharedVenue} showHost={ctx.everyone && hosts.length > 1} />
+          ),
+        )}
+      </ol>
+    </section>
+  );
+}
+
+function SlotRow({ slot, phase, ctx, showVenue, showHost }: { slot: DemoDaySlot; phase: Phase; ctx: RowContext; showVenue: boolean; showHost: boolean }) {
   const tz = slot.assignment.course.timezone;
-  const otherTz = tz !== ctx.timezone;
+  const time = fmtTimeRange(slot.startsAt, slot.endsAt, tz);
+  const extra = [showVenue && (slot.venue?.name ?? "No venue"), showHost && slot.ta.name].filter(Boolean).join(" · ");
+
+  if (slot.bookings.length === 0) {
+    // Open slots are quiet: one muted line, no actions.
+    return (
+      <li id={phase === "now" ? "now" : undefined} className="flex items-center gap-3 px-3 py-1.5 text-xs text-muted-foreground sm:px-4">
+        <span className="w-28 shrink-0 tabular-nums sm:w-32">{time}</span>
+        <span className="rounded border border-dashed px-1.5 py-0.5">Open · not booked</span>
+        {extra && <span className="truncate">{extra}</span>}
+      </li>
+    );
+  }
+
   const started = phase === "done" || phase === "now";
   return (
-    <div id={phase === "now" ? "now" : undefined} className={cn("flex items-start gap-3 px-3 py-3 sm:px-4", PHASE_STYLE[phase])}>
-      <div className="w-14 shrink-0 tabular-nums sm:w-24">
-        <p className={cn("font-semibold", phase === "done" && "font-normal")}>{fmt(slot.startsAt, tz, "HH:mm")}</p>
-        <p className="text-xs text-muted-foreground">
-          to {fmt(slot.endsAt, tz, "HH:mm")}
-          {otherTz && ` (${tz})`}
-        </p>
-        {PHASE_LABEL[phase] && <p className="mt-0.5 text-xs font-semibold text-primary">{PHASE_LABEL[phase]}</p>}
-      </div>
-      <div className="min-w-0 flex-1 space-y-2">
-        <p className="truncate text-xs text-muted-foreground">
-          {ctx.multiCourse && `${slot.assignment.course.code} · `}
-          {slot.assignment.title} · {slot.venue?.name ?? "No venue"}
-          {ctx.everyone && ` · ${slot.ta.name}`}
-          {slot.venue?.meetingUrl && (
-            <>
-              {" · "}
-              <a href={slot.venue.meetingUrl} target="_blank" rel="noreferrer" className="text-primary underline">
-                meeting link
-              </a>
-            </>
-          )}
-        </p>
-        {slot.bookings.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Open slot — nobody booked</p>
-        ) : (
-          slot.bookings.map((b) => (
-            <div key={b.id} className="flex flex-wrap items-center gap-2">
-              <p className={cn("mr-auto font-medium", phase === "done" && "text-foreground")}>{b.student.name}</p>
-              <BookingActions booking={b} slot={slot} ctx={ctx} started={started} ended={phase === "done"} />
-            </div>
-          ))
-        )}
-      </div>
-    </div>
+    <>
+      {slot.bookings.map((b) => {
+        const status = demoStatus(b, phase);
+        return (
+          <li
+            key={b.id}
+            id={phase === "now" ? "now" : undefined}
+            className={cn(
+              "relative flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5 pr-3 pl-4 before:absolute before:inset-y-0 before:left-0 before:w-1 sm:pr-4 sm:pl-5",
+              TONE[status.tone].stripe,
+              phase === "now" && "bg-primary/5",
+            )}
+          >
+            <span className={cn("w-24 shrink-0 text-sm tabular-nums sm:w-28", phase === "now" && "font-semibold")}>{time}</span>
+            {/* A minimum width so on a phone the status wraps below rather than squeezing the name. */}
+            <span className="min-w-36 flex-1">
+              <span className="block truncate font-medium">{b.student.name}</span>
+              {extra && <span className="block truncate text-xs text-muted-foreground">{extra}</span>}
+            </span>
+            <Pill tone={status.tone}>{status.label}</Pill>
+            <BookingActions booking={b} slot={slot} ctx={ctx} started={started} />
+          </li>
+        );
+      })}
+    </>
   );
 }
 
@@ -370,41 +407,19 @@ function SlotRow({ slot, phase, ctx }: { slot: DemoDaySlot; phase: Phase; ctx: R
  * Attendance and marking for one student. Attendance only appears once the demo
  * has started (it can't be recorded earlier), so there are no dead buttons.
  */
-function BookingActions({
-  booking: b,
-  slot,
-  ctx,
-  started,
-  ended,
-  prominent,
-}: {
-  booking: Booking;
-  slot: DemoDaySlot;
-  ctx: RowContext;
-  started: boolean;
-  ended?: boolean;
-  prominent?: boolean;
-}) {
-  const evalHref = `/courses/${slot.assignment.courseId}/manage/assignments/${slot.assignment.id}/evaluate/${b.student.id}?returnTo=${encodeURIComponent(ctx.returnTo)}`;
-  const evaluation = b.evaluation;
-  const locked = evaluation?.status === "SUBMITTED" || evaluation?.status === "FINALIZED";
-  const markLabel = locked ? "View marks" : evaluation ? "Continue marking" : "Mark";
-
+function BookingActions({ booking: b, slot, ctx, started, prominent }: { booking: Booking; slot: DemoDaySlot; ctx: RowContext; started: boolean; prominent?: boolean }) {
+  const href = markHref(slot.assignment, { day: ctx.day, bookingId: b.id, everyone: ctx.everyone, back: ctx.back });
+  const locked = b.evaluation?.status === "SUBMITTED" || b.evaluation?.status === "FINALIZED";
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {b.status !== "BOOKED" && <StatusBadge status={b.status} />}
-      {b.status === "BOOKED" && ended && <StatusBadge status="PENDING" label="Attendance?" tone="warning" />}
-      {evaluation && evaluation.status !== "DRAFT" && <StatusBadge status={evaluation.status} />}
-      {evaluation?.status === "DRAFT" && <StatusBadge status="DRAFT" label="Marks in draft" />}
-
+    <div className="flex flex-wrap items-center gap-1.5">
       {started && !locked && b.status === "BOOKED" && (
         <>
           <ActionForm action={markAttendanceAction} compact>
             <input type="hidden" name="bookingId" value={b.id} />
             <input type="hidden" name="status" value="COMPLETED" />
-            <input type="hidden" name="next" value={evalHref} />
+            <input type="hidden" name="next" value={href} />
             <SubmitButton size="sm" variant={prominent ? "default" : "outline"}>
-              Completed → mark
+              Present → mark
             </SubmitButton>
           </ActionForm>
           <ActionForm
@@ -415,24 +430,24 @@ function BookingActions({
           >
             <input type="hidden" name="bookingId" value={b.id} />
             <input type="hidden" name="status" value="NO_SHOW" />
-            <SubmitButton size="sm" variant="outline">
+            <SubmitButton size="sm" variant="ghost">
               No-show
             </SubmitButton>
           </ActionForm>
         </>
       )}
-      {!locked && b.status !== "BOOKED" && (
+      {!locked && b.status === "NO_SHOW" && (
         <ActionForm action={markAttendanceAction} compact>
           <input type="hidden" name="bookingId" value={b.id} />
           <input type="hidden" name="status" value="BOOKED" />
-          <SubmitButton size="sm" variant="ghost" aria-label={`Undo attendance for ${b.student.name}`}>
+          <SubmitButton size="sm" variant="ghost" aria-label={`Undo no-show for ${b.student.name}`}>
             Undo
           </SubmitButton>
         </ActionForm>
       )}
-      {(b.status !== "BOOKED" || !started) && b.status !== "NO_SHOW" && (
-        <Button asChild size="sm" variant={b.status === "COMPLETED" && !locked ? "default" : "outline"}>
-          <Link href={evalHref}>{markLabel}</Link>
+      {b.status === "COMPLETED" && (
+        <Button asChild size="sm" variant={locked ? "ghost" : "outline"}>
+          <Link href={href}>{locked ? "View" : "Mark"}</Link>
         </Button>
       )}
     </div>
@@ -441,26 +456,58 @@ function BookingActions({
 
 // ─── Week, loose ends ────────────────────────────────────────────────────────
 
-function WeekStrip({ week, selected, href }: { week: DemoDay["week"]; selected: string; href: (day: string) => string }) {
+function WeekStrip({ data, href }: { data: DemoDay; href: (day: string) => string }) {
+  const used = new Set(data.week.map((d) => d.state).filter((s) => s !== "none"));
   return (
-    <nav aria-label="This week" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
-      {week.map((d) => (
-        <Link
-          key={d.day}
-          href={href(d.day)}
-          aria-current={d.day === selected ? "date" : undefined}
-          aria-label={`${d.label} ${d.date}: ${d.count} demo${d.count === 1 ? "" : "s"}`}
-          className={cn(
-            "flex min-w-16 flex-1 flex-col items-center rounded-lg border px-2 py-1.5 text-xs",
-            d.day === selected ? "border-primary bg-primary/10" : "hover:bg-muted/60",
-          )}
-        >
-          <span className="font-medium">{d.label}</span>
-          <span className="text-muted-foreground">{d.date}</span>
-          <span className={cn("mt-0.5 text-sm font-semibold tabular-nums", d.count === 0 && "font-normal text-muted-foreground")}>{d.count || "–"}</span>
-        </Link>
-      ))}
-    </nav>
+    <div className="space-y-1.5">
+      <nav aria-label="Week" className="flex items-stretch gap-1">
+        <Button asChild variant="ghost" size="icon-sm" aria-label="Previous week" className="h-auto self-stretch">
+          <Link href={href(data.prevWeek)}>
+            <ChevronsLeft />
+          </Link>
+        </Button>
+        <div className="grid min-w-0 flex-1 grid-cols-7 gap-1">
+          {data.week.map((d) => {
+            const state = d.state === "none" ? null : DAY_STATE[d.state];
+            const selected = d.day === data.day;
+            return (
+              <Link
+                key={d.day}
+                href={href(d.day)}
+                aria-current={selected ? "date" : undefined}
+                aria-label={`${d.label} ${d.date}: ${d.count ? `${d.count} demo${d.count === 1 ? "" : "s"}, ${state?.label.toLowerCase()}` : "no demos"}`}
+                className={cn(
+                  "flex min-w-0 flex-col items-center rounded-lg border px-1 py-1.5 text-xs transition-colors",
+                  state ? TONE[state.tone].pill : "text-muted-foreground hover:bg-muted/60",
+                  state && "border-transparent",
+                  selected && "ring-2 ring-foreground ring-offset-1 ring-offset-background",
+                )}
+              >
+                <span className="font-medium">{d.label}</span>
+                <span className="hidden opacity-80 sm:inline">{d.date}</span>
+                <span className="mt-0.5 text-sm font-semibold tabular-nums">{d.count || "·"}</span>
+              </Link>
+            );
+          })}
+        </div>
+        <Button asChild variant="ghost" size="icon-sm" aria-label="Next week" className="h-auto self-stretch">
+          <Link href={href(data.nextWeek)}>
+            <ChevronsRight />
+          </Link>
+        </Button>
+      </nav>
+      {used.size > 0 && (
+        <ul className="flex flex-wrap gap-x-4 gap-y-1 px-9 text-xs text-muted-foreground" aria-label="Legend">
+          {(Object.keys(DAY_STATE) as (keyof typeof DAY_STATE)[])
+            .filter((s) => used.has(s))
+            .map((s) => (
+              <li key={s} className="flex items-center gap-1.5">
+                <span className={cn("size-2 rounded-full", TONE[DAY_STATE[s].tone].dot)} aria-hidden /> {DAY_STATE[s].label}
+              </li>
+            ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -469,85 +516,61 @@ function NextDemoHint({ data, dayHref }: { data: DemoDay; dayHref: (day: string)
   return (
     <>
       Next demos:{" "}
-      <Link className="underline" href={dayHref(fmt(data.nextDemoAt, data.timezone, "yyyy-MM-dd"))}>
+      <Link className="underline" href={dayHref(fmt(data.nextDemoAt, data.timezone, "yyyy-MM-dd", "24h"))}>
         {fmt(data.nextDemoAt, data.timezone, "EEEE d MMMM 'from' HH:mm")}
       </Link>
     </>
   );
 }
 
-function LooseEnds({ data, dayHref, returnTo }: { data: DemoDay; dayHref: (day: string) => string; returnTo: string }) {
+function LooseEnds({ data, dayHref, back }: { data: DemoDay; dayHref: (day: string) => string; back: string }) {
   const { attendance, marking, openRequests } = data.toFinish;
   const pastAttendance = attendance.filter((a) => a.day !== data.day);
   if (pastAttendance.length === 0 && marking.length === 0 && openRequests.length === 0) return null;
+  // Marking is grouped per assignment: each group opens the marking sheet on its to-do list.
+  const byAssignment = new Map<string, typeof marking>();
+  for (const b of marking) byAssignment.set(b.assignment.id, [...(byAssignment.get(b.assignment.id) ?? []), b]);
   return (
-    <section aria-labelledby="loose-ends" className="space-y-3">
+    <section aria-labelledby="loose-ends" className="space-y-2">
       <h3 id="loose-ends" className="text-sm font-semibold">
-        To finish
+        Still to finish
       </h3>
-      <div className="grid gap-3 md:grid-cols-2">
+      <ul className="divide-y rounded-xl border bg-card text-sm">
         {pastAttendance.length > 0 && (
-          <Card className="gap-2 p-4 text-sm">
-            <p className="font-medium">
-              <CalendarClock className="mr-1.5 inline size-4 align-text-bottom text-amber-600" aria-hidden />
-              Attendance not recorded
-            </p>
-            <p className="flex flex-wrap gap-x-3 gap-y-1">
-              {pastAttendance.map((a) => (
-                <Link key={a.day} className="underline" href={dayHref(a.day)}>
-                  {a.label} ({a.count})
-                </Link>
-              ))}
-            </p>
-          </Card>
+          <li className="flex flex-wrap items-center gap-2 px-4 py-2.5">
+            <Pill tone="danger">Attendance missing</Pill>
+            {pastAttendance.map((a) => (
+              <Link key={a.day} className="underline" href={dayHref(a.day)}>
+                {a.label} ({a.count})
+              </Link>
+            ))}
+          </li>
         )}
+        {[...byAssignment.values()].map((group) => {
+          const a = group[0].assignment;
+          return (
+            <li key={a.id} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
+              <Pill tone="warning">To mark</Pill>
+              <span className="min-w-0 flex-1 truncate">
+                {group.length} demo{group.length === 1 ? "" : "s"} · {a.course.code} {a.title}
+              </span>
+              <Button asChild size="sm" variant="outline">
+                <Link href={`${markHref(a, { back })}&todo=1`}>Open marking sheet</Link>
+              </Button>
+            </li>
+          );
+        })}
         {openRequests.length > 0 && (
-          <Card className="gap-2 p-4 text-sm">
-            <p className="font-medium">Student requests waiting</p>
-            <p className="flex flex-wrap gap-x-3 gap-y-1">
-              {openRequests.map((r) => (
-                <Link key={r.courseId} className="underline" href={`/courses/${r.courseId}/manage/requests`}>
-                  {r.code} ({r.count})
-                </Link>
-              ))}
-            </p>
-          </Card>
+          <li className="flex flex-wrap items-center gap-2 px-4 py-2.5">
+            <Pill tone="warning">Student requests</Pill>
+            {openRequests.map((r) => (
+              <Link key={r.courseId} className="underline" href={`/courses/${r.courseId}/manage/requests`}>
+                {r.code} ({r.count})
+              </Link>
+            ))}
+          </li>
         )}
-        {marking.length > 0 && (
-          <Card className="gap-2 p-4 text-sm md:col-span-2">
-            <p className="font-medium">
-              Marks to finish <span className="font-normal text-muted-foreground">({marking.length}{marking.length === 100 ? "+" : ""})</span>
-            </p>
-            <ul className="divide-y">
-              {marking.slice(0, 8).map((b) => (
-                <li key={b.id} className="flex flex-wrap items-center gap-2 py-2">
-                  <span className="mr-auto min-w-0">
-                    <span className="font-medium">{b.student.name}</span>{" "}
-                    <span className="text-muted-foreground">
-                      · {b.assignment.course.code} {b.assignment.title} · {fmt(b.slot.startsAt, data.timezone, "EEE d MMM")}
-                    </span>
-                  </span>
-                  <StatusBadge status={b.evaluation?.status ?? "NONE"} label={b.evaluation ? undefined : "Not started"} />
-                  <Button asChild size="sm" variant="outline">
-                    <Link
-                      href={`/courses/${b.assignment.courseId}/manage/assignments/${b.assignment.id}/evaluate/${b.student.id}?returnTo=${encodeURIComponent(returnTo)}`}
-                    >
-                      {b.evaluation ? "Continue" : "Mark"}
-                    </Link>
-                  </Button>
-                </li>
-              ))}
-            </ul>
-            {marking.length > 8 && <p className="text-xs text-muted-foreground">…and {marking.length - 8} more (oldest first).</p>}
-          </Card>
-        )}
-      </div>
+      </ul>
     </section>
   );
-}
-
-function duration(ms: number) {
-  const min = Math.round(ms / 60_000);
-  const h = Math.floor(min / 60);
-  return h ? `${h} h${min % 60 ? ` ${min % 60} min` : ""}` : `${min} min`;
 }

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { DomainError } from "@/domain/result";
-import { fmt } from "@/lib/time";
+import { fmt, tzLabel } from "@/lib/time";
 import { db, type Tx } from "@/server/db";
 import { assertAssignmentRole, assertCourseRole, assertStaff, STAFF, type Actor } from "./access";
 import { audit } from "./audit";
@@ -171,7 +171,7 @@ async function announceBookingOpens(tx: Tx, a: AnnounceTarget, opensAt: Date, tz
   await notify(tx, await studentIds(tx, a.courseId), {
     type: "assignment.opens_soon",
     title: `Demo booking opens ${fmt(opensAt, tz, "EEE d MMM, HH:mm")}: ${a.title}`,
-    body: `Demo slots for ${a.course.code} — ${a.title} are published. Booking opens ${fmt(opensAt, tz, "EEEE d MMMM 'at' HH:mm")} (${tz}). We'll remind you when it opens.`,
+    body: `Demo slots for ${a.course.code} — ${a.title} are published. Booking opens ${fmt(opensAt, tz, "EEEE d MMMM 'at' HH:mm")} (${tzLabel(tz)}). We'll remind you when it opens.`,
     link: `/courses/${a.courseId}/assignments/${a.id}`,
   });
 }
@@ -202,9 +202,9 @@ export async function announceBookingOpen(tx: Tx, a: AnnounceTarget, opts: { reo
 export async function publishAssignment(actor: Actor, assignmentId: string, now = new Date()) {
   return db.$transaction(async (tx) => {
     const { assignment } = await assertAssignmentRole(tx, actor, assignmentId, STAFF, { write: true });
-    if (assignment.status === "PUBLISHED") throw new DomainError("Already published.");
+    if (assignment.status === "PUBLISHED") throw new DomainError("Booking is already open.");
     const slotCount = await tx.slot.count({ where: { assignmentId, status: { not: "CANCELLED" } } });
-    if (slotCount === 0) throw new DomainError("Add availability to create slots before publishing.");
+    if (slotCount === 0) throw new DomainError("Add slots before opening booking: every student is notified, so there must be times to book.");
     await tx.slot.updateMany({ where: { assignmentId, status: "DRAFT" }, data: { status: "PUBLISHED" } });
     await tx.assignment.update({ where: { id: assignmentId }, data: { status: "PUBLISHED" } });
 

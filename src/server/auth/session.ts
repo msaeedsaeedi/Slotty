@@ -3,6 +3,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/server/db";
+import { setRequestClock } from "@/server/clock";
 import { generateToken, hashToken } from "./tokens";
 import type { Actor } from "@/server/services/access";
 export type { Actor };
@@ -46,7 +47,8 @@ export const getCurrentUser = cache(async (): Promise<Actor | null> => {
     include: { user: true },
   });
   if (!session || session.expiresAt < new Date() || session.user.status !== "ACTIVE") return null;
-  const { id, email, name, isAdmin } = session.user;
+  const { id, email, name, isAdmin, timeFormat } = session.user;
+  setRequestClock(timeFormat === "H24" ? "24h" : "12h");
   return { id, email, name, isAdmin };
 });
 

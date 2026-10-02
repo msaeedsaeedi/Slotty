@@ -60,7 +60,7 @@ describe("demo day", () => {
     await enroll(course.id, [other], "TA");
     await enroll(course.id, [ann, bob]);
     const start = inHours(3, slots[0].startsAt);
-    await addAvailability(ta, assignment.id, { taId: other.id, venueId: venue.id, startsAt: start, endsAt: inHours(0.25, start) });
+    await addAvailability(other, assignment.id, { taId: other.id, venueId: venue.id, startsAt: start, endsAt: inHours(0.25, start) });
     await db.slot.updateMany({ where: { assignmentId: assignment.id }, data: { status: "PUBLISHED" } });
     const otherSlot = await db.slot.findFirstOrThrow({ where: { taId: other.id } });
     await bookSlot(ann, slots[0].id);
@@ -83,9 +83,9 @@ describe("demo day", () => {
     await bookSlot(ann, slots[0].id);
 
     expect((await getDemoDay(admin)).courses).toEqual([]);
-    expect(await myRoleKinds(admin)).toEqual({ staff: false, student: false, enrolled: false });
-    expect(await myRoleKinds(ta)).toEqual({ staff: true, student: false, enrolled: true });
-    expect(await myRoleKinds(ann)).toEqual({ staff: false, student: true, enrolled: true });
+    expect(await myRoleKinds(admin)).toEqual({ staff: false, student: false });
+    expect(await myRoleKinds(ta)).toEqual({ staff: true, student: false });
+    expect(await myRoleKinds(ann)).toEqual({ staff: false, student: true });
     await expect(getDemoDay(ann, { courseId: course.id })).rejects.toThrow(/permission/);
   });
 });

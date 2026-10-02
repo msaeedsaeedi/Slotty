@@ -1,11 +1,11 @@
 import { removeMemberAction, resendInviteAction } from "@/app/actions/courses";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { StatusBadge } from "@/components/status-badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireUser } from "@/server/auth/session";
 import { load } from "@/server/page-utils";
-import { listMembers } from "@/server/services/courses";
+import { getCourseForActor, listMembers } from "@/server/services/courses";
 import { RosterImport } from "./roster-import";
 
 export const metadata = { title: "People" };
@@ -13,7 +13,7 @@ export const metadata = { title: "People" };
 export default async function RosterPage({ params }: PageProps<"/courses/[courseId]/manage/roster">) {
   const { courseId } = await params;
   const user = await requireUser();
-  const members = await load(listMembers(user, courseId));
+  const [members, { role }] = await Promise.all([load(listMembers(user, courseId)), load(getCourseForActor(user, courseId))]);
   const counts = { STUDENT: 0, TA: 0, INSTRUCTOR: 0 };
   for (const m of members) counts[m.role]++;
 
@@ -42,7 +42,7 @@ export default async function RosterPage({ params }: PageProps<"/courses/[course
                   <p className="font-medium">{m.user.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {m.user.email}
-                    {m.section && ` · §${m.section}`}
+                    {m.section && ` · Section ${m.section}`}
                   </p>
                 </TableCell>
                 <TableCell>
@@ -78,15 +78,7 @@ export default async function RosterPage({ params }: PageProps<"/courses/[course
           </TableBody>
         </Table>
       </Card>
-      <Card className="h-fit">
-        <CardHeader>
-          <CardTitle>Import class list</CardTitle>
-          <CardDescription>Add students and staff by email from a CSV. Re-import any time — existing people are kept.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <RosterImport courseId={courseId} />
-        </CardContent>
-      </Card>
+      <RosterImport courseId={courseId} canAddInstructors={role === "INSTRUCTOR"} />
     </div>
   );
 }

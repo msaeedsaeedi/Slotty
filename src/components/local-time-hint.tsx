@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { tzLabel } from "@/lib/time";
 
 const subscribe = () => () => {};
 const deviceZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -29,7 +30,7 @@ export function LocalTimeHint({ timezone }: { timezone: string }) {
   const amount = Number.isInteger(hours) ? `${hours}h` : `${hours.toFixed(1)}h`;
   return (
     <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground" role="note">
-      Times are in the course timezone ({timezone}). Your device is on {mine}, which is {amount} {diff > 0 ? "ahead" : "behind"}.
+      Times are in {tzLabel(timezone)}. Your device is on {mine}, which is {amount} {diff > 0 ? "ahead" : "behind"}.
     </p>
   );
 }

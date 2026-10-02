@@ -1,4 +1,4 @@
-import { buildCalendar, type CalendarEvent } from "@/domain/ics";
+import { buildCalendar, calendarLinks, type CalendarEvent } from "@/domain/ics";
 import { DomainError } from "@/domain/result";
 import { db } from "@/server/db";
 import { absoluteUrl } from "@/server/app-url";
@@ -27,7 +27,7 @@ function bookingRows(filter: object) {
   return db.booking.findMany({ where: filter, include, orderBy: { slot: { startsAt: "asc" } } });
 }
 
-function studentEvent(b: BookingRow): CalendarEvent {
+function studentEvent(b: BookingForCalendar): CalendarEvent {
   const url = absoluteUrl(`/courses/${b.assignment.courseId}/assignments/${b.assignmentId}`);
   return {
     uid: `booking-${b.id}@slotty`,
@@ -51,6 +51,18 @@ function hostEvent(b: BookingRow): CalendarEvent {
     location: where(b.slot.venue),
     url,
   };
+}
+
+export type BookingForCalendar = {
+  id: string;
+  assignmentId: string;
+  slot: { startsAt: Date; endsAt: Date; venue: Venue; ta: { name: string } };
+  assignment: { title: string; courseId: string; course: { code: string } };
+};
+
+/** "Add to calendar" options for one of the student's bookings: Google, Outlook, or an .ics file. */
+export function bookingCalendarOptions(b: BookingForCalendar) {
+  return { ...calendarLinks(studentEvent(b)), ics: `/bookings/${b.id}/calendar` };
 }
 
 /** One booking as a downloadable .ics file (the student's own booking only). */

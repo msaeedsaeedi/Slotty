@@ -4,6 +4,7 @@ import { requireUser } from "@/server/auth/session";
 import { bool, run, str, type ActionState } from "@/server/action-utils";
 import {
   adminAssignStaff,
+  adminCreateCourse,
   adminRetryEmails,
   adminSendAccessEmail,
   adminSetAdmin,
@@ -51,6 +52,23 @@ export async function assignStaffAction(_: ActionState, fd: FormData): Promise<A
     const role = str(fd, "role") === "TA" ? "TA" : "INSTRUCTOR";
     const r = await adminAssignStaff(await requireUser(), str(fd, "courseId"), { email: str(fd, "email"), name: str(fd, "name") || undefined, role });
     return `${r.name} added as ${role === "TA" ? "TA" : "instructor"}${r.invited ? " and invited by email" : ""}.`;
+  });
+}
+
+export async function createCourseAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run(async () => {
+    const role = str(fd, "role") === "TA" ? "TA" : "INSTRUCTOR";
+    const r = await adminCreateCourse(await requireUser(), {
+      code: str(fd, "code"),
+      title: str(fd, "title"),
+      term: str(fd, "term"),
+      timezone: str(fd, "timezone"),
+      staff: { email: str(fd, "email"), name: str(fd, "name") || undefined, role },
+    });
+    return {
+      message: `${r.course.code} created and handed to ${r.name}${r.invited ? ", who was invited by email" : ""}.`,
+      navigate: `/admin/courses?q=${encodeURIComponent(r.course.code)}`,
+    };
   });
 }
 

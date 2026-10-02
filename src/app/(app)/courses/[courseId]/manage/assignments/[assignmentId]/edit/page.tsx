@@ -1,7 +1,9 @@
-import { updateAssignmentAction } from "@/app/actions/scheduling";
+import { deleteAssignmentAction, updateAssignmentAction } from "@/app/actions/scheduling";
+import { ActionForm, SubmitButton } from "@/components/action-form";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { toLocalInput } from "@/lib/time";
+import { toLocalInput, tzLabel } from "@/lib/time";
 import { db } from "@/server/db";
 import { requireUser } from "@/server/auth/session";
 import { load } from "@/server/page-utils";
@@ -16,13 +18,14 @@ export default async function EditAssignmentPage({ params }: PageProps<"/courses
   const { assignment, criteria } = await load(getAssignment(user, assignmentId));
   const tz = assignment.course.timezone;
   const p = assignment.policy!;
-  const [scored, booked, topMark] = await Promise.all([
+  const [scored, booked, everBooked, topMark] = await Promise.all([
     db.evaluationScore.count({ where: { criterion: { assignmentId } } }),
     db.booking.count({ where: { assignmentId, status: "BOOKED" } }),
+    db.booking.count({ where: { assignmentId } }),
     db.evaluation.aggregate({ where: { assignmentId }, _max: { totalMarks: true } }),
   ]);
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-5xl">
       <PageHeader
         title={`Edit ${assignment.title}`}
         description="Changes to slot length or capacity apply to slots you add from now on."
@@ -47,7 +50,7 @@ export default async function EditAssignmentPage({ params }: PageProps<"/courses
         action={updateAssignmentAction}
         courseId={courseId}
         assignmentId={assignmentId}
-        timezone={tz}
+        timezoneLabel={tzLabel(tz)}
         rubricLocked={scored > 0}
         defaults={{
           title: assignment.title,
@@ -65,6 +68,27 @@ export default async function EditAssignmentPage({ params }: PageProps<"/courses
           allowStudentCancel: p.allowStudentCancel,
         }}
       />
+      <Card className="mt-8 border-destructive/40">
+        <CardHeader>
+          <CardTitle className="text-base">Delete assignment</CardTitle>
+          <CardDescription>
+            {everBooked > 0
+              ? "Students have booked this assignment, so it can't be deleted. Close booking instead; the record stays for marking and export."
+              : "Removes the assignment and all its slots. Nobody has booked it yet."}
+          </CardDescription>
+        </CardHeader>
+        {everBooked === 0 && (
+          <CardContent>
+            <ActionForm action={deleteAssignmentAction} compact confirmLabel="Delete" confirm={`Delete ${assignment.title} and all its slots? This can't be undone.`}>
+              <input type="hidden" name="assignmentId" value={assignmentId} />
+              <input type="hidden" name="courseId" value={courseId} />
+              <SubmitButton variant="destructive" size="sm">
+                Delete assignment
+              </SubmitButton>
+            </ActionForm>
+          </CardContent>
+        )}
+      </Card>
     </div>
   );
 }

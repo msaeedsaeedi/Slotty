@@ -70,3 +70,29 @@ export function buildCalendar(args: { name: string; events: CalendarEvent[]; now
   lines.push("END:VCALENDAR");
   return lines.map(icsFold).join("\r\n") + "\r\n";
 }
+
+/**
+ * One-click "add this event" links for web calendars. They add a copy of the
+ * event: if the booking changes later the student gets an email and a fresh link.
+ */
+export function calendarLinks(e: Omit<CalendarEvent, "uid">): { google: string; outlook: string } {
+  const details = [e.description, e.url].filter(Boolean).join("\n");
+  const google = new URL("https://calendar.google.com/calendar/render");
+  google.search = new URLSearchParams({
+    action: "TEMPLATE",
+    text: e.summary,
+    dates: `${icsDate(e.start)}/${icsDate(e.end)}`,
+    details,
+    ...(e.location ? { location: e.location } : {}),
+  }).toString();
+  const outlook = new URL("https://outlook.live.com/calendar/0/action/compose");
+  outlook.search = new URLSearchParams({
+    rru: "addevent",
+    subject: e.summary,
+    startdt: e.start.toISOString(),
+    enddt: e.end.toISOString(),
+    body: details,
+    ...(e.location ? { location: e.location } : {}),
+  }).toString();
+  return { google: google.toString(), outlook: outlook.toString() };
+}

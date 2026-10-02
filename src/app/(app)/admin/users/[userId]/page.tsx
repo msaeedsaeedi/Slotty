@@ -77,7 +77,10 @@ export default async function AdminUserPage({ params }: PageProps<"/admin/users/
                 </SubmitButton>
               </ActionForm>
             )}
-            {!self && (
+            {!self && !user.isAdmin && user.enrollments.length > 0 && (
+              <p className="self-center text-xs text-muted-foreground">Can&apos;t be made admin while they&apos;re in a course.</p>
+            )}
+            {!self && (user.isAdmin || user.enrollments.length === 0) && (
               <ActionForm
                 action={setAdminAction}
                 compact

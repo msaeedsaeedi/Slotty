@@ -1,9 +1,9 @@
 import { z } from "zod";
 import type { CourseRole } from "@/generated/prisma/client";
 import { DomainError } from "@/domain/result";
-import { parseRoster, type RosterRow } from "@/domain/csv-roster";
+import { parseRoster, type RosterError, type RosterRow } from "@/domain/csv-roster";
 import { fmtRange, isValidTimezone } from "@/lib/time";
-import { db } from "@/server/db";
+import { db, type Tx } from "@/server/db";
 import { assertCourseRole, assertStaff, courseRoleOf, type Actor } from "./access";
 import { audit } from "./audit";
 import { issueInvite } from "./accounts";
@@ -17,6 +17,7 @@ export const courseInput = z.object({
 });
 
 export async function createCourse(actor: Actor, input: z.input<typeof courseInput> & { myRole: "TA" | "INSTRUCTOR" }) {
+  if (actor.isAdmin) throw new DomainError("Admins don't join courses. Create it from the admin console and name its instructor or TA.", "FORBIDDEN");
   const data = courseInput.parse(input);
   const myRole = input.myRole === "INSTRUCTOR" ? "INSTRUCTOR" : "TA";
   return db.$transaction(async (tx) => {
@@ -59,7 +60,7 @@ export async function listMyCourses(actor: Actor) {
 export async function myRoleKinds(actor: Actor) {
   const roles = await db.enrollment.findMany({ where: { userId: actor.id, course: { archived: false } }, select: { role: true }, distinct: ["role"] });
   const hasBookings = roles.some((r) => r.role === "STUDENT") || (await db.booking.count({ where: { studentId: actor.id }, take: 1 })) > 0;
-  return { staff: roles.some((r) => r.role !== "STUDENT"), student: hasBookings, enrolled: roles.length > 0 };
+  return { staff: roles.some((r) => r.role !== "STUDENT"), student: hasBookings };
 }
 
 /** Course + the actor's role in it; throws NOT_FOUND when the actor has no access. */
@@ -95,9 +96,23 @@ export interface RosterPreviewRow extends RosterRow {
   currentRole?: CourseRole;
 }
 
+/** Admins manage the platform and are never course members, so their emails are skipped. */
+async function withoutAdmins(tx: Tx, parsed: { rows: RosterRow[]; errors: RosterError[] }) {
+  const admins = await tx.user.findMany({ where: { isAdmin: true, email: { in: parsed.rows.map((r) => r.email) } }, select: { email: true } });
+  const adminEmails = new Set(admins.map((a) => a.email));
+  if (adminEmails.size === 0) return parsed;
+  return {
+    rows: parsed.rows.filter((r) => !adminEmails.has(r.email)),
+    errors: [
+      ...parsed.errors,
+      ...parsed.rows.filter((r) => adminEmails.has(r.email)).map((r) => ({ line: r.line, message: `${r.email} is a Slotty admin. Admins manage every course already and can't be added to one.` })),
+    ].sort((a, b) => a.line - b.line),
+  };
+}
+
 export async function previewRoster(actor: Actor, courseId: string, csv: string) {
   await assertStaff(db, actor, courseId);
-  const { rows, errors } = parseRoster(csv);
+  const { rows, errors } = await withoutAdmins(db, parseRoster(csv));
   const users = await db.user.findMany({
     where: { email: { in: rows.map((r) => r.email) } },
     include: { enrollments: { where: { courseId } } },
@@ -119,11 +134,33 @@ export async function previewRoster(actor: Actor, courseId: string, csv: string)
  * accounts and receive a set-password link; existing users are notified.
  */
 export async function importRoster(actor: Actor, courseId: string, csv: string) {
-  const { rows, errors } = parseRoster(csv);
-  if (rows.length === 0) throw new DomainError(errors[0]?.message ?? "The CSV has no valid rows.");
+  return importRows(actor, courseId, parseRoster(csv));
+}
 
+const memberInput = z.object({
+  email: z.string().trim().toLowerCase().email("Enter a valid email address."),
+  name: z.string().trim().max(120).optional(),
+  role: z.enum(["STUDENT", "TA", "INSTRUCTOR"]),
+  section: z.string().trim().max(40).optional().transform((v) => v || null),
+});
+
+/** Add one person by email (the quick alternative to a CSV). */
+export async function addMember(actor: Actor, courseId: string, input: z.input<typeof memberInput>) {
+  const data = memberInput.parse(input);
+  const existing = await db.user.findUnique({ where: { email: data.email }, select: { name: true } });
+  const name = data.name || existing?.name;
+  if (!name) throw new DomainError("This email has no Slotty account yet. Add their name so we can invite them.");
+  const r = await importRows(actor, courseId, { rows: [{ line: 1, email: data.email, name, role: data.role, section: data.section }], errors: [] });
+  if (r.errors.length) throw new DomainError(r.errors[0].message);
+  if (r.unchanged) throw new DomainError(`${name} is already in this course with that role.`);
+  return { ...r, name };
+}
+
+async function importRows(actor: Actor, courseId: string, parsed: { rows: RosterRow[]; errors: RosterError[] }) {
   return db.$transaction(
     async (tx) => {
+      const { rows, errors } = await withoutAdmins(tx, parsed);
+      if (rows.length === 0) throw new DomainError(errors[0]?.message ?? "The list has no valid rows.");
       const myRole = await assertStaff(tx, actor, courseId, { write: true });
       if (myRole !== "INSTRUCTOR" && rows.some((r) => r.role === "INSTRUCTOR")) {
         throw new DomainError("Only instructors can add other instructors.", "FORBIDDEN");

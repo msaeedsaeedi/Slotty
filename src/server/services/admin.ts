@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { DomainError } from "@/domain/result";
-import { db } from "@/server/db";
+import { db, type Tx } from "@/server/db";
+import { courseInput } from "./courses";
 import { signalOutbox } from "@/server/outbox-signal";
 import { issueInvite, requestPasswordReset } from "./accounts";
 import { assertAdmin, STAFF, type Actor } from "./access";
@@ -241,6 +242,16 @@ export async function adminSetAdmin(actor: Actor, userId: string, isAdmin: boole
   assertAdmin(actor);
   if (userId === actor.id && !isAdmin) throw new DomainError("You can't remove your own admin rights.");
   return db.$transaction(async (tx) => {
+    if (isAdmin) {
+      // Admins run the platform; they're never a student or staff member of a course.
+      const courses = await tx.enrollment.findMany({ where: { userId }, select: { course: { select: { code: true } } } });
+      if (courses.length > 0) {
+        throw new DomainError(
+          `They're a member of ${courses.map((e) => e.course.code).join(", ")}. Admins can't also be in courses — remove them from ${courses.length === 1 ? "it" : "those courses"} first.`,
+          "CONFLICT",
+        );
+      }
+    }
     await tx.user.update({ where: { id: userId }, data: { isAdmin } });
     await audit(tx, actor, { action: isAdmin ? "user.grant_admin" : "user.revoke_admin", entityType: "User", entityId: userId });
   });
@@ -308,28 +319,48 @@ export async function adminAssignStaff(actor: Actor, courseId: string, input: z.
   return db.$transaction(async (tx) => {
     const course = await tx.course.findUnique({ where: { id: courseId } });
     if (!course) throw new DomainError("Course not found.", "NOT_FOUND");
-    let user = await tx.user.findUnique({ where: { email: data.email } });
-    if (user?.status === "DISABLED") throw new DomainError("That account is disabled. Enable it first.");
-    if (!user) {
-      if (!data.name) throw new DomainError("This email has no account yet. Add their name so we can invite them.");
-      user = await tx.user.create({ data: { email: data.email, name: data.name, status: "INVITED" } });
-    }
-    const existing = await tx.enrollment.findUnique({ where: { courseId_userId: { courseId, userId: user.id } } });
-    if (existing?.role === data.role) throw new DomainError(`${user.name} is already ${data.role === "TA" ? "a TA" : "an instructor"} here.`);
-    if (existing) await tx.enrollment.update({ where: { id: existing.id }, data: { role: data.role } });
-    else await tx.enrollment.create({ data: { courseId, userId: user.id, role: data.role } });
+    return assignStaff(tx, actor, course, data);
+  });
+}
 
-    const context = `${actor.name} (Slotty admin) made you ${data.role === "TA" ? "a TA" : "the instructor"} of ${course.code} — ${course.title} (${course.term}).`;
-    if (user.status === "INVITED") await issueInvite(tx, user, context);
-    else await notify(tx, [user.id], { type: "course.enrolled", title: `You now help run ${course.code}`, body: context, link: `/courses/${courseId}/manage` });
-    await audit(tx, actor, {
-      action: "course.assign_staff",
-      entityType: "Course",
-      entityId: courseId,
-      before: existing ? { userId: user.id, role: existing.role } : undefined,
-      after: { userId: user.id, email: user.email, role: data.role },
-    });
-    return { invited: user.status === "INVITED", name: user.name };
+async function assignStaff(tx: Tx, actor: Actor, course: { id: string; code: string; title: string; term: string }, data: z.output<typeof staffInput>) {
+  const courseId = course.id;
+  let user = await tx.user.findUnique({ where: { email: data.email } });
+  if (user?.status === "DISABLED") throw new DomainError("That account is disabled. Enable it first.");
+  if (user?.isAdmin) throw new DomainError(`${user.name} is an admin. Admins already manage every course and can't also be its staff.`);
+  if (!user) {
+    if (!data.name) throw new DomainError("This email has no account yet. Add their name so we can invite them.");
+    user = await tx.user.create({ data: { email: data.email, name: data.name, status: "INVITED" } });
+  }
+  const existing = await tx.enrollment.findUnique({ where: { courseId_userId: { courseId, userId: user.id } } });
+  if (existing?.role === data.role) throw new DomainError(`${user.name} is already ${data.role === "TA" ? "a TA" : "an instructor"} here.`);
+  if (existing) await tx.enrollment.update({ where: { id: existing.id }, data: { role: data.role } });
+  else await tx.enrollment.create({ data: { courseId, userId: user.id, role: data.role } });
+
+  const context = `${actor.name} (Slotty admin) made you ${data.role === "TA" ? "a TA" : "the instructor"} of ${course.code} — ${course.title} (${course.term}).`;
+  if (user.status === "INVITED") await issueInvite(tx, user, context);
+  else await notify(tx, [user.id], { type: "course.enrolled", title: `You now help run ${course.code}`, body: context, link: `/courses/${courseId}/manage` });
+  await audit(tx, actor, {
+    action: "course.assign_staff",
+    entityType: "Course",
+    entityId: courseId,
+    before: existing ? { userId: user.id, role: existing.role } : undefined,
+    after: { userId: user.id, email: user.email, role: data.role },
+  });
+  return { invited: user.status === "INVITED", name: user.name };
+}
+
+const newCourseInput = courseInput.extend({ staff: staffInput });
+
+/** Create a course and hand it to its instructor or TA (admins never join courses themselves). */
+export async function adminCreateCourse(actor: Actor, input: z.input<typeof newCourseInput>) {
+  assertAdmin(actor);
+  const { staff, ...data } = newCourseInput.parse(input);
+  return db.$transaction(async (tx) => {
+    const course = await tx.course.create({ data: { ...data, createdById: actor.id } });
+    await audit(tx, actor, { action: "course.create", entityType: "Course", entityId: course.id, after: data });
+    const assigned = await assignStaff(tx, actor, course, staff);
+    return { course, ...assigned };
   });
 }
 

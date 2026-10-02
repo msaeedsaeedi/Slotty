@@ -2,8 +2,7 @@
 
 import { currentSessionHash, requireUser } from "@/server/auth/session";
 import { bool, run, str, type ActionState } from "@/server/action-utils";
-import { changePassword, setEmailPreferences, signOutOtherSessions, updateProfile } from "@/server/services/accounts";
-import { rotateCalendarToken } from "@/server/services/calendar";
+import { changePassword, setEmailPreferences, setTimeFormat, signOutOtherSessions, updateProfile } from "@/server/services/accounts";
 import { DomainError } from "@/domain/result";
 
 export async function updateProfileAction(_: ActionState, fd: FormData): Promise<ActionState> {
@@ -24,8 +23,17 @@ export async function changePasswordAction(_: ActionState, fd: FormData): Promis
 
 export async function setEmailPreferencesAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return run(async () => {
-    await setEmailPreferences(await requireUser(), { emailReminders: bool(fd, "emailReminders"), emailAgenda: bool(fd, "emailAgenda") });
+    // Each checkbox is only on the form for the roles it applies to.
+    const pref = (key: string) => (fd.has(`${key}Shown`) ? bool(fd, key) : undefined);
+    await setEmailPreferences(await requireUser(), { emailReminders: pref("emailReminders"), emailAgenda: pref("emailAgenda") });
     return "Email preferences saved.";
+  });
+}
+
+export async function setTimeFormatAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run(async () => {
+    await setTimeFormat(await requireUser(), str(fd, "timeFormat") === "H24" ? "H24" : "H12");
+    return "Time format saved.";
   });
 }
 
@@ -36,9 +44,3 @@ export async function signOutOthersAction(): Promise<ActionState> {
   });
 }
 
-export async function rotateCalendarAction(): Promise<ActionState> {
-  return run(async () => {
-    await rotateCalendarToken(await requireUser());
-    return "New calendar link created. Old links stop working.";
-  });
-}

@@ -1,9 +1,13 @@
 import Link from "next/link";
-import { assignStaffAction, setCourseArchivedAction } from "@/app/actions/admin";
+import { Plus } from "lucide-react";
+import { assignStaffAction, createCourseAction, setCourseArchivedAction } from "@/app/actions/admin";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { EmptyState } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { Card } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { tzLabel } from "@/lib/time";
+import { CourseFields } from "../../courses/course-fields";
 import { Input } from "@/components/ui/input";
 import { requireAdminUser } from "@/server/auth/session";
 import { adminListCourses, type CourseFilter } from "@/server/services/admin";
@@ -27,6 +31,30 @@ export default async function AdminCoursesPage({ searchParams }: PageProps<"/adm
 
   return (
     <div className="space-y-4">
+      <details className="rounded-xl border bg-card p-4" open={sp.new === "1" || undefined}>
+        <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+          <Plus className="size-4" /> New course
+        </summary>
+        <ActionForm action={createCourseAction} resetOnSuccess className="mt-4 space-y-4">
+          <CourseFields />
+          <fieldset className="space-y-2">
+            <Label asChild>
+              <legend>Who runs it</legend>
+            </Label>
+            <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+              <Input name="email" type="email" required placeholder="Email" aria-label="Instructor or TA email" />
+              <Input name="name" placeholder="Name (if new to Slotty)" aria-label="Instructor or TA name" maxLength={120} />
+              <select name="role" defaultValue="INSTRUCTOR" aria-label="Their role" className="h-8 rounded-md border bg-background px-2 text-sm">
+                <option value="INSTRUCTOR">Instructor</option>
+                <option value="TA">TA</option>
+              </select>
+            </div>
+            <p className="text-xs text-muted-foreground">They get an invite (or a notification if they already use Slotty) and add the class list themselves. You don&apos;t join the course.</p>
+          </fieldset>
+          <SubmitButton>Create course</SubmitButton>
+        </ActionForm>
+      </details>
+
       <form className="flex max-w-md gap-2" role="search">
         <Input name="q" type="search" placeholder="Search code, title or term" aria-label="Search courses" defaultValue={q} />
         {filter !== "active" && <input type="hidden" name="filter" value={filter} />}
@@ -48,7 +76,7 @@ export default async function AdminCoursesPage({ searchParams }: PageProps<"/adm
                         {c.code} — {c.title}
                       </Link>
                       <p className="text-xs text-muted-foreground">
-                        {c.term} · {c.timezone}
+                        {c.term} · {tzLabel(c.timezone)}
                       </p>
                     </div>
                     {c.archived && <StatusBadge status="ARCHIVED" label="Archived" />}

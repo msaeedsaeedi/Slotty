@@ -7,37 +7,37 @@ import { unreadCount } from "@/server/services/inbox";
 
 export async function AppHeader({ user }: { user: Actor }) {
   const [unread, roles] = await Promise.all([unreadCount(user), myRoleKinds(user)]);
-  // An admin who isn't in any course has nothing on the course dashboard: the console is home.
-  const adminOnly = user.isAdmin && !roles.enrolled;
+  // Admins run the platform and never join courses, so the console is all they need.
+  const admin = user.isAdmin;
   return (
     <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4">
-        <Link href={adminOnly ? "/admin" : "/dashboard"} className="mr-2 flex items-center gap-2 font-semibold">
+        <Link href={admin ? "/admin" : "/dashboard"} className="mr-2 flex items-center gap-2 font-semibold">
           <CalendarCheck className="size-5 text-primary" />
           Slotty
         </Link>
         <nav className="flex items-center gap-1 text-sm">
-          {!adminOnly && (
+          {!admin && (
             <Button asChild variant="ghost" size="sm">
-              <Link href="/dashboard">Courses</Link>
+              <Link href="/dashboard">Home</Link>
             </Button>
           )}
-          {roles.staff && (
+          {!admin && roles.staff && (
             <Button asChild variant="ghost" size="sm">
               <Link href="/today">
                 <CalendarClock /> Demo day
               </Link>
             </Button>
           )}
-          {roles.student && (
+          {!admin && roles.student && (
             <Button asChild variant="ghost" size="sm">
-              <Link href="/bookings">My bookings</Link>
+              <Link href="/bookings">My demos</Link>
             </Button>
           )}
-          {user.isAdmin && (
+          {admin && (
             <Button asChild variant="ghost" size="sm">
               <Link href="/admin">
-                <Shield /> {adminOnly ? "Administration" : "Admin"}
+                <Shield /> Administration
               </Link>
             </Button>
           )}

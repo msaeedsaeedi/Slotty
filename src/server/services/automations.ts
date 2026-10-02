@@ -1,4 +1,4 @@
-import { fmt } from "@/lib/time";
+import { fmt, fmtData, fmtTimeRange } from "@/lib/time";
 import { db } from "@/server/db";
 import { announceBookingOpen } from "./assignments";
 import { audit } from "./audit";
@@ -112,10 +112,10 @@ export async function sendDailyAgendas(now = new Date()): Promise<number> {
     if (!host.emailAgenda) continue;
     const tz = all[0].assignment.course.timezone;
     const hour = Number(fmt(now, tz, "H"));
-    const today = fmt(now, tz, "yyyy-MM-dd");
+    const today = fmtData(now, tz, "yyyy-MM-dd");
     if (hour < AGENDA_HOURS[0] || hour >= AGENDA_HOURS[1]) continue;
-    if (host.agendaSentAt && fmt(host.agendaSentAt, tz, "yyyy-MM-dd") === today) continue;
-    const todays = all.filter((b) => fmt(b.slot.startsAt, b.assignment.course.timezone, "yyyy-MM-dd") === today);
+    if (host.agendaSentAt && fmtData(host.agendaSentAt, tz, "yyyy-MM-dd") === today) continue;
+    const todays = all.filter((b) => fmtData(b.slot.startsAt, b.assignment.course.timezone, "yyyy-MM-dd") === today);
     if (todays.length === 0) continue;
 
     await db.$transaction(async (tx) => {
@@ -126,7 +126,7 @@ export async function sendDailyAgendas(now = new Date()): Promise<number> {
       if (claimed.count === 0) return;
       const lines = todays.map(
         (b) =>
-          `${fmt(b.slot.startsAt, b.assignment.course.timezone, "HH:mm")}–${fmt(b.slot.endsAt, b.assignment.course.timezone, "HH:mm")}  ${b.student.name} · ${b.assignment.course.code} ${b.assignment.title} · ${b.slot.venue?.name ?? "no venue"}`,
+          `${fmtTimeRange(b.slot.startsAt, b.slot.endsAt, b.assignment.course.timezone)}  ${b.student.name} · ${b.assignment.course.code} ${b.assignment.title} · ${b.slot.venue?.name ?? "no venue"}`,
       );
       await notify(tx, [taId], {
         type: "agenda.daily",

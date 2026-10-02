@@ -4,11 +4,14 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { CourseFields } from "../course-fields";
-import { TimezoneDefault } from "./timezone-default";
+import { redirect } from "next/navigation";
+import { requireUser } from "@/server/auth/session";
 
 export const metadata = { title: "New course" };
 
-export default function NewCoursePage() {
+export default async function NewCoursePage() {
+  // Admins don't join courses: they create one from the console and hand it to its staff.
+  if ((await requireUser()).isAdmin) redirect("/admin/courses?new=1");
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader
@@ -20,7 +23,6 @@ export default function NewCoursePage() {
         <CardContent>
           <ActionForm action={createCourseAction} className="space-y-5">
             <CourseFields />
-            <TimezoneDefault />
             <fieldset className="space-y-2">
               <Label asChild>
                 <legend>Your role in this course</legend>
