@@ -92,3 +92,17 @@ export function canSubmit(args: {
   }
   return allow;
 }
+
+/**
+ * Once marks are recorded, the booking they belong to is pinned: cancelling or
+ * moving it would leave marks for a demo that no longer exists. Staff clear (or
+ * unlock and clear) the marks first; students ask staff.
+ */
+export function canChangeMarkedBooking(evaluation: { status: EvaluationStatus; totalMarks: number | null } | null, who: "staff" | "student"): RuleResult {
+  if (!evaluation || (evaluation.totalMarks === null && evaluation.status === "DRAFT")) return allow;
+  if (who === "student") return deny("Your demo has already been marked, so it can't be changed. Send your TA a request if something is wrong.");
+  if (evaluation.status === "SUBMITTED" || evaluation.status === "FINALIZED") {
+    return deny("their marks are already submitted. Unlock and clear the marks on their student page first.");
+  }
+  return deny("they already have marks for this demo. Clear the marks on their student page first.");
+}

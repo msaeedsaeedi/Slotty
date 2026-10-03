@@ -15,6 +15,12 @@ enum UserStatus {
   DISABLED
 }
 
+/// How clock times are shown to this user (12-hour "2:30 PM" or 24-hour "14:30").
+enum TimeFormat {
+  H12
+  H24
+}
+
 model User {
   id             String     @id @default(cuid())
   email          String     @unique
@@ -27,6 +33,7 @@ model User {
   /// Email preferences (in-app notifications are always kept).
   emailReminders Boolean    @default(true)
   emailAgenda    Boolean    @default(true)
+  timeFormat     TimeFormat @default(H12)
   /// Last time the worker sent this staff member their daily agenda.
   agendaSentAt   DateTime?
   createdAt      DateTime   @default(now())
@@ -98,7 +105,7 @@ model Course {
   code        String
   title       String
   term        String
-  timezone    String   @default("UTC")
+  timezone    String   @default("Asia/Karachi")
   archived    Boolean  @default(false)
   createdById String
   createdAt   DateTime @default(now())
@@ -360,23 +367,27 @@ enum EvaluationStatus {
 }
 
 model Evaluation {
-  id            String           @id @default(cuid())
-  assignmentId  String
-  studentId     String
-  bookingId     String?          @unique
-  evaluatorId   String
-  totalMarks    Float?
-  totalOverride Boolean          @default(false)
-  overrideNote  String?
-  feedback      String?
-  privateNotes  String?
-  status        EvaluationStatus @default(DRAFT)
-  submittedAt   DateTime?
-  reviewedById  String?
-  reviewedAt    DateTime?
-  reviewComment String?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id              String           @id @default(cuid())
+  assignmentId    String
+  studentId       String
+  bookingId       String?          @unique
+  evaluatorId     String
+  totalMarks      Float?
+  totalOverride   Boolean          @default(false)
+  overrideNote    String?
+  feedback        String?
+  privateNotes    String?
+  /// Why staff marked a student who had no demo booking (unusual, so it's recorded).
+  noBookingReason String?
+  /// Why staff marked the demo before it started (also unusual, also recorded).
+  earlyMarkReason String?
+  status          EvaluationStatus @default(DRAFT)
+  submittedAt     DateTime?
+  reviewedById    String?
+  reviewedAt      DateTime?
+  reviewComment   String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   assignment Assignment        @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   student    User              @relation("EvaluationStudent", fields: [studentId], references: [id])

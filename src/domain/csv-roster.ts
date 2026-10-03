@@ -3,6 +3,8 @@ import Papa from "papaparse";
 export type RosterRole = "STUDENT" | "TA" | "INSTRUCTOR";
 
 export interface RosterRow {
+  /** Line in the pasted text or file (1-based). */
+  line: number;
   email: string;
   name: string;
   role: RosterRole;
@@ -53,16 +55,29 @@ function normalizeRole(value: string | undefined): RosterRole | null {
   return null;
 }
 
+/** Columns, in order, when the list has no header row (e.g. just pasted emails). */
+const POSITIONAL = ["email", "name", "role", "section"];
+
+/**
+ * Read a class list: CSV with a header row (our template or a Google Classroom
+ * export), tab-separated text pasted from a spreadsheet, or simply one email per
+ * line (optionally followed by name, role, section).
+ */
 export function parseRoster(csv: string): RosterParseResult {
-  const parsed = Papa.parse<Record<string, string>>(csv.trim(), {
+  const text = csv.trim();
+  const firstCell = text.split(/[\n,;\t]/)[0]?.trim() ?? "";
+  const headerless = EMAIL_RE.test(firstCell);
+  const parsed = Papa.parse<Record<string, string>>(headerless ? `${POSITIONAL.join(",")}\n${text}` : text, {
     header: true,
     skipEmptyLines: "greedy",
     transformHeader: (h) => h.trim().toLowerCase(),
   });
+  // A header we added ourselves isn't a line of the user's text.
+  const lineOffset = headerless ? 1 : 2;
 
   const headers = parsed.meta.fields ?? [];
   if (!headers.some((h) => HEADER_ALIASES[h] === "email")) {
-    return { rows: [], errors: [{ line: 1, message: 'Missing an "email" column.' }] };
+    return { rows: [], errors: [{ line: 1, message: 'No "email" column found. Start with a header row (email,name,role,section) or paste one email per line.' }] };
   }
 
   const rows: RosterRow[] = [];
@@ -70,7 +85,7 @@ export function parseRoster(csv: string): RosterParseResult {
   const seen = new Set<string>();
 
   parsed.data.forEach((record, i) => {
-    const line = i + 2; // 1-based, after the header row
+    const line = i + lineOffset;
     const raw: RawRow = {};
     for (const [key, value] of Object.entries(record)) {
       const field = HEADER_ALIASES[key];
@@ -94,7 +109,7 @@ export function parseRoster(csv: string): RosterParseResult {
     seen.add(email);
     const name =
       raw.name || [raw.firstName, raw.lastName].filter(Boolean).join(" ") || email.split("@")[0];
-    rows.push({ email, name, role, section: raw.section || null });
+    rows.push({ line, email, name, role, section: raw.section || null });
   });
 
   return { rows, errors };

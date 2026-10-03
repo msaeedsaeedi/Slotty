@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarClock, CalendarPlus, ExternalLink, MapPin, User } from "lucide-react";
+import { CalendarClock, ExternalLink, MapPin, User } from "lucide-react";
+import { AddToCalendar } from "@/components/add-to-calendar";
+import { bookingCalendarOptions } from "@/server/services/calendar";
 import { bookSlotAction, cancelBookingAction, joinWaitlistAction, leaveWaitlistAction, rescheduleAction } from "@/app/actions/bookings";
 import { LocalTimeHint } from "@/components/local-time-hint";
 import { PushPrompt } from "@/components/pwa";
@@ -12,7 +14,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { canBookSlot, canCancelBooking, cancelConsequence, rescheduleConsequence, changeBudget, freezeAt, isFrozen, NO_ALLOWANCE } from "@/domain/booking-rules";
-import { fmt, fmtRange } from "@/lib/time";
+import { fmt, fmtData, fmtRange, fmtTimeRange, tzLabel } from "@/lib/time";
 import { requireUser } from "@/server/auth/session";
 import { load } from "@/server/page-utils";
 import { getAssignment } from "@/server/services/assignments";
@@ -58,7 +60,7 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
   // Group bookable slots by day in the course timezone, with optional day/host filters.
   const bookable = slots.filter((s) => s.id !== booking?.slotId && s.seatsLeft > 0);
   const fullSlots = slots.filter((s) => s.id !== booking?.slotId && s.seatsLeft === 0).length;
-  const dayKey = (d: Date) => fmt(d, tz, "yyyy-MM-dd");
+  const dayKey = (d: Date) => fmtData(d, tz, "yyyy-MM-dd");
   const dayOptions = [...new Map(bookable.map((s) => [dayKey(s.startsAt), fmt(s.startsAt, tz, "EEE d MMM")])).entries()];
   const hostOptions = [...new Map(bookable.map((s) => [s.ta.id, s.ta.name])).entries()];
   const pickDay = typeof dayFilter === "string" && dayOptions.some(([k]) => k === dayFilter) ? dayFilter : null;
@@ -152,7 +154,7 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
           <CardContent className="space-y-2 text-sm">
             <p className="flex items-center gap-2">
               <CalendarClock className="size-4 text-muted-foreground" />
-              {fmt(booking.slot.startsAt, tz, "HH:mm")}–{fmt(booking.slot.endsAt, tz, "HH:mm")} <span className="text-muted-foreground">({tz})</span>
+              {fmtTimeRange(booking.slot.startsAt, booking.slot.endsAt, tz)} <span className="text-muted-foreground">({tzLabel(tz)})</span>
             </p>
             <p className="flex items-center gap-2">
               <MapPin className="size-4 text-muted-foreground" />
@@ -166,11 +168,7 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
             <p className="flex items-center gap-2">
               <User className="size-4 text-muted-foreground" /> {booking.slot.ta.name}
             </p>
-            {booking.status === "BOOKED" && (
-              <a href={`/bookings/${booking.id}/calendar`} className="flex items-center gap-2 text-primary underline">
-                <CalendarPlus className="size-4" /> Add to calendar
-              </a>
-            )}
+            {booking.status === "BOOKED" && <AddToCalendar options={bookingCalendarOptions(booking)} />}
             {booking.status === "BOOKED" && (
               <div className="flex flex-wrap items-center gap-2 pt-3">
                 {rescheduling ? (
@@ -208,9 +206,8 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
           <div>
             <h2 className="text-lg font-semibold">{rescheduling ? "Pick a new slot" : "Book a slot"}</h2>
             <p className="text-sm text-muted-foreground">
-              {policy.slotDurationMin}-minute demos · times in {tz}
-              {policy.freezeHours > 0 && ` · changes lock ${policy.freezeHours}h before your slot`}
-              {fullSlots > 0 && ` · ${fullSlots} full slot${fullSlots === 1 ? "" : "s"} hidden`}
+              Each demo takes {policy.slotDurationMin} minutes.
+              {policy.freezeHours > 0 && ` You can change your booking until ${policy.freezeHours} hours before it starts.`}
             </p>
           </div>
           {(dayOptions.length > 1 || hostOptions.length > 1) && (
@@ -289,7 +286,7 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
                         <div className="flex items-center gap-3 rounded-lg border bg-card p-3">
                           <div className="min-w-0 flex-1 text-sm">
                             <p className="font-medium tabular-nums">
-                              {fmt(s.startsAt, tz, "HH:mm")}–{fmt(s.endsAt, tz, "HH:mm")}
+                              {fmtTimeRange(s.startsAt, s.endsAt, tz)}
                             </p>
                             <p className="truncate text-muted-foreground">
                               {s.venue?.name ?? "Venue TBA"} · {s.ta.name}

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { EmptyState, PageHeader } from "@/components/page-header";
+import { BookingStageBadge } from "@/components/booking-stage";
 import { StatusBadge } from "@/components/status-badge";
 import { Card } from "@/components/ui/card";
 import { fmt, fmtRange } from "@/lib/time";
@@ -42,7 +43,9 @@ export default async function StudentCoursePage({ params }: PageProps<"/courses/
             let status: React.ReactNode;
             if (result) status = <StatusBadge status="FINALIZED" label={`Marked: ${result.totalMarks}/${a.maxMarks}`} />;
             else if (booking) status = <StatusBadge status={booking.status} />;
-            else if (a.status === "CLOSED") status = <StatusBadge status="CLOSED" />;
+            else if (a.status === "CLOSED") status = <StatusBadge status="CLOSED" label="Booking closed" />;
+            else if (a.policy?.bookingOpensAt && a.policy.bookingOpensAt > new Date())
+              status = <BookingStageBadge stage="scheduled" opensAt={a.policy.bookingOpensAt} timezone={course.timezone} />;
             else status = <StatusBadge status="NOT_BOOKED" label="Not booked" tone="warning" />;
             return (
               <Link key={a.id} href={`/courses/${courseId}/assignments/${a.id}`} className="flex items-center gap-3 p-4 hover:bg-muted/50">

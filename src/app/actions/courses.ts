@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/server/auth/session";
 import { optStr, run, str, type ActionState } from "@/server/action-utils";
 import {
+  addMember,
   createCourse,
   createVenue,
   deleteVenue,
@@ -78,6 +79,20 @@ export async function importRosterAction(_: ActionState, fd: FormData): Promise<
     const parts = [`${r.enrolled} added`, `${r.invited} invited by email`, `${r.updated} updated`];
     if (r.errors.length) parts.push(`${r.errors.length} rows skipped`);
     return `Roster imported: ${parts.join(", ")}.`;
+  });
+}
+
+export async function addMemberAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run(async () => {
+    const role = str(fd, "role");
+    const r = await addMember(await requireUser(), str(fd, "courseId"), {
+      email: str(fd, "email"),
+      name: str(fd, "name") || undefined,
+      role: role === "TA" || role === "INSTRUCTOR" ? role : "STUDENT",
+      section: str(fd, "section"),
+    });
+    if (r.updated) return `${r.name}'s role was updated.`;
+    return r.invited ? `${r.name} was added and invited by email.` : `${r.name} was added and notified.`;
   });
 }
 

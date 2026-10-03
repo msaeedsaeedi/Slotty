@@ -42,6 +42,9 @@ export async function markAttendanceAction(_: ActionState, fd: FormData): Promis
     const status = str(fd, "status");
     if (status !== "BOOKED" && status !== "COMPLETED" && status !== "NO_SHOW") throw new Error("bad status");
     await markAttendance(await requireUser(), str(fd, "bookingId"), status);
+    // "Completed → mark": continue straight to the marking page.
+    const next = str(fd, "next");
+    if (next.startsWith("/") && !next.startsWith("//")) return { navigate: next };
   });
 }
 

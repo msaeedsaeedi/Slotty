@@ -32,28 +32,35 @@ test("TA runs the whole loop alone: roster → slots → booking → marking →
   await student.getByRole("link", { name: /Sprint demo/ }).click();
   await student.getByRole("button", { name: "Book" }).first().click();
   await expect(student.getByText("Your demo")).toBeVisible();
-  await expect(student.getByText("09:00–09:15")).toBeVisible();
+  await expect(student.getByText("9:00–9:15 AM")).toBeVisible();
   await student.getByRole("link", { name: "Reschedule" }).click();
   await student.getByRole("button", { name: "Move here" }).first().click();
   await expect(student.getByRole("dialog")).toContainText("This uses 1 of your 2 changes");
   await student.getByRole("button", { name: "Move my demo" }).click();
   await expect(student.getByText("Rescheduled.")).toBeVisible();
   await expect(student).not.toHaveURL(/reschedule=1/);
-  await expect(student.getByText("09:15–09:30")).toBeVisible();
+  await expect(student.getByText("9:15–9:30 AM")).toBeVisible();
   await expect(student.getByText(/1 of 2 changes left/)).toBeVisible();
 
-  // TA scores the demo; with no instructor, submitting releases marks. Attendance
-  // can't be recorded before the demo starts.
+  // TA scores the demo on the marking sheet: marks autosave as drafts, and with
+  // no instructor, releasing them is final. Attendance waits for the demo to start.
   await open(ta, `/courses/${courseId}/manage/assignments/${assignmentId}?tab=students`);
   await ta.getByRole("link", { name: "Mark", exact: true }).click();
-  await expect(ta.getByRole("button", { name: "Completed" })).toBeDisabled();
+  await expect(ta.getByText("Attendance can be recorded once the demo starts")).toBeVisible();
+  // The demo is days away, so marking now needs a reason (it's recorded).
+  await ta.getByLabel("Reason for marking before the demo").fill("Demoed early by arrangement");
+  await ta.getByRole("button", { name: "Start marking" }).click();
   await ta.getByLabel("Functionality").fill("5");
   await ta.getByLabel("Code quality").fill("3.5");
-  await expect(ta.getByLabel("Total marks")).toHaveValue("8.5");
+  await expect(ta.getByLabel("Total marks")).toHaveText("8.5");
   await ta.getByLabel("Feedback for the student").fill("Clear walkthrough");
-  await ta.getByLabel("Private notes").fill("Needed hints on tests");
-  await ta.getByRole("button", { name: "Submit & release marks" }).click();
-  await expect(ta.getByText("Finalized").first()).toBeVisible();
+  await ta.getByLabel("Private note").fill("Needed hints on tests");
+  await expect(ta.getByText("Draft saved")).toBeVisible();
+  // A reload keeps everything that was typed.
+  await ta.reload();
+  await expect(ta.getByLabel("Feedback for the student")).toHaveValue("Clear walkthrough");
+  await ta.getByRole("button", { name: "Release 1 mark" }).click();
+  await expect(ta.getByText("1 submitted (1 finalized).")).toBeVisible();
 
   // Student sees marks + feedback, never the private notes.
   await student.reload();
@@ -75,7 +82,8 @@ test("with an instructor, TA submissions wait for review and the instructor fina
   const prof = await login(browser, "prof@e2e.test");
   const courseId = await createCourse(prof, "REV200", "Instructor");
   await importRoster(prof, "email,role\nta@e2e.test,ta\nsam@e2e.test,student");
-  const assignmentId = await createPublishedAssignment(prof, courseId, "Viva");
+  // The TA hosts by default and already has 09:00 slots in another e2e course.
+  const assignmentId = await createPublishedAssignment(prof, courseId, "Viva", { from: "11:00", to: "12:00" });
 
   const student = await login(browser, "sam@e2e.test");
   await open(student, `/courses/${courseId}/assignments/${assignmentId}`);
@@ -85,10 +93,13 @@ test("with an instructor, TA submissions wait for review and the instructor fina
   const ta = await login(browser, "ta@e2e.test");
   await open(ta, `/courses/${courseId}/manage/assignments/${assignmentId}?tab=students`);
   await ta.getByRole("link", { name: "Mark", exact: true }).click();
+  await ta.getByLabel("Reason for marking before the demo").fill("Demoed early by arrangement");
+  await ta.getByRole("button", { name: "Start marking" }).click();
   await ta.getByLabel("Functionality").fill("6");
   await ta.getByLabel("Code quality").fill("4");
-  await ta.getByRole("button", { name: "Submit for review" }).click();
-  await expect(ta.getByText("Awaiting review").first()).toBeVisible();
+  await expect(ta.getByText("Draft saved")).toBeVisible();
+  await ta.getByRole("button", { name: "Submit 1 for review" }).click();
+  await expect(ta.getByText("1 submitted.")).toBeVisible();
 
   // Not released yet.
   await student.reload();

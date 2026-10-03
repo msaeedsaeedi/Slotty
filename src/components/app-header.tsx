@@ -1,29 +1,43 @@
 import Link from "next/link";
-import { Bell, CalendarCheck, LogOut, Shield, UserRound } from "lucide-react";
+import { Bell, CalendarCheck, CalendarClock, LogOut, Shield, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Actor } from "@/server/services/access";
+import { myRoleKinds } from "@/server/services/courses";
 import { unreadCount } from "@/server/services/inbox";
 
 export async function AppHeader({ user }: { user: Actor }) {
-  const unread = await unreadCount(user);
+  const [unread, roles] = await Promise.all([unreadCount(user), myRoleKinds(user)]);
+  // Admins run the platform and never join courses, so the console is all they need.
+  const admin = user.isAdmin;
   return (
     <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4">
-        <Link href="/dashboard" className="mr-2 flex items-center gap-2 font-semibold">
+        <Link href={admin ? "/admin" : "/dashboard"} className="mr-2 flex items-center gap-2 font-semibold">
           <CalendarCheck className="size-5 text-primary" />
           Slotty
         </Link>
         <nav className="flex items-center gap-1 text-sm">
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/dashboard">Courses</Link>
-          </Button>
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/bookings">My bookings</Link>
-          </Button>
-          {user.isAdmin && (
+          {!admin && (
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/dashboard">Home</Link>
+            </Button>
+          )}
+          {!admin && roles.hosts && (
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/today">
+                <CalendarClock /> Demo day
+              </Link>
+            </Button>
+          )}
+          {!admin && roles.student && (
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/bookings">My demos</Link>
+            </Button>
+          )}
+          {admin && (
             <Button asChild variant="ghost" size="sm">
               <Link href="/admin">
-                <Shield /> Admin
+                <Shield /> Administration
               </Link>
             </Button>
           )}

@@ -1,17 +1,40 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { ChevronRight, Plus } from "lucide-react";
+import { BookingStageBadge } from "@/components/booking-stage";
 import { EmptyState } from "@/components/page-header";
-import { StatusBadge } from "@/components/status-badge";
+import { bookingStage } from "@/domain/booking-rules";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { requireUser } from "@/server/auth/session";
 import { load } from "@/server/page-utils";
-import { courseProgress } from "@/server/services/reports";
+import { courseProgress, type AssignmentProgress } from "@/server/services/reports";
+
+/** The single most useful thing to do next for an assignment, and how urgent it is. */
+function nextStep(a: AssignmentProgress): { text: string; tone: "danger" | "warning" | "info" | "done" } {
+  if (a.opensAt && a.opensAt > new Date() && a.status === "PUBLISHED") return { text: "Students are told when booking opens", tone: "info" };
+  if (a.status === "DRAFT") return a.slots ? { text: `${a.slots} slots ready — open booking when you're set`, tone: "info" } : { text: "Add slots, then open booking", tone: "info" };
+  if (a.needsAttendance) return { text: `${a.needsAttendance} past demo${a.needsAttendance === 1 ? " needs" : "s need"} attendance`, tone: "danger" };
+  const toMark = a.completed - a.submitted - a.finalized;
+  if (toMark > 0) return { text: `${toMark} demo${toMark === 1 ? "" : "s"} to mark`, tone: "warning" };
+  if (a.submitted) return { text: `${a.submitted} mark${a.submitted === 1 ? "" : "s"} awaiting review`, tone: "warning" };
+  if (a.status === "PUBLISHED" && a.unbooked) return { text: `${a.unbooked} student${a.unbooked === 1 ? " hasn't" : "s haven't"} booked yet`, tone: "info" };
+  if (a.booked) return { text: `${a.booked} demo${a.booked === 1 ? "" : "s"} coming up`, tone: "info" };
+  return { text: "Nothing waiting", tone: "done" };
+}
+
+const TONE = {
+  danger: "text-red-700 dark:text-red-400",
+  warning: "text-amber-700 dark:text-amber-400",
+  info: "text-foreground",
+  done: "text-muted-foreground",
+};
 
 export default async function ManageCoursePage({ params }: PageProps<"/courses/[courseId]/manage">) {
   const { courseId } = await params;
   const user = await requireUser();
   const progress = await load(courseProgress(user, courseId));
+  const now = new Date();
 
   return (
     <div className="space-y-4">
@@ -24,70 +47,53 @@ export default async function ManageCoursePage({ params }: PageProps<"/courses/[
         </Button>
       </div>
       {progress.length === 0 ? (
-        <EmptyState title="No assignments yet">
-          Create an assignment, set its demo rules and your availability, then publish it for students to book.
-        </EmptyState>
+        <EmptyState title="No assignments yet">Create an assignment, add the times you&apos;re available, then open booking for students.</EmptyState>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2">
           {progress.map((a) => {
-            const pct = (n: number) => (a.students ? Math.round((n / a.students) * 100) : 0);
+            const step = nextStep(a);
             const bookedAny = a.booked + a.completed + a.noShow;
+            const marked = a.submitted + a.finalized;
+
             return (
-              <Link key={a.id} href={`/courses/${courseId}/manage/assignments/${a.id}`}>
-                <Card className="h-full transition-colors hover:border-primary/40">
-                  <CardHeader>
-                    <div className="flex items-start justify-between gap-2">
-                      <CardTitle>{a.title}</CardTitle>
-                      <StatusBadge status={a.status} />
+              <Link key={a.id} href={`/courses/${courseId}/manage/assignments/${a.id}`} className="group">
+                <Card className="h-full gap-3 p-4 transition-colors group-hover:border-primary/40">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-semibold">{a.title}</p>
+                    <BookingStageBadge stage={bookingStage(a.status, a.opensAt, now)} opensAt={a.opensAt} timezone={a.timezone} />
+                  </div>
+                  <p className={cn("flex items-center gap-1 text-sm font-medium", TONE[step.tone])}>
+                    {step.text}
+                    <ChevronRight className="size-4 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
+                  </p>
+                  {a.status !== "DRAFT" && a.students > 0 && (
+                    <div className="space-y-1.5">
+                      <Meter label="Booked" value={bookedAny} of={a.students} className="bg-blue-500" />
+                      <Meter label="Marked" value={marked} of={a.students} className="bg-emerald-500" />
                     </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3 text-sm">
-                    <div>
-                      <div className="mb-1 flex justify-between text-xs text-muted-foreground">
-                        <span>
-                          {bookedAny}/{a.students} booked
-                        </span>
-                        <span>
-                          {a.finalized}/{a.students} finalized
-                        </span>
-                      </div>
-                      <div
-                        className="flex h-2 overflow-hidden rounded-full bg-muted"
-                        role="img"
-                        aria-label={`${a.completed} completed, ${a.booked} booked, ${a.noShow} no-show out of ${a.students} students`}
-                      >
-                        <div className="bg-emerald-500" style={{ width: `${pct(a.completed)}%` }} title="Completed" />
-                        <div className="bg-blue-500" style={{ width: `${pct(a.booked)}%` }} title="Booked" />
-                        <div className="bg-red-400" style={{ width: `${pct(a.noShow)}%` }} title="No-show" />
-                      </div>
-                    </div>
-                    <dl className="grid grid-cols-3 gap-2 text-center sm:grid-cols-6">
-                      {[
-                        ["Unbooked", a.unbooked],
-                        ["Booked", a.booked],
-                        ["Done", a.completed],
-                        ["No-show", a.noShow],
-                        ["Review", a.submitted],
-                        ["Final", a.finalized],
-                      ].map(([label, n]) => (
-                        <div key={label} className="rounded-md bg-muted/60 p-1.5">
-                          <dd className="font-semibold tabular-nums">{n}</dd>
-                          <dt className="text-[11px] text-muted-foreground">{label}</dt>
-                        </div>
-                      ))}
-                    </dl>
-                    {a.needsAttendance > 0 && (
-                      <p className="rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-                        {a.needsAttendance} past demo{a.needsAttendance === 1 ? " needs" : "s need"} attendance recorded
-                      </p>
-                    )}
-                  </CardContent>
+                  )}
                 </Card>
               </Link>
             );
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/** One labelled bar: what it counts is written next to it, so there's nothing to decode. */
+function Meter({ label, value, of, className }: { label: string; value: number; of: number; className: string }) {
+  const pct = of ? Math.round((value / of) * 100) : 0;
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="w-14 shrink-0 text-muted-foreground">{label}</span>
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted" role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={of} aria-valuenow={value}>
+        <div className={cn("h-full rounded-full", className)} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="w-14 shrink-0 text-right tabular-nums">
+        {value} of {of}
+      </span>
     </div>
   );
 }

@@ -61,7 +61,7 @@ export async function notify(tx: Tx, userIds: string[], n: NotificationInput): P
   }
   if (n.email === false) return;
   const users = await tx.user.findMany({
-    where: { id: { in: ids }, status: { not: "DISABLED" }, ...(n.category === "reminder" ? { emailReminders: true } : {}) },
+    where: { id: { in: ids }, status: "ACTIVE", ...(n.category === "reminder" ? { emailReminders: true } : {}) },
     select: { email: true },
   });
   const content = renderEmail(n);

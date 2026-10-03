@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { createContext, startTransition, useActionState, useContext, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -12,6 +12,9 @@ import type { ActionState } from "@/server/action-utils";
 import { useOnline } from "@/components/pwa";
 
 type Action = (state: ActionState, formData: FormData) => Promise<ActionState>;
+
+/** Pending state of the enclosing ActionForm (submits are dispatched by hand, so useFormStatus can't see them). */
+const PendingContext = createContext(false);
 
 /**
  * A <form> bound to a Server Action. Success messages show as toasts; errors
@@ -50,7 +53,7 @@ export function ActionForm({
   // Toasts and navigation run when the action resolves rather than in an effect,
   // so they still happen if the refreshed page no longer renders this form
   // (e.g. the slot a student just booked leaves the picker).
-  const [state, formAction] = useActionState(async (prev: ActionState, fd: FormData) => {
+  const [state, formAction, pending] = useActionState(async (prev: ActionState, fd: FormData) => {
     const result = await action(prev, fd);
     if (result?.ok) {
       if (result.message) toast.success(result.message);
@@ -72,19 +75,24 @@ export function ActionForm({
   return (
     <form
       ref={formRef}
-      action={formAction}
       className={className}
       onSubmit={(e) => {
-        if (!confirm || confirmed.current) {
-          confirmed.current = false;
+        // Dispatch the action ourselves instead of using <form action>: React resets
+        // uncontrolled fields after a form action, which wiped what people typed
+        // when a save failed validation (or after saving a draft).
+        e.preventDefault();
+        const by = (e.nativeEvent as SubmitEvent).submitter;
+        if (confirm && !confirmed.current) {
+          submitter.current = by;
+          setAsking(true);
           return;
         }
-        e.preventDefault();
-        submitter.current = (e.nativeEvent as SubmitEvent).submitter;
-        setAsking(true);
+        confirmed.current = false;
+        const fd = new FormData(e.currentTarget, by instanceof HTMLButtonElement || by instanceof HTMLInputElement ? by : null);
+        startTransition(() => formAction(fd));
       }}
     >
-      {children}
+      <PendingContext.Provider value={pending}>{children}</PendingContext.Provider>
       {confirm && (
         <Dialog open={asking} onOpenChange={setAsking}>
           <DialogContent>
@@ -122,7 +130,8 @@ export function ActionForm({
 
 /** Submit button with a pending spinner. Disabled while offline: changes are never queued for later. */
 export function SubmitButton({ children, ...props }: ComponentProps<typeof Button>) {
-  const { pending } = useFormStatus();
+  const { pending: nativePending } = useFormStatus();
+  const pending = useContext(PendingContext) || nativePending;
   const online = useOnline();
   return (
     <Button type="submit" {...props} disabled={pending || !online || props.disabled} title={!online ? "You're offline" : props.title}>

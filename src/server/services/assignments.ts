@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { DomainError } from "@/domain/result";
-import { fmt } from "@/lib/time";
+import { fmt, tzLabel } from "@/lib/time";
 import { db, type Tx } from "@/server/db";
 import { assertAssignmentRole, assertCourseRole, assertStaff, STAFF, type Actor } from "./access";
 import { audit } from "./audit";
@@ -146,7 +146,7 @@ export async function updateAssignment(actor: Actor, assignmentId: string, input
       notified = booked.length;
     }
     if (reannounce && assignment.status === "PUBLISHED") {
-      await announceBookingOpens(tx, { ...assignment, title: data.title }, data.policy.bookingOpensAt!, tz);
+      await announceBookingOpens(tx, { ...assignment, title: data.title }, data.policy.bookingOpensAt!, tz, { changed: true });
     }
     await audit(tx, actor, {
       action: "assignment.update",
@@ -167,11 +167,14 @@ async function studentIds(tx: Tx, courseId: string) {
 }
 
 /** "Booking opens on …" — sent at publish time when booking opens later. */
-async function announceBookingOpens(tx: Tx, a: AnnounceTarget, opensAt: Date, tz: string) {
+async function announceBookingOpens(tx: Tx, a: AnnounceTarget, opensAt: Date, tz: string, opts: { changed?: boolean } = {}) {
+  const when = fmt(opensAt, tz, "EEEE d MMMM 'at' HH:mm");
   await notify(tx, await studentIds(tx, a.courseId), {
-    type: "assignment.opens_soon",
-    title: `Demo booking opens ${fmt(opensAt, tz, "EEE d MMM, HH:mm")}: ${a.title}`,
-    body: `Demo slots for ${a.course.code} — ${a.title} are published. Booking opens ${fmt(opensAt, tz, "EEEE d MMMM 'at' HH:mm")} (${tz}). We'll remind you when it opens.`,
+    type: opts.changed ? "assignment.opening_moved" : "assignment.opens_soon",
+    title: opts.changed ? `New booking time: ${a.title} opens ${fmt(opensAt, tz, "EEE d MMM, HH:mm")}` : `Demo booking opens ${fmt(opensAt, tz, "EEE d MMM, HH:mm")}: ${a.title}`,
+    body: opts.changed
+      ? `Booking for ${a.course.code} — ${a.title} now opens ${when} (${tzLabel(tz)}). We'll remind you when it opens.`
+      : `Demo slots for ${a.course.code} — ${a.title} are ready. Booking opens ${when} (${tzLabel(tz)}). We'll remind you when it opens.`,
     link: `/courses/${a.courseId}/assignments/${a.id}`,
   });
 }
@@ -202,9 +205,9 @@ export async function announceBookingOpen(tx: Tx, a: AnnounceTarget, opts: { reo
 export async function publishAssignment(actor: Actor, assignmentId: string, now = new Date()) {
   return db.$transaction(async (tx) => {
     const { assignment } = await assertAssignmentRole(tx, actor, assignmentId, STAFF, { write: true });
-    if (assignment.status === "PUBLISHED") throw new DomainError("Already published.");
+    if (assignment.status === "PUBLISHED") throw new DomainError("Booking is already open.");
     const slotCount = await tx.slot.count({ where: { assignmentId, status: { not: "CANCELLED" } } });
-    if (slotCount === 0) throw new DomainError("Add availability to create slots before publishing.");
+    if (slotCount === 0) throw new DomainError("Add slots before opening booking: every student is notified, so there must be times to book.");
     await tx.slot.updateMany({ where: { assignmentId, status: "DRAFT" }, data: { status: "PUBLISHED" } });
     await tx.assignment.update({ where: { id: assignmentId }, data: { status: "PUBLISHED" } });
 

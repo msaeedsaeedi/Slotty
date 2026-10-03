@@ -1,44 +1,9 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { requireUser } from "@/server/auth/session";
-import { bool, run, str, type ActionState } from "@/server/action-utils";
-import { reviewEvaluation, saveEvaluation, submitEvaluations, unlockEvaluation, finalizeMany } from "@/server/services/evaluations";
-
-export async function saveEvaluationAction(_: ActionState, fd: FormData): Promise<ActionState> {
-  const intent = str(fd, "intent"); // "save" | "submit" | "save-next"
-  let nextUrl = "";
-  const result = await run(async () => {
-    const user = await requireUser();
-    const evaluationId = str(fd, "evaluationId");
-    const criterionIds = fd.getAll("criterionId").map(String);
-    const scores = criterionIds
-      .map((criterionId) => ({
-        criterionId,
-        raw: str(fd, `points:${criterionId}`),
-        comment: str(fd, `comment:${criterionId}`),
-      }))
-      .filter((s) => s.raw !== "")
-      .map((s) => ({ criterionId: s.criterionId, points: Number(s.raw), comment: s.comment }));
-    const total = str(fd, "totalMarks");
-    await saveEvaluation(user, evaluationId, {
-      scores,
-      totalMarks: total === "" ? null : Number(total),
-      totalOverride: bool(fd, "totalOverride"),
-      overrideNote: str(fd, "overrideNote"),
-      feedback: str(fd, "feedback"),
-      privateNotes: str(fd, "privateNotes"),
-    });
-    if (intent === "submit") {
-      const [r] = await submitEvaluations(user, [evaluationId]);
-      nextUrl = str(fd, "returnTo");
-      return r.status === "FINALIZED" ? "Submitted and finalized — marks released to the student." : "Submitted to the instructor for review.";
-    }
-    return "Saved.";
-  });
-  if (result?.ok && nextUrl) redirect(nextUrl);
-  return result;
-}
+import { attempt, run, str, type ActionState } from "@/server/action-utils";
+import { markAttendance } from "@/server/services/bookings";
+import { clearMarks, reviewEvaluation, saveDraft, submitEvaluations, unlockEvaluation, finalizeMany } from "@/server/services/evaluations";
 
 export async function submitManyAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return run(async () => {
@@ -71,5 +36,42 @@ export async function finalizeManyAction(_: ActionState, fd: FormData): Promise<
     if (ids.length === 0) return "Nothing to finalize.";
     const n = await finalizeMany(await requireUser(), ids);
     return `${n} finalized — marks released.`;
+  });
+}
+
+export interface DraftInput {
+  assignmentId: string;
+  studentId: string;
+  scores: { criterionId: string; points: number; comment?: string }[];
+  totalMarks: number | null;
+  totalOverride: boolean;
+  overrideNote?: string;
+  feedback?: string;
+  privateNotes?: string;
+  noBookingReason?: string;
+  earlyMarkReason?: string;
+}
+
+/** Autosave from the marking sheet (no page refresh). */
+export async function saveDraftAction(input: DraftInput) {
+  return attempt(async () => {
+    const { assignmentId, studentId, ...data } = input;
+    const r = await saveDraft(await requireUser(), assignmentId, studentId, data);
+    return { ...r, savedAt: new Date().toISOString() };
+  });
+}
+
+/** Attendance from the marking sheet (no page refresh). */
+export async function sheetAttendanceAction(bookingId: string, status: "BOOKED" | "COMPLETED" | "NO_SHOW") {
+  return attempt(async () => {
+    await markAttendance(await requireUser(), bookingId, status);
+    return status;
+  });
+}
+
+export async function clearMarksAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run(async () => {
+    await clearMarks(await requireUser(), str(fd, "evaluationId"), str(fd, "reason"));
+    return "Marks cleared. The booking can be changed now.";
   });
 }

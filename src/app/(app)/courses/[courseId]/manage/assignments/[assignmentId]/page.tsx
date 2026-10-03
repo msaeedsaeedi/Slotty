@@ -1,50 +1,67 @@
 import Link from "next/link";
-import { Download, Pencil } from "lucide-react";
-import { addAvailabilityAction, closeAssignmentAction, deleteAssignmentAction, publishAssignmentAction } from "@/app/actions/scheduling";
+import { CalendarRange, Clock, PenLine, Repeat, Settings2, Target } from "lucide-react";
+import { closeAssignmentAction, publishAssignmentAction } from "@/app/actions/scheduling";
 import { ActionForm, SubmitButton } from "@/components/action-form";
+import { BookingStageBadge } from "@/components/booking-stage";
+import { markHref } from "@/components/demo-day";
+import { bookingStage } from "@/domain/booking-rules";
 import { EmptyState, PageHeader } from "@/components/page-header";
-import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { fmt } from "@/lib/time";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { currentClock, dayRange, fmt, fmtData, fmtTimeRange, tzLabel } from "@/lib/time";
+import { cn } from "@/lib/utils";
 import { requireUser } from "@/server/auth/session";
 import { load } from "@/server/page-utils";
 import { getAssignment } from "@/server/services/assignments";
 import { listCourseStaff, listVenues } from "@/server/services/courses";
 import { listAssignmentRoster } from "@/server/services/evaluations";
-import { listSlotsForStaff } from "@/server/services/slots";
+import { listHostBusy, listSlotsForStaff } from "@/server/services/slots";
 import { waitlistCount } from "@/server/services/waitlist";
+import { AvailabilityPlanner } from "./availability-planner";
 import { SlotTable, type SlotRow } from "./slot-table";
 import { StudentsTable, type StudentRow } from "./students-table";
 
 export default async function ManageAssignmentPage({ params, searchParams }: PageProps<"/courses/[courseId]/manage/assignments/[assignmentId]">) {
   const { courseId, assignmentId } = await params;
-  const { tab } = await searchParams;
+  const { tab, filter } = await searchParams;
   const user = await requireUser();
-  const { assignment, criteria } = await load(getAssignment(user, assignmentId));
+  const { assignment, criteria, role } = await load(getAssignment(user, assignmentId));
   const tz = assignment.course.timezone;
   const policy = assignment.policy!;
-  const [slots, venues, staff, roster, waiting] = await Promise.all([
+  const [slots, venues, staff, roster, waiting, busy] = await Promise.all([
     listSlotsForStaff(user, assignmentId),
     listVenues(user, courseId),
     listCourseStaff(courseId),
     listAssignmentRoster(user, assignmentId),
     waitlistCount(user, assignmentId),
+    listHostBusy(user, assignmentId),
   ]);
   const activeTab = tab === "students" ? "students" : "slots";
   const now = new Date();
   const base = `/courses/${courseId}/manage/assignments/${assignmentId}`;
-  const drafts = slots.filter((s) => s.status === "DRAFT").length;
   const liveSlots = slots.filter((s) => s.status !== "CANCELLED");
-  const totalCapacity = liveSlots.reduce((n, s) => n + s.capacity, 0);
-  const hasBookings = roster.some((r) => r.booking);
+  const hiddenSlots = slots.filter((s) => s.status === "DRAFT").length;
+  const upcoming = liveSlots.filter((s) => s.startsAt > now);
+  const freePlaces = upcoming.reduce((n, s) => n + Math.max(0, s.capacity - s.bookings.length), 0);
+  const booked = roster.filter((r) => r.booking).length;
+  const hasBookings = booked > 0;
+  const stage = bookingStage(assignment.status, policy.bookingOpensAt, now);
+  const instructor = role === "INSTRUCTOR";
+
+  // Every day of the demo window, for the slot planner.
+  const days: { key: string; weekday: string; date: string; past: boolean }[] = [];
+  for (let key = fmtData(policy.windowStart, tz, "yyyy-MM-dd"); days.length < 62; ) {
+    const { start, end } = dayRange(key, tz);
+    if (start >= policy.windowEnd) break;
+    days.push({ key, weekday: fmt(start, tz, "EEE"), date: fmt(start, tz, "d MMM"), past: end <= now });
+    key = fmtData(end, tz, "yyyy-MM-dd");
+  }
 
   const slotRows: SlotRow[] = slots.map((s) => ({
     id: s.id,
+    dayKey: fmtData(s.startsAt, tz, "yyyy-MM-dd"),
     day: fmt(s.startsAt, tz, "EEEE d MMMM"),
-    time: `${fmt(s.startsAt, tz, "HH:mm")}–${fmt(s.endsAt, tz, "HH:mm")}`,
+    time: fmtTimeRange(s.startsAt, s.endsAt, tz),
     host: s.ta.name,
     venue: s.venue?.name ?? null,
     status: s.status,
@@ -59,68 +76,84 @@ export default async function ManageAssignmentPage({ params, searchParams }: Pag
     section: r.section,
     slot: r.booking ? fmt(r.booking.slot.startsAt, tz, "EEE d MMM, HH:mm") : null,
     host: r.booking?.slot.ta.name ?? null,
+    bookingId: r.booking?.id ?? null,
     bookingStatus: r.booking?.status ?? null,
     evaluationId: r.evaluation?.id ?? null,
     evaluationStatus: r.evaluation?.status ?? null,
+    noBooking: Boolean(r.evaluation?.noBookingReason),
     total: r.evaluation?.totalMarks ?? null,
   }));
 
+  const facts = [
+    { icon: CalendarRange, label: "Demos", value: `${fmt(policy.windowStart, tz, "EEE d MMM")} – ${fmt(policy.windowEnd, tz, "EEE d MMM")}` },
+    {
+      icon: Clock,
+      label: "Each slot",
+      value: `${policy.slotDurationMin} min${policy.bufferMin ? ` + ${policy.bufferMin} min break` : ""} · ${policy.capacityPerSlot === 1 ? "1 student" : `${policy.capacityPerSlot} students`}`,
+    },
+    {
+      icon: Repeat,
+      label: "Students can change",
+      value: policy.maxReschedules === 0 ? "No changes" : `${policy.maxReschedules}×, until ${policy.freezeHours} h before`,
+    },
+    { icon: Target, label: "Marked out of", value: `${assignment.maxMarks}${criteria.length ? ` · ${criteria.length} criteria` : ""}` },
+  ];
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         title={
           <span className="flex flex-wrap items-center gap-2">
-            {assignment.title} <StatusBadge status={assignment.status} />
+            {assignment.title}
+            <BookingStageBadge stage={stage} opensAt={policy.bookingOpensAt} timezone={tz} />
           </span>
-        }
-        description={
-          <>
-            Demos {fmt(policy.windowStart, tz, "EEE d MMM HH:mm")} – {fmt(policy.windowEnd, tz, "EEE d MMM HH:mm")} · {policy.slotDurationMin} min
-            {policy.bufferMin > 0 && ` + ${policy.bufferMin} min break`} · {policy.capacityPerSlot} per slot · locks {policy.freezeHours}h before ·{" "}
-            {policy.maxReschedules} change{policy.maxReschedules === 1 ? "" : "s"} per student · marked out of {assignment.maxMarks}
-            {criteria.length > 0 && ` (${criteria.length}-row rubric)`}
-          </>
         }
         back={{ href: `/courses/${courseId}/manage`, label: "Assignments" }}
         actions={
-          <>
-            <Button asChild variant="outline" size="sm">
-              <Link href={`${base}/edit`}>
-                <Pencil /> Edit
+          hasBookings && (
+            <Button asChild>
+              <Link href={markHref({ id: assignmentId, courseId }, { day: fmtData(now, tz, "yyyy-MM-dd") })}>
+                <PenLine /> Marking sheet
               </Link>
             </Button>
-            <Button asChild variant="outline" size="sm">
-              <a href={`${base}/export`}>
-                <Download /> Export CSV
-              </a>
-            </Button>
-            {assignment.status !== "PUBLISHED" ? (
-              <ActionForm action={publishAssignmentAction} compact confirmLabel="Publish" confirm="Publish? All students in the course will be notified that booking is open.">
-                <input type="hidden" name="assignmentId" value={assignmentId} />
-                <SubmitButton size="sm">{assignment.status === "CLOSED" ? "Reopen booking" : "Publish"}</SubmitButton>
-              </ActionForm>
-            ) : (
-              <ActionForm action={closeAssignmentAction} compact confirmLabel="Close booking" confirm="Close booking? Students won't be able to book or change slots. Existing bookings stay.">
-                <input type="hidden" name="assignmentId" value={assignmentId} />
-                <SubmitButton size="sm" variant="outline">
-                  Close booking
-                </SubmitButton>
-              </ActionForm>
-            )}
-            {!hasBookings && (
-              <ActionForm action={deleteAssignmentAction} compact confirmLabel="Delete" confirm="Delete this assignment and all its slots?">
-                <input type="hidden" name="assignmentId" value={assignmentId} />
-                <input type="hidden" name="courseId" value={courseId} />
-                <SubmitButton size="sm" variant="ghost" className="text-destructive">
-                  Delete
-                </SubmitButton>
-              </ActionForm>
-            )}
-          </>
+          )
         }
       />
 
-      <div className="flex gap-1 border-b text-sm">
+      <div className="grid gap-3 lg:grid-cols-[1fr_340px]">
+        <Card className="gap-0 py-0">
+          <dl className="grid grid-cols-2 divide-x divide-y sm:grid-cols-4 sm:divide-y-0">
+            {facts.map((f) => (
+              <div key={f.label} className="p-3">
+                <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <f.icon className="size-3.5" aria-hidden /> {f.label}
+                </dt>
+                <dd className="mt-0.5 text-sm font-medium">{f.value}</dd>
+              </div>
+            ))}
+          </dl>
+          <div className="flex items-center justify-between border-t px-3 py-2 text-xs text-muted-foreground">
+            <span>Times are {tzLabel(tz)}</span>
+            <Link href={`${base}/edit`} className="inline-flex items-center gap-1 font-medium text-foreground hover:underline">
+              <Settings2 className="size-3.5" /> Edit settings
+            </Link>
+          </div>
+        </Card>
+
+        <BookingPanel
+          assignmentId={assignmentId}
+          status={assignment.status}
+          slots={liveSlots.length}
+          hiddenSlots={hiddenSlots}
+          capacity={freePlaces}
+          students={roster.length}
+          booked={booked}
+          waiting={waiting}
+          opensAt={policy.bookingOpensAt && policy.bookingOpensAt > now ? fmt(policy.bookingOpensAt, tz, "EEE d MMM 'at' HH:mm") : null}
+        />
+      </div>
+
+      <nav className="flex gap-1 border-b text-sm" aria-label="Assignment sections">
         {[
           ["slots", `Slots (${liveSlots.length})`],
           ["students", `Students & marks (${roster.length})`],
@@ -128,104 +161,153 @@ export default async function ManageAssignmentPage({ params, searchParams }: Pag
           <Link
             key={key}
             href={`${base}?tab=${key}`}
-            className={`-mb-px border-b-2 px-3 py-2 ${activeTab === key ? "border-primary font-medium" : "border-transparent text-muted-foreground"}`}
+            aria-current={activeTab === key ? "page" : undefined}
+            className={cn("px-3 py-2", activeTab === key ? "font-medium shadow-[inset_0_-2px_0_0_var(--color-primary)]" : "text-muted-foreground hover:text-foreground")}
           >
             {label}
           </Link>
         ))}
-      </div>
+      </nav>
 
       {activeTab === "slots" ? (
-        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-          <div className="order-2 space-y-3 lg:order-1">
-            <p className="text-sm text-muted-foreground">
-              {liveSlots.length} slots · room for {totalCapacity} of {roster.length} students
-              {drafts > 0 && ` · ${drafts} draft slot${drafts === 1 ? "" : "s"} go live when you publish`}
-              {waiting > 0 && ` · ${waiting} student${waiting === 1 ? " is" : "s are"} waiting for a free slot`}
-            </p>
+        <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
+          <div className="order-2 min-w-0 lg:order-1">
             {slots.length === 0 ? (
-              <EmptyState title="No slots yet">Add your availability — Slotty splits it into {policy.slotDurationMin}-minute slots.</EmptyState>
+              <EmptyState title="No slots yet">Pick the days and hours you&apos;re available on the right. Slotty splits them into {policy.slotDurationMin}-minute slots.</EmptyState>
             ) : (
               <SlotTable
                 slots={slotRows}
                 venues={venues.map((v) => ({ id: v.id, name: v.name }))}
-                hosts={staff.map((s) => ({ id: s.userId, name: s.user.name }))}
+                hosts={instructor ? staff.map((s) => ({ id: s.userId, name: s.user.name })) : []}
               />
             )}
           </div>
           <Card className="order-1 h-fit lg:order-2">
             <CardHeader>
-              <CardTitle>Add availability</CardTitle>
-              <CardDescription>Times in {tz}. Overlaps with the host&apos;s other slots are rejected.</CardDescription>
+              <CardTitle>
+                <h2>Add slots</h2>
+              </CardTitle>
             </CardHeader>
             <CardContent>
               {assignment.status === "CLOSED" ? (
-                <p className="text-sm text-muted-foreground">Reopen booking to add slots.</p>
+                <p className="text-sm text-muted-foreground">Booking is closed. Reopen it to add slots.</p>
               ) : (
-                <ActionForm action={addAvailabilityAction} className="space-y-3">
-                  <input type="hidden" name="courseId" value={courseId} />
-                  <input type="hidden" name="assignmentId" value={assignmentId} />
-                  <div className="space-y-2">
-                    <Label htmlFor="taId">Host</Label>
-                    <select id="taId" name="taId" defaultValue={user.id} className="h-8 w-full rounded-lg border bg-background px-2 text-sm">
-                      {staff.map((s) => (
-                        <option key={s.userId} value={s.userId}>
-                          {s.user.name}
-                          {s.userId === user.id ? " (you)" : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="venueId">Venue</Label>
-                    <select id="venueId" name="venueId" className="h-8 w-full rounded-lg border bg-background px-2 text-sm">
-                      <option value="">To be announced</option>
-                      {venues.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {v.name}
-                        </option>
-                      ))}
-                    </select>
-                    {venues.length === 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        <Link className="underline" href={`/courses/${courseId}/manage/venues`}>
-                          Add venues
-                        </Link>{" "}
-                        so students know where to go.
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="date">Date</Label>
-                    <Input
-                      id="date"
-                      name="date"
-                      type="date"
-                      min={fmt(policy.windowStart, tz, "yyyy-MM-dd")}
-                      max={fmt(policy.windowEnd, tz, "yyyy-MM-dd")}
-                      defaultValue={fmt(policy.windowStart > now ? policy.windowStart : now, tz, "yyyy-MM-dd")}
-                      required
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="startTime">From</Label>
-                      <Input id="startTime" name="startTime" type="time" defaultValue="09:00" required />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="endTime">To</Label>
-                      <Input id="endTime" name="endTime" type="time" defaultValue="12:00" required />
-                    </div>
-                  </div>
-                  <SubmitButton className="w-full">Generate slots</SubmitButton>
-                </ActionForm>
+                <AvailabilityPlanner
+                  courseId={courseId}
+                  assignmentId={assignmentId}
+                  timezone={tz}
+                  timezoneLabel={tzLabel(tz)}
+                  clock={currentClock()}
+                  policy={{
+                    windowStart: policy.windowStart.toISOString(),
+                    windowEnd: policy.windowEnd.toISOString(),
+                    slotDurationMin: policy.slotDurationMin,
+                    bufferMin: policy.bufferMin,
+                    capacityPerSlot: policy.capacityPerSlot,
+                  }}
+                  coverage={{ students: roster.length, booked, freePlaces }}
+                  days={days}
+                  hosts={
+                    instructor
+                      ? [...staff].sort((a, b) => Number(a.role === "INSTRUCTOR") - Number(b.role === "INSTRUCTOR")).map((s) => ({ id: s.userId, name: s.role === "INSTRUCTOR" ? `${s.user.name} (instructor)` : s.user.name }))
+                      : [{ id: user.id, name: user.name }]
+                  }
+                  me={user.id}
+                  venues={venues.map((v) => ({ id: v.id, name: v.name }))}
+                  busy={busy.map((b) => ({ taId: b.taId, startsAt: b.startsAt.toISOString(), endsAt: b.endsAt.toISOString() }))}
+                  open={assignment.status === "PUBLISHED"}
+                />
               )}
             </CardContent>
           </Card>
         </div>
       ) : (
-        <StudentsTable rows={studentRows} maxMarks={assignment.maxMarks} markHref={`${base}/evaluate`} />
+        <StudentsTable
+          rows={studentRows}
+          maxMarks={assignment.maxMarks}
+          detailsHref={`${base}/evaluate`}
+          markBase={`${base}/mark`}
+          exportHref={`${base}/export`}
+          initialFilter={typeof filter === "string" ? filter : undefined}
+        />
       )}
     </div>
+  );
+}
+
+/**
+ * Where booking stands and the one thing to do next: open it (once there are
+ * slots to book), close it, or reopen it.
+ */
+function BookingPanel(p: {
+  assignmentId: string;
+  status: "DRAFT" | "PUBLISHED" | "CLOSED";
+  slots: number;
+  hiddenSlots: number;
+  capacity: number;
+  students: number;
+  booked: number;
+  waiting: number;
+  opensAt: string | null;
+}) {
+  const short = p.status !== "CLOSED" && p.capacity < p.students - p.booked;
+  return (
+    <Card className="gap-2 p-4 text-sm">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Booking</p>
+      {p.status === "DRAFT" && (
+        <>
+          <p>
+            {p.slots === 0
+              ? "Students can't see this assignment yet. Add slots first: opening booking notifies every student, so there must be times to pick."
+              : `${p.slots} slot${p.slots === 1 ? " is" : "s are"} ready but hidden. Opening booking shows them and notifies all ${p.students} students${p.opensAt ? ` that booking starts ${p.opensAt}` : ""}.`}
+          </p>
+          <ActionForm
+            action={publishAssignmentAction}
+            compact
+            confirmLabel="Open booking"
+            confirm={`Open booking? All ${p.students} students are notified${p.opensAt ? ` that they can book from ${p.opensAt}` : " and can book straight away"}.`}
+          >
+            <input type="hidden" name="assignmentId" value={p.assignmentId} />
+            <SubmitButton className="w-full" disabled={p.slots === 0}>
+              Open booking
+            </SubmitButton>
+          </ActionForm>
+        </>
+      )}
+      {p.status === "PUBLISHED" && (
+        <>
+          <p>
+            <span className="font-semibold tabular-nums">{p.booked}</span> of {p.students} students booked
+            {p.waiting > 0 && ` · ${p.waiting} waiting for a free slot`}.
+            {p.opensAt && ` Students can book from ${p.opensAt}.`}
+          </p>
+          {short && <p className="text-amber-700 dark:text-amber-400">Only {p.capacity} free places left for {p.students - p.booked} unbooked students — add slots.</p>}
+          <ActionForm
+            action={closeAssignmentAction}
+            compact
+            confirmLabel="Close booking"
+            confirm="Close booking? Students can no longer book or change their slot. Existing bookings, demos and marking carry on."
+          >
+            <input type="hidden" name="assignmentId" value={p.assignmentId} />
+            <SubmitButton variant="outline" className="w-full">
+              Close booking
+            </SubmitButton>
+          </ActionForm>
+        </>
+      )}
+      {p.status === "CLOSED" && (
+        <>
+          <p>
+            Closed with {p.booked} of {p.students} students booked. Demos and marking carry on; nobody can book or change.
+          </p>
+          <ActionForm action={publishAssignmentAction} compact confirmLabel="Reopen booking" confirm="Reopen booking? Students who haven't booked are notified.">
+            <input type="hidden" name="assignmentId" value={p.assignmentId} />
+            <SubmitButton variant="outline" className="w-full">
+              Reopen booking
+            </SubmitButton>
+          </ActionForm>
+        </>
+      )}
+    </Card>
   );
 }

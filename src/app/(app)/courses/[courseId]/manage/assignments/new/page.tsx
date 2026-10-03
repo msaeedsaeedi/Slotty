@@ -1,7 +1,7 @@
 import { addDays } from "date-fns";
 import { createAssignmentAction } from "@/app/actions/scheduling";
 import { PageHeader } from "@/components/page-header";
-import { toLocalInput } from "@/lib/time";
+import { toLocalInput, tzLabel } from "@/lib/time";
 import { requireUser } from "@/server/auth/session";
 import { load } from "@/server/page-utils";
 import { getCourseForActor } from "@/server/services/courses";
@@ -16,12 +16,12 @@ export default async function NewAssignmentPage({ params }: PageProps<"/courses/
   const start = addDays(new Date(), 7);
   start.setUTCMinutes(0, 0, 0);
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-5xl">
       <PageHeader title="New assignment" back={{ href: `/courses/${courseId}/manage`, label: "Assignments" }} />
       <AssignmentForm
         action={createAssignmentAction}
         courseId={courseId}
-        timezone={course.timezone}
+        timezoneLabel={tzLabel(course.timezone)}
         defaults={{
           title: "",
           description: "",

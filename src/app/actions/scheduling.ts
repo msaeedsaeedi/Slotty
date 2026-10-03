@@ -84,8 +84,8 @@ export async function publishAssignmentAction(_: ActionState, fd: FormData): Pro
   return run(async () => {
     const r = await publishAssignment(await requireUser(), str(fd, "assignmentId"));
     return r.opensAt
-      ? `Published — students have been notified that booking opens ${fmt(r.opensAt, r.timezone, "EEE d MMM, HH:mm")}.`
-      : "Published — students have been notified.";
+      ? `Booking is set to open ${fmt(r.opensAt, r.timezone, "EEE d MMM, HH:mm")} — students have been told.`
+      : "Booking is open — students have been notified.";
   });
 }
 
@@ -108,15 +108,19 @@ export async function deleteAssignmentAction(_: ActionState, fd: FormData): Prom
 export async function addAvailabilityAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return run(async () => {
     const tz = await courseTimezone(str(fd, "courseId"));
-    const date = str(fd, "date");
-    if (!date) throw new DomainError("Pick a date.");
+    const days = fd.getAll("date").map(String).filter(Boolean);
+    if (days.length === 0) throw new DomainError("Pick at least one day.");
+    const from = str(fd, "startTime");
+    const to = str(fd, "endTime");
+    if (!from || !to) throw new DomainError("Enter the hours you're available.");
     const r = await addAvailability(await requireUser(), str(fd, "assignmentId"), {
       taId: str(fd, "taId"),
       venueId: optStr(fd, "venueId"),
-      startsAt: fromLocalInput(`${date}T${str(fd, "startTime")}`, tz),
-      endsAt: fromLocalInput(`${date}T${str(fd, "endTime")}`, tz),
+      blocks: days.map((d) => ({ startsAt: fromLocalInput(`${d}T${from}`, tz), endsAt: fromLocalInput(`${d}T${to}`, tz) })),
     });
-    return `${r.slots} slot${r.slots === 1 ? "" : "s"} created${r.status === "DRAFT" ? " as drafts" : " and published"}.`;
+    const n = `${r.slots} slot${r.slots === 1 ? "" : "s"} added`;
+    const skipped = r.skipped ? ` (${r.skipped} skipped — already taken)` : "";
+    return `${n}${skipped}. ${r.status === "DRAFT" ? "Students can book them once you open booking." : "Students can book them now."}`;
   });
 }
 

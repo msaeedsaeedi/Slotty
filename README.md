@@ -15,18 +15,42 @@ Next.js 16 (App Router, Server Actions), TypeScript, PostgreSQL with Prisma 7, T
 
 ## Getting started
 
+There are three ways to run Slotty, each with its own database in the same local Postgres:
+
+| | Command | URL | Database |
+| --- | --- | --- | --- |
+| Development | `bun run dev` + `bun run worker` | https://slotty.local (Caddy) or http://localhost:3000 | `slotty` (`.env`) |
+| Production image, locally | `bun run app:up` | http://localhost:3001 | `slotty_app` |
+| Tests | `bun run test`, `bun run test:e2e` | http://localhost:3100 (e2e) | `slotty_test` (`.env.test`) |
+
+The real production stack (VPS) lives in `deploy/`, described [below](#deploying-single-vps).
+
+### Development
+
 ```bash
+cp .env.example .env # once
 bun install
-bun run infra:up     # Postgres + Mailpit in Docker (infra/docker-compose.yml)
+bun run infra:up     # Postgres, Mailpit and Caddy in Docker (infra/docker-compose.yml)
 bun run db:migrate   # apply migrations
 bun run db:seed      # demo data (see below)
-bun run dev          # http://localhost:3000
+bun run dev          # https://slotty.local
 bun run worker       # in a second terminal: sends queued emails and schedules reminders
 ```
 
-Copy `.env.example` to `.env` first if you don't have one. For push notifications (PWA), add VAPID keys (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`): `bunx web-push generate-vapid-keys`. The service worker only registers in production builds unless `NEXT_PUBLIC_ENABLE_SW=1` is set. Emails go to Mailpit, at **http://localhost:8025**. If `SMTP_HOST` is empty, the worker prints them to its console instead. **http://localhost:3000/dev/mail** also lists every queued email (development only).
+Caddy serves the dev server at **https://slotty.local**, using a certificate from its own local CA (`infra/Caddyfile`). This needs a one-time setup:
 
-To try the production image locally, run `bun run app:up`. It builds the Docker image and runs migrate, web and worker against their own database, at **http://localhost:3001**, with email going to Mailpit. Stop everything with `bun run infra:down`.
+1. Add `127.0.0.1 slotty.local` to your hosts file. On WSL, edit the Windows file `C:\Windows\System32\drivers\etc\hosts` as Administrator.
+2. Run `bun run infra:cert`, which copies Caddy's CA to `infra/caddy-root.crt`. Then trust it: on WSL, run `certutil.exe -user -addstore Root infra/caddy-root.crt` and restart the browser. The CA is kept in the `caddy_data` volume, so you only redo this if you delete that volume.
+
+`APP_URL` in `.env` controls links in emails. Set it to `http://localhost:3000` if you skip Caddy.
+
+Emails go to Mailpit, at **http://localhost:8025**. If `SMTP_HOST` is empty, the worker prints them to its console instead. **/dev/mail** also lists every queued email (development only). For push notifications (PWA), add VAPID keys (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`): `bunx web-push generate-vapid-keys`. The service worker only registers in production builds unless `NEXT_PUBLIC_ENABLE_SW=1` is set.
+
+Other database scripts: `bun run db:studio` opens Prisma Studio, and `bun run db:reset` wipes the dev database and re-applies migrations and the seed.
+
+### Production image, locally
+
+`bun run app:up` builds the same Docker image that `deploy/` runs. It then runs migrate, web and worker against `slotty_app`, at **http://localhost:3001**, with email going to Mailpit. Use it to check the build, migrations and the service worker before deploying. `bun run infra:down` stops everything.
 
 ### Demo accounts (after `db:seed`)
 

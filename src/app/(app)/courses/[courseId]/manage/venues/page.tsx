@@ -57,7 +57,13 @@ export default async function VenuesPage({ params }: PageProps<"/courses/[course
             </div>
             <div className="space-y-2">
               <Label htmlFor="meetingUrl">Meeting link (online)</Label>
-              <Input id="meetingUrl" name="meetingUrl" type="url" placeholder="https://meet.example.com/abc" />
+              <Input id="meetingUrl" name="meetingUrl" type="url" placeholder="https://meet.google.com/abc-defg-hij" />
+              <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                Paste a link you created.
+                <button type="button" disabled className="rounded-md border px-2 py-0.5 opacity-60" title="Coming soon">
+                  Create a Google Meet link automatically · coming soon
+                </button>
+              </p>
             </div>
             <SubmitButton>Add venue</SubmitButton>
           </ActionForm>

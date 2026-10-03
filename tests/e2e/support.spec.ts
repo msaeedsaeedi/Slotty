@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { createCourse, createPublishedAssignment, importRoster, login, open } from "./helpers";
 
-test("a stuck student asks for help, staff move them, and the calendar feed follows", async ({ browser }) => {
+test("a stuck student asks for help, staff move them, and their calendar file follows", async ({ browser }) => {
   test.setTimeout(300_000); // visits several pages the dev server compiles on first use
   const ta = await login(browser, "ta@e2e.test");
   const courseId = await createCourse(ta, "HELP300", "TA");
@@ -14,7 +14,7 @@ test("a stuck student asks for help, staff move them, and the calendar feed foll
   await open(ria, `/courses/${courseId}/assignments/${assignmentId}`);
   await ria.getByRole("button", { name: "Book" }).first().click();
   await expect(ria.getByText("Your demo")).toBeVisible();
-  await expect(ria.getByRole("link", { name: "Add to calendar" })).toBeVisible();
+  await expect(ria.getByRole("button", { name: "Add to calendar" })).toBeVisible();
 
   // She can't make it and asks staff instead of spending changes.
   await ria.getByText("Need help with your booking?").click();
@@ -37,15 +37,14 @@ test("a stuck student asks for help, staff move them, and the calendar feed foll
   await open(ria, `/courses/${courseId}/assignments/${assignmentId}`);
   await expect(ria.getByText("Handled")).toBeVisible();
   // The move answers her request automatically, and her demo card shows the new time.
-  await expect(ria.getByText(/Placed in .*14:15–14:30/)).toBeVisible();
+  await expect(ria.getByText(/Placed in .*2:15–2:30 PM/)).toBeVisible();
   await expect(ria.getByText("Your demo")).toBeVisible();
-  await expect(ria.getByText("14:15–14:30", { exact: false }).first()).toBeVisible();
+  await expect(ria.getByText("2:15–2:30 PM", { exact: false }).first()).toBeVisible();
 
-  // Personal calendar feed from the account page.
-  await open(ria, "/account");
-  await ria.getByRole("button", { name: "Create calendar link" }).click();
-  const feedUrl = await ria.getByLabel("Calendar subscription link").inputValue();
-  expect(feedUrl).toMatch(/\/calendar\//);
-  const feed = await ria.request.get(new URL(feedUrl).pathname);
-  expect(await feed.text()).toContain("SUMMARY:HELP300 demo: Oral exam");
+  // "Add to calendar" offers Google, Outlook, or a file for the booking as it is now.
+  await ria.getByRole("button", { name: "Add to calendar" }).click();
+  await expect(ria.getByRole("menuitem", { name: "Google Calendar" })).toHaveAttribute("href", /calendar\.google\.com/);
+  const icsHref = await ria.getByRole("menuitem", { name: /Download \.ics/ }).getAttribute("href");
+  const ics = await ria.request.get(icsHref!);
+  expect(await ics.text()).toContain("SUMMARY:HELP300 demo: Oral exam");
 });

@@ -4,10 +4,12 @@ import { StatusBadge } from "@/components/status-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
 import { fmtRange } from "@/lib/time";
+import { AddToCalendar } from "@/components/add-to-calendar";
 import { requireUser } from "@/server/auth/session";
+import { bookingCalendarOptions } from "@/server/services/calendar";
 import { listMyBookings } from "@/server/services/bookings";
 
-export const metadata = { title: "My bookings" };
+export const metadata = { title: "My demos" };
 
 export default async function BookingsPage() {
   const user = await requireUser();
@@ -15,7 +17,7 @@ export default async function BookingsPage() {
   const now = new Date();
   return (
     <div>
-      <PageHeader title="My bookings" description="Every demo you've booked, including cancelled and past ones." />
+      <PageHeader title="My demos" description="Every demo you've booked, including cancelled and past ones." />
       {bookings.length === 0 ? (
         <EmptyState title="No bookings yet">Open a course to book a demo slot.</EmptyState>
       ) : (
@@ -51,9 +53,9 @@ export default async function BookingsPage() {
                   <TableCell>
                     <StatusBadge status={b.status} />
                     {b.status === "BOOKED" && b.slot.endsAt > now && (
-                      <a href={`/bookings/${b.id}/calendar`} className="mt-1 block text-xs text-primary underline">
-                        Add to calendar
-                      </a>
+                      <div className="mt-1">
+                        <AddToCalendar options={bookingCalendarOptions(b)} variant="ghost" />
+                      </div>
                     )}
                   </TableCell>
                 </TableRow>

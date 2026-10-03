@@ -88,7 +88,7 @@ async function main() {
     },
   });
   await addAvailability(ta, assignment.id, { taId: ta.id, venueId: lab.id, startsAt: at(2, "09:00"), endsAt: at(2, "12:00") });
-  await addAvailability(ta, assignment.id, { taId: prof.id, venueId: lab.id, startsAt: at(3, "14:00"), endsAt: at(3, "16:00") });
+  await addAvailability(prof, assignment.id, { taId: prof.id, venueId: lab.id, startsAt: at(3, "14:00"), endsAt: at(3, "16:00") });
   await publishAssignment(ta, assignment.id);
   const slots = await db.slot.findMany({ where: { assignmentId: assignment.id }, orderBy: { startsAt: "asc" } });
   await bookSlot(students[0], slots[0].id);

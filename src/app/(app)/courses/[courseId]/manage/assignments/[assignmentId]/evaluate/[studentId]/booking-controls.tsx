@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ChangeBudget } from "@/domain/booking-rules";
-import { fmt } from "@/lib/time";
+import { fmt, fmtTime } from "@/lib/time";
 
 /**
  * Staff tools for one student's booking: place or move them (ignores the freeze
@@ -51,7 +51,7 @@ export function BookingControls({
               <select id="place-slot" name="slotId" required className="h-8 min-w-0 flex-1 rounded-lg border bg-background px-2 text-sm">
                 {choices.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {fmt(s.startsAt, timezone, "EEE d MMM HH:mm")}–{fmt(s.endsAt, timezone, "HH:mm")} · {s.ta.name} ·{" "}
+                    {fmt(s.startsAt, timezone, "EEE d MMM HH:mm")}–{fmtTime(s.endsAt, timezone)} · {s.ta.name} ·{" "}
                     {s.booked >= s.capacity ? "full" : `${s.capacity - s.booked} free`}
                   </option>
                 ))}
