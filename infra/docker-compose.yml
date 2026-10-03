@@ -1,5 +1,6 @@
-# Local development services: Postgres (same major version as production) and Mailpit.
-#   bun run infra:up      → Postgres on localhost:5432, Mailpit SMTP on :1025, inbox at http://localhost:8025
+# Local development services: Postgres (same major version as production), Mailpit and Caddy.
+#   bun run infra:up      → Postgres on localhost:5432, Mailpit SMTP on :1025, inbox at http://localhost:8025,
+#                           Caddy serving https://slotty.local → `bun run dev` on :3000 (see infra/Caddyfile)
 #   bun run infra:down    (add -v to the underlying command to wipe the data volume)
 #
 # Databases: slotty (dev, .env), slotty_test (tests, .env.test), slotty_app (the `app` profile).
@@ -42,6 +43,16 @@ services:
     image: axllent/mailpit
     ports: ["1025:1025", "8025:8025"]
 
+  caddy:
+    image: caddy:2
+    ports: ["80:80", "443:443"]
+    # Docker Desktop provides host.docker.internal already; this adds it on a plain Linux engine.
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
   migrate:
     <<: *app
     command: ["node_modules/.bin/prisma", "migrate", "deploy"]
@@ -68,3 +79,5 @@ services:
 
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:

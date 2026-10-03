@@ -52,3 +52,6 @@ next-env.d.ts
 
 # production backups (deploy/backup.sh)
 /deploy/backups
+
+# Caddy's local CA certificate (bun run infra:cert)
+/infra/caddy-root.crt

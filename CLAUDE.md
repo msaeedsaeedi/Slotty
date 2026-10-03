@@ -3,7 +3,7 @@
 # Slotty — working notes
 
 - Package manager/runner is **bun** (`bun run …`, `bunx …`). No pnpm or sudo.
-- Local services run in Docker: `bun run infra:up` (infra/docker-compose.yml) starts Postgres 17 on :5432 and Mailpit (SMTP :1025, inbox http://localhost:8025). One server holds three databases: `slotty` (dev, `.env`), `slotty_test` (tests, `.env.test`), and `slotty_app` (`bun run app:up`, the production image on :3001).
+- Local services run in Docker: `bun run infra:up` (infra/docker-compose.yml) starts Postgres 17 on :5432, Mailpit (SMTP :1025, inbox http://localhost:8025) and Caddy, which serves `bun run dev` at https://slotty.local. One server holds three databases: `slotty` (dev, `.env`), `slotty_test` (tests, `.env.test`), and `slotty_app` (`bun run app:up`, the production image on :3001).
 - If `docker` says permission denied in an agent shell, run it through `sg docker -c "…"`.
 - `prisma migrate reset` is blocked for agents. Ask the user before wiping the dev DB.
 - Checks: `bun run typecheck`, `bun run lint`, `bun run test` (unit + integration), `bun run test:e2e`.

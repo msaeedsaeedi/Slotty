@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Lets the E2E server (port 3100, test DB) run next to `next dev` without sharing build output.
   distDir: process.env.NEXT_DIST_DIR || ".next",
+  // The dev server behind Caddy at https://slotty.local (infra/Caddyfile); HMR and dev assets need this.
+  allowedDevOrigins: ["slotty.local"],
   async headers() {
     return [
       {

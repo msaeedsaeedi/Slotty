@@ -1,0 +1,6 @@
+# Local HTTPS for `bun run dev`: https://slotty.local → next dev on the host (port 3000).
+# `tls internal` signs the certificate with Caddy's own local CA; trust it once (see README).
+slotty.local {
+	tls internal
+	reverse_proxy host.docker.internal:3000
+}
