@@ -1,0 +1,126 @@
+variable "account_role_arn" {
+  description = "Role in the slotty-prod account to manage it with (output slotty_admin_role_arn of ../org)."
+  type        = string
+}
+
+variable "domain" {
+  description = "Public hostname; its DNS is delegated to the Route 53 zone created here."
+  type        = string
+  default     = "slotty.msaeedsaeedi.com"
+}
+
+variable "alert_email" {
+  description = "Where CloudWatch alarms go (confirm the SNS subscription email once)."
+  type        = string
+}
+
+variable "github_repo" {
+  description = "owner/name of the repository whose master branch may deploy."
+  type        = string
+  default     = "msaeedsaeedi/Slotty"
+}
+
+variable "launch" {
+  description = "false until CI has pushed the first image: services exist but run no tasks."
+  type        = bool
+  default     = false
+}
+
+# ── Sizing (the cost levers) ──
+
+variable "web_cpu" {
+  type    = number
+  default = 512
+}
+
+variable "web_memory" {
+  type    = number
+  default = 1024
+}
+
+variable "web_min" {
+  description = "Minimum web tasks. 2 = one per AZ (the first on regular Fargate, the rest on Spot)."
+  type        = number
+  default     = 2
+}
+
+variable "web_max" {
+  type    = number
+  default = 4
+}
+
+variable "worker_cpu" {
+  type    = number
+  default = 256
+}
+
+variable "worker_memory" {
+  type    = number
+  default = 512
+}
+
+variable "db_instance_class" {
+  type    = string
+  default = "db.t4g.micro"
+}
+
+variable "db_multi_az" {
+  type    = bool
+  default = false
+}
+
+variable "db_storage_gb" {
+  type    = number
+  default = 20
+}
+
+variable "db_max_storage_gb" {
+  type    = number
+  default = 50
+}
+
+variable "nat_mode" {
+  description = "\"instance\" (fck-nat on t4g.nano, ~$7/mo) or \"gateway\" (managed NAT Gateway, ~$33/mo; also lift the SCP deny in ../org)."
+  type        = string
+  default     = "instance"
+  validation {
+    condition     = contains(["instance", "gateway"], var.nat_mode)
+    error_message = "nat_mode must be \"instance\" or \"gateway\"."
+  }
+}
+
+variable "api_rate_limit" {
+  description = "API Gateway steady-state requests per second (the edge rate limit; there is no WAF)."
+  type        = number
+  default     = 50
+}
+
+variable "api_burst_limit" {
+  type    = number
+  default = 100
+}
+
+variable "enable_guardduty" {
+  description = "GuardDuty threat detection (30-day free trial, then a few $/month)."
+  type        = bool
+  default     = false
+}
+
+variable "enable_exec" {
+  description = "Allow `aws ecs execute-command` into running tasks."
+  type        = bool
+  default     = true
+}
+
+# ── Web Push. Generate once: bunx web-push generate-vapid-keys. Empty = push off. ──
+
+variable "vapid_public_key" {
+  type    = string
+  default = ""
+}
+
+variable "vapid_private_key" {
+  type      = string
+  default   = ""
+  sensitive = true
+}

@@ -1,0 +1,4 @@
+# Copy to terraform.tfvars (gitignored).
+account_email = "you+slotty-aws@example.com"
+alert_email   = "you@example.com"
+budget_usd    = 50

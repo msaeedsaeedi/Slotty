@@ -33,3 +33,10 @@ Needs: outbox emails with attachments, and an opt-in for the invites. Until then
 
 - **Intermittent e2e timeout.** Once, the instructor test timed out on a page load after the service worker arrived (it passed on rerun). Watch for it; if it recurs, suspect `waitForLoadState("networkidle")` in `tests/e2e/helpers.ts` together with SW registration.
 - **E2E now runs on a production build** (`next build && next start`, see `playwright.config.ts`). Under `next dev`, Fast Refresh from on-demand compiling sometimes dropped the page refresh after an action in multi-browser tests. `/dev/mail` is enabled there through `ENABLE_DEV_MAIL=1`.
+
+## Hosting (AWS, `infra/aws`)
+
+Bootstrap tier, about $47/month against a $50 budget. Next steps, in the order they're worth paying for:
+- **WAF** (~$10/mo) or CloudFront's flat-rate plan once traffic is real; today API Gateway throttling is the only rate limit.
+- **Multi-AZ RDS** (`db_multi_az`, ~+$14/mo) when a few minutes of downtime during an AZ outage stops being acceptable.
+- **ALB instead of API Gateway** if responses need streaming, longer than 30 s, or larger than 10 MB.

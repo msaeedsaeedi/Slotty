@@ -14,3 +14,7 @@ tests
 !.env.example
 deploy/.env
 deploy/backups
+dist
+infra/aws/**/.terraform
+infra/aws/**/*.tfstate*
+.github
