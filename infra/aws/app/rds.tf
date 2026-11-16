@@ -16,8 +16,9 @@ resource "aws_db_parameter_group" "main" {
   family = "postgres17"
 
   parameter {
-    name  = "rds.force_ssl"
-    value = "1"
+    name         = "rds.force_ssl"
+    value        = "1"
+    apply_method = "pending-reboot"
   }
   # Log statements slower than 1 s.
   parameter {
