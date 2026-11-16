@@ -4,6 +4,64 @@
 
 resource "aws_sesv2_email_identity" "domain" {
   email_identity = var.domain
+  # Every message from the domain uses it, so the app doesn't need to name it.
+  configuration_set_name = aws_sesv2_configuration_set.main.configuration_set_name
+}
+
+# Bounces, complaints and rejects go to the alerts topic (SNS email). The account-level
+# suppression list (on by default) stops later sends to those addresses.
+resource "aws_sesv2_configuration_set" "main" {
+  configuration_set_name = local.name
+  reputation_options {
+    reputation_metrics_enabled = true
+  }
+  suppression_options {
+    suppressed_reasons = ["BOUNCE", "COMPLAINT"]
+  }
+}
+
+resource "aws_sesv2_configuration_set_event_destination" "feedback" {
+  configuration_set_name = aws_sesv2_configuration_set.main.configuration_set_name
+  event_destination_name = "bounces-and-complaints"
+  event_destination {
+    enabled              = true
+    matching_event_types = ["BOUNCE", "COMPLAINT", "REJECT"]
+    sns_destination {
+      topic_arn = aws_sns_topic.alerts.arn
+    }
+  }
+}
+
+resource "aws_sns_topic_policy" "alerts" {
+  arn = aws_sns_topic.alerts.arn
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "AccountOwns"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::${local.account_id}:root" }
+        Action    = ["SNS:Publish", "SNS:Subscribe", "SNS:GetTopicAttributes", "SNS:SetTopicAttributes", "SNS:ListSubscriptionsByTopic", "SNS:DeleteTopic"]
+        Resource  = aws_sns_topic.alerts.arn
+      },
+      {
+        Sid       = "CloudWatchAlarms"
+        Effect    = "Allow"
+        Principal = { Service = "cloudwatch.amazonaws.com" }
+        Action    = "SNS:Publish"
+        Resource  = aws_sns_topic.alerts.arn
+        Condition = { StringEquals = { "aws:SourceAccount" = local.account_id } }
+      },
+      {
+        Sid       = "SesFeedback"
+        Effect    = "Allow"
+        Principal = { Service = "ses.amazonaws.com" }
+        Action    = "SNS:Publish"
+        Resource  = aws_sns_topic.alerts.arn
+        Condition = { StringEquals = { "aws:SourceAccount" = local.account_id } }
+      },
+    ]
+  })
 }
 
 resource "aws_route53_record" "dkim" {
@@ -58,9 +116,14 @@ resource "aws_iam_user_policy" "ses_smtp" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect    = "Allow"
-      Action    = "ses:SendRawEmail"
-      Resource  = aws_sesv2_email_identity.domain.arn
+      Effect = "Allow"
+      Action = "ses:SendRawEmail"
+      # SES authorizes every identity involved: the sending domain, and (in the sandbox) the
+      # verified recipient, plus the configuration set. The From address is what's pinned.
+      Resource = [
+        "arn:aws:ses:${local.region}:${local.account_id}:identity/*",
+        aws_sesv2_configuration_set.main.arn,
+      ]
       Condition = { StringLike = { "ses:FromAddress" = "*@${var.domain}" } }
     }]
   })
