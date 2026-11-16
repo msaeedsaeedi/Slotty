@@ -1,8 +1,8 @@
 # Production stack for a single VPS: Caddy (HTTPS) → web, plus the worker and Postgres.
 #   cd deploy && cp .env.example .env   # fill it in
 #   docker compose up -d --build
-# Moving to AWS later: web → ECS service behind an ALB, worker → ECS service with 1 task,
-# migrate → one-off ECS task, postgres → RDS. The image and env variables stay the same.
+# The AWS deployment (infra/aws) runs the same images: web and worker → ECS Fargate services,
+# migrate → a one-off ECS task, postgres → RDS. Env variables stay the same.
 
 x-app: &app
   image: slotty-app:latest
@@ -31,7 +31,9 @@ services:
   # Applies pending migrations on every `up`, then exits; web and worker wait for it.
   migrate:
     <<: *app
-    command: ["node_modules/.bin/prisma", "migrate", "deploy"]
+    # The `migrate` image target carries the Prisma CLI; the app image doesn't.
+    image: slotty-app:migrate
+    build: { context: .., target: migrate }
     depends_on:
       postgres: { condition: service_healthy }
     restart: "no"
@@ -49,7 +51,7 @@ services:
   # One worker is plenty; jobs claim their rows, so extra workers would share work, not duplicate it.
   worker:
     <<: *app
-    command: ["bun", "src/jobs/worker.ts"]
+    command: ["node", "dist/jobs/worker.js"]
     # Lets it finish the batch it's sending on deploy/restart (it force-exits after 25s).
     stop_grace_period: 30s
     depends_on:

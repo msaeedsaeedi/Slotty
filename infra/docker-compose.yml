@@ -55,7 +55,9 @@ services:
 
   migrate:
     <<: *app
-    command: ["node_modules/.bin/prisma", "migrate", "deploy"]
+    # The `migrate` image target carries the Prisma CLI; the app image doesn't.
+    image: slotty-app:migrate
+    build: { context: .., target: migrate }
     depends_on:
       postgres: { condition: service_healthy }
 
@@ -72,7 +74,7 @@ services:
 
   worker:
     <<: *app
-    command: ["bun", "src/jobs/worker.ts"]
+    command: ["node", "dist/jobs/worker.js"]
     stop_grace_period: 30s
     depends_on:
       migrate: { condition: service_completed_successfully }

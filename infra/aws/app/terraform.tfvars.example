@@ -1,0 +1,10 @@
+# Copy to terraform.tfvars (gitignored).
+account_role_arn = "arn:aws:iam::<slotty-prod account id>:role/OrganizationAccountAccessRole"
+alert_email      = "you@example.com"
+
+# Set to true after CI has pushed the first image.
+launch = false
+
+# bunx web-push generate-vapid-keys   (leave empty to run without push notifications)
+vapid_public_key  = ""
+vapid_private_key = ""
