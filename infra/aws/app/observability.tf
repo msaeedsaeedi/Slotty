@@ -132,13 +132,28 @@ resource "aws_cloudwatch_metric_alarm" "nat_status" {
   alarm_actions       = local.alarm_actions
 }
 
-# Worker job failures ("[worker] <job> failed") counted from its logs.
-resource "aws_cloudwatch_log_metric_filter" "worker_failures" {
-  name           = "worker-job-failures"
+# Worker problems, from its logs, as one alarm:
+#   job crashes   "[worker] <job> failed"           → any crash alerts
+#   failed sends  "[worker] … failed=N" (summaries) → only 10+ in 30 min: an outage (SMTP auth,
+#                 SES limits), not one bad address. Bounces/complaints arrive via SES events.
+resource "aws_cloudwatch_log_metric_filter" "worker_crashes" {
+  name           = "worker-job-crashes"
   log_group_name = aws_cloudwatch_log_group.task["worker"].name
-  pattern        = "\"[worker]\" \"failed\""
+  pattern        = "\"[worker]\" \"failed\" -\"failed=\""
   metric_transformation {
-    name          = "WorkerJobFailures"
+    name          = "WorkerJobCrashes"
+    namespace     = "Slotty"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "email_send_failures" {
+  name           = "email-send-failures"
+  log_group_name = aws_cloudwatch_log_group.task["worker"].name
+  pattern        = "\"[worker]\" \"failed=\""
+  metric_transformation {
+    name          = "EmailSendFailures"
     namespace     = "Slotty"
     value         = "1"
     default_value = "0"
@@ -147,14 +162,36 @@ resource "aws_cloudwatch_log_metric_filter" "worker_failures" {
 
 resource "aws_cloudwatch_metric_alarm" "worker_failures" {
   alarm_name          = "${local.name}-worker-failures"
-  alarm_description   = "Worker jobs failing repeatedly (see /slotty/worker logs)."
-  namespace           = "Slotty"
-  metric_name         = "WorkerJobFailures"
-  statistic           = "Sum"
-  period              = 900
+  alarm_description   = "Worker job crashed, or 10+ failed email sends in 30 min (see /slotty/worker logs and Admin → email outbox)."
   evaluation_periods  = 1
-  threshold           = 3
+  threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = local.alarm_actions
+  ok_actions          = local.alarm_actions
+
+  metric_query {
+    id          = "problem"
+    expression  = "IF(crashes >= 1 OR sends >= 10, 1, 0)"
+    label       = "Worker problem"
+    return_data = true
+  }
+  metric_query {
+    id = "crashes"
+    metric {
+      namespace   = "Slotty"
+      metric_name = "WorkerJobCrashes"
+      period      = 1800
+      stat        = "Sum"
+    }
+  }
+  metric_query {
+    id = "sends"
+    metric {
+      namespace   = "Slotty"
+      metric_name = "EmailSendFailures"
+      period      = 1800
+      stat        = "Sum"
+    }
+  }
 }
