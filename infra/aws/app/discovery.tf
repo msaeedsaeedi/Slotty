@@ -18,6 +18,9 @@ resource "aws_service_discovery_service" "web" {
     }
   }
 
-  # Health comes from ECS (the container health check), not Route 53 checks.
-  health_check_custom_config {}
+  # Health comes from ECS (the container health check), not Route 53 checks. The argument is
+  # deprecated (AWS always uses 1) but an empty block isn't kept, which drops custom health.
+  health_check_custom_config {
+    failure_threshold = 1
+  }
 }
