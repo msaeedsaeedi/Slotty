@@ -1,0 +1,150 @@
+% slottydoc.sty — the design system for Slotty's system documentation.
+% Typography, colour tokens, callouts, tables and the commands that tie prose to the code.
+% Every chapter uses only what's defined here, so the document stays visually coherent.
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{slottydoc}[2026/11/16 Slotty documentation style]
+
+% ── Page and type ────────────────────────────────────────────────────────────
+\RequirePackage[a4paper, top=26mm, bottom=28mm, inner=28mm, outer=24mm, headsep=9mm]{geometry}
+\RequirePackage{amsmath, amssymb}   % before fontspec and cleveref
+\RequirePackage{fontspec}
+\setmainfont{Libertinus Serif}
+\setsansfont{Libertinus Sans}
+\setmonofont{inconsolatazi4-Regular.otf}[BoldFont=inconsolatazi4-Bold.otf, Scale=MatchLowercase]
+\RequirePackage[protrusion=true]{microtype}
+\RequirePackage[english]{babel}
+\RequirePackage{csquotes}
+\setlength{\parskip}{0.45\baselineskip plus 2pt}
+\setlength{\parindent}{0pt}
+\linespread{1.06}
+
+% ── Colour tokens (use these names, never raw colours) ───────────────────────
+\RequirePackage[table]{xcolor}
+\definecolor{ink}{HTML}{1B1F24}         % body text
+\definecolor{muted}{HTML}{5C6670}       % secondary text, captions
+\definecolor{rulegrey}{HTML}{D5DAE0}    % hairlines
+\definecolor{wash}{HTML}{F3F5F7}        % table stripes, code backgrounds
+\definecolor{accent}{HTML}{0F6E6E}      % Slotty teal: headings, links
+\definecolor{accentwash}{HTML}{E3F1F0}
+% Callout tones
+\definecolor{decisiontone}{HTML}{2F5FA8}
+\definecolor{ruletone}{HTML}{0F6E6E}
+\definecolor{risktone}{HTML}{B23B2E}
+\definecolor{notetone}{HTML}{5C6670}
+\definecolor{todotone}{HTML}{B7791F}
+\definecolor{audittone}{HTML}{6B3FA0}
+% AWS service categories (the AWS architecture-icon palette)
+\definecolor{awscompute}{HTML}{ED7100}
+\definecolor{awsnetwork}{HTML}{8C4FFF}
+\definecolor{awsdatabase}{HTML}{C925D1}
+\definecolor{awssecurity}{HTML}{DD344C}
+\definecolor{awsbusiness}{HTML}{DD344C}   % business applications (e.g. SES)
+\definecolor{awsstorage}{HTML}{7AA116}
+\definecolor{awsmanage}{HTML}{E7157B}
+\definecolor{awsintegration}{HTML}{E7157B}
+\definecolor{awsgeneric}{HTML}{232F3E}
+\color{ink}
+
+% ── Headings, headers, footers (KOMA-Script) ─────────────────────────────────
+\addtokomafont{disposition}{\sffamily\color{accent}}
+\addtokomafont{chapter}{\Huge\bfseries}
+\addtokomafont{part}{\Huge\bfseries}
+\addtokomafont{section}{\Large\bfseries}
+\addtokomafont{subsection}{\large\bfseries\color{ink}}
+\addtokomafont{caption}{\small\color{muted}}
+\addtokomafont{captionlabel}{\sffamily\bfseries\color{ink}}
+\RedeclareSectionCommand[beforeskip=-1.6\baselineskip, afterskip=.6\baselineskip]{section}
+\RequirePackage[automark, headsepline=0.4pt]{scrlayer-scrpage}
+\setkomafont{headsepline}{\color{rulegrey}}
+\clearpairofpagestyles
+\ohead{\sffamily\small\color{muted}\headmark}
+\ihead{\sffamily\small\color{muted}Slotty system documentation}
+\ofoot{\sffamily\small\color{muted}\pagemark}
+\setkomafont{pageheadfoot}{\normalfont}
+
+% ── Lists, tables, links ─────────────────────────────────────────────────────
+\RequirePackage{enumitem}
+\setlist{nosep, leftmargin=1.4em, itemsep=.25\baselineskip}
+\setlist[description]{font=\sffamily\bfseries\color{ink}, leftmargin=1.4em}
+\RequirePackage{array, booktabs, tabularx, longtable, xltabular, multirow}
+\renewcommand{\arraystretch}{1.25}
+\setlength{\aboverulesep}{0.4ex}
+\setlength{\belowrulesep}{0.6ex}
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+% Table header row: \thead{Col}&\thead{Col}\\
+\newcommand{\thead}[1]{\sffamily\bfseries\small #1}
+\newcommand{\tablefont}{\small}
+\RequirePackage{siunitx}
+\sisetup{group-separator={,}, round-mode=places, round-precision=2}
+\RequirePackage{graphicx}
+\PassOptionsToPackage{obeyspaces, hyphens}{url}   % \code keeps the spaces in commands
+\RequirePackage{url}
+\RequirePackage[colorlinks, linkcolor=accent, urlcolor=accent, citecolor=accent,
+  bookmarksnumbered, pdfusetitle]{hyperref}
+\RequirePackage[nameinlink, capitalise, noabbrev]{cleveref}
+\RequirePackage{xurl}
+\urlstyle{tt}
+
+% ── Code ─────────────────────────────────────────────────────────────────────
+\RequirePackage{fancyvrb}
+\RequirePackage{listings}
+\lstset{basicstyle=\ttfamily\small, columns=fullflexible, keepspaces, breaklines,
+  backgroundcolor=\color{wash}, frame=none, xleftmargin=.6em, framexleftmargin=.6em,
+  aboveskip=.6\baselineskip, belowskip=.4\baselineskip, showstringspaces=false,
+  keywordstyle=\color{accent}\bfseries, commentstyle=\color{muted}\itshape, upquote}
+\lstdefinelanguage{hcl}{morekeywords={resource,variable,data,locals,output,module,provider,terraform},
+  morecomment=[l]{\#}, morestring=[b]"}
+
+% ── Linking prose to the system ──────────────────────────────────────────────
+% Repository base for source links. Builds pass the commit: latexmk -usepretex='\def\docrev{<sha>}'.
+\providecommand{\docrev}{master}
+\newcommand{\repourl}{https://github.com/msaeedsaeedi/Slotty}
+% \src{src/domain/booking-rules.ts}: a file in the repo, linked at the documented revision.
+\newcommand{\src}[1]{\href{\repourl/blob/\docrev/#1}{\textcolor{accent}{\nolinkurl{#1}}}}
+% \code{bookSlot}: an identifier in the code (function, column, enum value). Breaks like a URL,
+% so long dotted names fit narrow table columns. Write it raw: \code{NO_SHOW}, not \code{NO\_SHOW}.
+\DeclareUrlCommand{\code}{\urlstyle{tt}}
+% \envvar{APP_URL}, \tfvar{web_min}: configuration names.
+\DeclareUrlCommand{\envvar}{\urlstyle{tt}}
+\newcommand{\tfvar}[1]{\texttt{\detokenize{#1}}}
+% \route{/courses/[id]}: an app URL path.
+\newcommand{\route}[1]{\textcolor{muted}{\nolinkurl{#1}}}
+% \ui{Book}: a label the user sees.
+\newcommand{\ui}[1]{\textsf{\emph{#1}}}
+% \term{bolt}: first use of a defined term (see the glossary).
+\newcommand{\term}[1]{\emph{#1}}
+% \aws{Amazon RDS}: an AWS service name.
+\newcommand{\aws}[1]{\textsf{#1}}
+
+% ── Callouts ─────────────────────────────────────────────────────────────────
+\RequirePackage[most]{tcolorbox}
+\tcbset{slottybox/.style={enhanced, breakable, sharp corners, boxrule=0pt, leftrule=2.2pt,
+  colback=wash, left=8pt, right=8pt, top=5pt, bottom=5pt, before skip=.8\baselineskip,
+  after skip=.8\baselineskip, fonttitle=\sffamily\bfseries\small, coltitle=ink,
+  attach title to upper={\enspace}}}
+% \begin{decision}{ADR-003} … \end{decision}: a decision with its record.
+\newtcolorbox{decision}[1]{slottybox, colframe=decisiontone, title={\color{decisiontone}Decision #1.}}
+% \begin{brule}{BR-B-04} … : a business rule the code enforces.
+\newtcolorbox{brule}[1]{slottybox, colframe=ruletone, title={\color{ruletone}Rule #1.}}
+\newtcolorbox{risk}{slottybox, colframe=risktone, title={\color{risktone}Risk.}}
+\newtcolorbox{note}{slottybox, colframe=notetone, title={\color{notetone}Note.}}
+% \begin{auditnote}: what an auditor should verify, and how.
+\newtcolorbox{auditnote}{slottybox, colframe=audittone, title={\color{audittone}For auditors.}}
+% \begin{todo}: content this chapter still needs. Listed in the document-status table.
+\newtcolorbox{todo}{slottybox, colframe=todotone, colback=todotone!6, title={\color{todotone}To be written.}}
+
+% ── Document status ──────────────────────────────────────────────────────────
+% \chapterstatus{complete|draft|stub}{last reviewed YYYY-MM-DD}{sources of truth}
+% Printed under the chapter title, so a reader knows how far to trust it.
+\newcommand{\statusbadge}[1]{%
+  \def\tmp@complete{complete}\def\tmp@draft{draft}\def\tmp@s{#1}%
+  \ifx\tmp@s\tmp@complete\def\tmp@c{ruletone}\else\ifx\tmp@s\tmp@draft\def\tmp@c{todotone}\else\def\tmp@c{risktone}\fi\fi
+  \tcbox[on line, colback=\tmp@c!12, colframe=\tmp@c, boxrule=.5pt, arc=2pt, left=3pt, right=3pt,
+    top=0pt, bottom=0pt, fontupper=\sffamily\footnotesize\bfseries\color{\tmp@c}]{\MakeUppercase{#1}}}
+\newcommand{\chapterstatus}[3]{%
+  \par\vspace*{-.4\baselineskip}%
+  {\sffamily\small\color{muted}\statusbadge{#1}\quad Last reviewed #2\quad·\quad Sources: #3}%
+  \par\vspace{.8\baselineskip}}
+
+\endinput

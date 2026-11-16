@@ -1,0 +1,45 @@
+\chapter*{Document control}
+\addcontentsline{toc}{chapter}{Document control}
+
+This document is the single written description of Slotty. Where it and the system disagree,
+\textbf{the system is right and the document has a defect}: the code in \src{src}, the schema in
+\src{prisma/schema.prisma} and the Terraform in \src{infra/aws} are the sources of truth. Each
+chapter names the sources it describes, so a reader can check it.
+
+\section*{Chapter status}
+Every chapter opens with a badge saying how far to trust it:
+
+\begin{description}
+  \item[\statusbadge{complete}] Describes the system as it is, checked against the named sources on the review date.
+  \item[\statusbadge{draft}] Correct where it speaks, but incomplete. Gaps are marked \emph{To be written}.
+  \item[\statusbadge{stub}] An outline only: the sections it will have and the sources to draw them from.
+\end{description}
+
+\begin{xltabular}{\linewidth}{@{}l L l l@{}}
+  \toprule
+  \thead{Ch.} & \thead{Chapter} & \thead{Status} & \thead{Reviewed}\\
+  \midrule
+  \endhead
+  1  & Introduction and conventions        & \statusbadge{complete} & 2026-11-16\\
+  2  & System context and quality goals    & \statusbadge{draft}    & 2026-11-16\\
+  3  & Roles and user journeys             & \statusbadge{complete} & 2026-11-16\\
+  4  & Business rules                      & \statusbadge{complete} & 2026-11-16\\
+  5  & Building blocks                     & \statusbadge{draft}    & 2026-11-16\\
+  6  & Data model                          & \statusbadge{stub}     & 2026-11-16\\
+  7  & Cross-cutting concepts              & \statusbadge{draft}    & 2026-11-16\\
+  8  & AWS platform                        & \statusbadge{complete} & 2026-11-16\\
+  9  & Build, test and delivery            & \statusbadge{complete} & 2026-11-16\\
+  10 & Operations and runbooks             & \statusbadge{draft}    & 2026-11-16\\
+  11 & Security                            & \statusbadge{draft}    & 2026-11-16\\
+  12 & Cost model                          & \statusbadge{complete} & 2026-11-16\\
+  13 & AI-DLC: how Slotty is changed       & \statusbadge{complete} & 2026-11-16\\
+  14 & Architecture decisions              & \statusbadge{complete} & 2026-11-16\\
+  15 & Roadmap and known issues            & \statusbadge{complete} & 2026-11-16\\
+  \bottomrule
+\end{xltabular}
+
+\section*{Keeping it current}
+A change is not done until the chapters it affects are updated in the same pull request
+(\cref{sec:doc-maintenance}). When AI-DLC runs a change, the project rules it loads for every
+intent require the same, and say which chapter covers which area (\cref{ch:aidlc}). Record every
+revision in the change log (\cref{app:changelog}).

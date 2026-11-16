@@ -1,0 +1,91 @@
+\chapter{Introduction and conventions}\label{ch:intro}
+\chapterstatus{complete}{2026-11-16}{this repository's layout}
+
+Slotty schedules and evaluates student \emph{demos}: short sessions in which a student shows
+their work to a teaching assistant (TA) or instructor, who marks it against a rubric. Staff
+publish time slots, students book them under a booking policy, staff run the demo day and
+record marks, and instructors give marks a final check before students see them.
+
+This document describes Slotty for the people who will audit it, operate it and change it. It is
+written to be read in parts: no chapter assumes you have read the ones before it, and every
+claim points to the code or configuration it describes.
+
+\section{Who this is for}
+\begin{xltabular}{\linewidth}{@{}P{30mm} L L@{}}
+  \toprule
+  \thead{Reader} & \thead{Needs to} & \thead{Start with}\\
+  \midrule
+  Auditor (security, architecture, cost) & Verify that controls exist and match intent & \cref{ch:aws,ch:security,ch:decisions,ch:cost}; the \emph{For auditors} boxes\\
+  Developer & Change behaviour without breaking rules & \cref{ch:rules,ch:blocks,ch:crosscutting,ch:aidlc}\\
+  Operator & Deploy, watch and repair production & \cref{ch:aws,ch:delivery,ch:ops}\\
+  Product owner & Know what the product does for each role & \cref{ch:journeys,ch:roadmap}\\
+  AI coding agent & Work inside the method with the right context & \cref{ch:aidlc}, then the chapter for the area being changed\\
+  \bottomrule
+\end{xltabular}
+
+\section{How the document is organised}
+The five parts follow the questions an expert asks, in order: \emph{what is it}
+(Foundations), \emph{what does it do} (Product), \emph{how is it built} (Software
+architecture), \emph{where and how does it run} (Platform and operations), and \emph{how is it
+changed and why is it this way} (Lifecycle and governance). The last part also maps each AI-DLC
+phase onto the chapters it reads and updates (\cref{fig:aidlc-docs}).
+
+\section{Conventions}
+\subsection{Callouts}
+\begin{brule}{BR-0}
+  A rule the system enforces, with where it is enforced.
+\end{brule}
+\begin{decision}{ADR-000}
+  A choice that was made on purpose, with the decision record that explains it.
+\end{decision}
+\begin{auditnote}
+  What to check, and how, to confirm a claim yourself.
+\end{auditnote}
+\begin{risk}
+  A known weakness, with its mitigation or the decision that accepted it.
+\end{risk}
+\begin{note}
+  Context that helps, but changes nothing.
+\end{note}
+\begin{todo}
+  Content still missing. Chapters with these boxes are \emph{draft} or \emph{stub}.
+\end{todo}
+
+\subsection{Names in the text}
+\begin{xltabular}{\linewidth}{@{}l L@{}}
+  \toprule
+  \thead{Written as} & \thead{Means}\\
+  \midrule
+  \src{src/domain/slots.ts} & A file in the repository, linked at the revision this PDF was built from\\
+  \code{bookSlot}, \code{FINALIZED} & An identifier in the code: function, model, column or enum value\\
+  \route{/courses/[id]} & A URL path in the app\\
+  \ui{Open booking} & A label a user sees\\
+  \envvar{APP_URL}, \tfvar{web_min} & An environment variable or a Terraform variable\\
+  \aws{Amazon RDS} & An AWS service\\
+  \bottomrule
+\end{xltabular}
+
+\subsection{Diagrams}
+All diagrams share one vocabulary (\src{docs/style/slottydiagrams.sty}): teal boxes are Slotty's
+own software; boxes with a coloured edge are AWS services, coloured by AWS category (compute
+orange, networking purple, database magenta, security and business applications red, storage green,
+management pink);
+dashed boxes are outside systems. Solid arrows carry requests or data, dashed arrows are queued or
+event-driven, and dotted arrows are deployment or management actions.
+
+\section{Building and changing this document}\label{sec:doc-maintenance}
+The source is in \src{docs}: \src{docs/slotty.tex} includes one file per chapter from
+\src{docs/chapters}, figures are TikZ in \src{docs/figures}, and the design lives in
+\src{docs/style}. It builds in a pinned TeX Live container, so every machine and CI produce the
+same PDF:
+\begin{lstlisting}[language=bash]
+bun run docs:build      # → docs/build/slotty.pdf
+bun run docs:watch      # rebuild on every save
+\end{lstlisting}
+CI builds the PDF for every pull request and keeps it as a build artifact.
+
+When you change the system, update the chapters it affects in the same pull request: new or
+changed rules in \cref{ch:rules} (with the domain function and its unit test), flows in
+\cref{ch:journeys}, infrastructure in \cref{ch:aws}, a new deliberate trade-off as a decision
+record in \cref{ch:decisions}. Move a chapter's badge when its status changes, and add a line to
+the change log (\cref{app:changelog}).

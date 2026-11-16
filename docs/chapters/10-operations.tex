@@ -1,0 +1,83 @@
+\chapter{Operations and runbooks}\label{ch:ops}
+\chapterstatus{draft}{2026-11-16}{\src{infra/aws}, \src{infra/aws/deploy.sh}}
+
+\section{Access}
+Operators reach \code{slotty-prod} from the management account; nobody has a user in it.
+\begin{description}
+  \item[Console] Sign in to the management account, then \emph{Switch role} to account
+    \code{slotty-prod} with role \code{OrganizationAccountAccessRole}.
+  \item[CLI] A profile that assumes the same role; every command below uses it.
+\end{description}
+\begin{lstlisting}
+[profile slotty-prod]
+role_arn       = arn:aws:iam::<slotty_account_id>:role/OrganizationAccountAccessRole
+source_profile = default
+region         = us-east-1
+\end{lstlisting}
+The values the commands need (subnets, security group, cluster) are in
+\code{terraform -chdir=infra/aws/app output github_actions_variables}.
+
+\section{Runbooks}
+\subsection{Deploy}
+Merge to \code{master}. To redeploy without a code change (for example after changing
+configuration in Terraform), run the \emph{CI / Deploy} workflow by hand from GitHub.
+
+\subsection{Roll back}
+Point the services at the previous task-definition revisions; nothing is rebuilt:
+\begin{lstlisting}[language=bash]
+aws ecs update-service --profile slotty-prod --cluster slotty --service web    --task-definition slotty-web:<n>
+aws ecs update-service --profile slotty-prod --cluster slotty --service worker --task-definition slotty-worker:<n>
+\end{lstlisting}
+Migrations are not rolled back automatically. Write them so the previous release still works
+against the new schema (expand first, contract in a later release).
+
+\subsection{Run a one-off command}
+Run it as a task with the worker's definition and its secrets. Creating an admin:
+\begin{lstlisting}[language=bash]
+aws ecs run-task --profile slotty-prod --cluster slotty --task-definition slotty-worker \
+  --launch-type FARGATE --network-configuration "awsvpcConfiguration={subnets=[<a>,<b>],securityGroups=[<sg>],assignPublicIp=DISABLED}" \
+  --overrides '{"containerOverrides":[{"name":"worker","command":["node","dist/jobs/create-admin.js"],
+    "environment":[{"name":"ADMIN_EMAIL","value":"…"},{"name":"ADMIN_NAME","value":"…"},{"name":"ADMIN_PASSWORD","value":"…"}]}]}'
+\end{lstlisting}
+\begin{risk}
+  Overrides are visible in the task's details and in CloudTrail. Treat a password passed this way
+  as temporary and change it after the first sign-in.
+\end{risk}
+
+\subsection{Reach the database}
+Port-forward through the NAT instance with Session Manager (no SSH, no bastion), then connect
+with the credentials in \code{/slotty/DATABASE_URL}:
+\begin{lstlisting}[language=bash]
+aws ssm start-session --profile slotty-prod --target <nat_instance_id> \
+  --document-name AWS-StartPortForwardingSessionToRemoteHost \
+  --parameters host=<db_address>,portNumber=5432,localPortNumber=15432
+\end{lstlisting}
+
+\subsection{Email is not arriving}
+Check \route{/admin/email}: failed and waiting messages show the SMTP error. A permission or
+credential error affects every message (\code{slotty-worker-failures} fires); a bounce or
+complaint arrives as an SNS email and the address is suppressed. Retry from the console after
+fixing the cause. Rotate the SMTP credentials with
+\code{terraform apply -replace=aws_iam_access_key.ses_smtp}, then redeploy.
+
+\subsection{An alarm fired}
+\begin{xltabular}{\linewidth}{@{}P{40mm} L@{}}
+  \toprule
+  \thead{Alarm} & \thead{First steps}\\
+  \midrule
+  \code{web-down}, \code{worker-down} & ECS console: the service's events and stopped tasks' reasons. Spot capacity, a failing health check and a bad image are the usual causes.\\
+  \code{5xx} & \code{/slotty/api} access log for the failing paths, then \code{/slotty/web} for the errors.\\
+  \code{worker-failures} & \code{/slotty/worker}: a job's error, or repeated send failures (see above).\\
+  \code{db-*} & RDS Performance and the slow-statement log; consider \tfvar{db_instance_class}.\\
+  \code{nat-status-failed} & EC2 automatic recovery usually restarts it; otherwise replace it with \code{terraform apply -replace=aws_instance.nat[0]}.\\
+  \bottomrule
+\end{xltabular}
+
+\begin{todo}
+  \begin{itemize}
+    \item Restore drill: restore a point-in-time copy of the database to a temporary instance,
+      check it, delete it. Record the date and the time it took.
+    \item Incident process: who is alerted, severity levels, and the post-incident review.
+    \item Scaling playbook for a large demo day: when to raise \tfvar{web_min} beforehand.
+  \end{itemize}
+\end{todo}

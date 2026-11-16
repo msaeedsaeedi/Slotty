@@ -1,0 +1,34 @@
+\chapter{Data model}\label{ch:data}
+\chapterstatus{stub}{2026-11-16}{\src{prisma/schema.prisma}, \src{prisma/migrations}}
+
+The schema has 22 models and 11 enums in \src{prisma/schema.prisma}; migrations are plain SQL under
+\src{prisma/migrations} and are applied by the one-off migrate task on every deploy
+(\cref{ch:delivery}). All timestamps are stored in UTC.
+
+\section{Entity groups}
+\begin{xltabular}{\linewidth}{@{}P{30mm} L@{}}
+  \toprule
+  \thead{Group} & \thead{Models}\\
+  \midrule
+  Identity & \code{User}, \code{Session}, \code{AuthToken}, \code{PushSubscription}\\
+  Courses & \code{Course}, \code{Enrollment} (role per course), \code{Venue}\\
+  Assignments & \code{Assignment}, \code{DemoPolicy}, \code{RubricCriterion}\\
+  Scheduling & \code{AvailabilityBlock}, \code{Slot}\\
+  Booking & \code{Booking}, \code{BookingAllowance}, \code{WaitlistEntry}, \code{StudentRequest}\\
+  Evaluation & \code{Evaluation}, \code{EvaluationScore}\\
+  Messaging & \code{Notification}, \code{EmailOutbox}, \code{PushMessage}\\
+  Audit & \code{AuditLog}\\
+  \bottomrule
+\end{xltabular}
+
+\begin{todo}
+  \begin{itemize}
+    \item An entity-relationship diagram per group (TikZ, \code{er} styles to add to
+      \src{docs/style/slottydiagrams.sty}).
+    \item Integrity rules the database enforces itself: unique and partial unique indexes (for
+      example \code{booking_one_active_per_student}), foreign-key delete behaviour, check constraints.
+    \item Lifecycle and retention of each table: what is never deleted (bookings, audit), what is
+      pruned (sessions, outbox rows).
+    \item Personal data inventory: which columns hold personal data, for privacy review.
+  \end{itemize}
+\end{todo}

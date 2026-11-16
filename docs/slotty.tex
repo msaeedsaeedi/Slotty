@@ -1,0 +1,52 @@
+% Slotty — system documentation.
+% Build: bun run docs:build  (→ docs/build/slotty.pdf). Structure and conventions: chapter 1.
+% One file per chapter; figures are TikZ sources in figures/, drawn with style/slottydiagrams.sty.
+\documentclass[11pt, a4paper, twoside=semi, open=any, headings=standardclasses,
+  toc=listof, numbers=noenddot, parskip=false]{scrbook}
+\usepackage{style/slottydoc}
+\usepackage{style/slottydiagrams}
+
+\hypersetup{pdftitle={Slotty — System Documentation}, pdfauthor={Slotty maintainers},
+  pdfsubject={Architecture, rules, platform and lifecycle of Slotty}}
+
+\begin{document}
+
+\frontmatter
+\input{front/title}
+\input{front/document-control}
+\tableofcontents
+\listoffigures
+
+\mainmatter
+
+\part{Foundations}
+\input{chapters/01-introduction}
+\input{chapters/02-context}
+
+\part{Product}
+\input{chapters/03-roles-journeys}
+\input{chapters/04-business-rules}
+
+\part{Software architecture}
+\input{chapters/05-building-blocks}
+\input{chapters/06-data-model}
+\input{chapters/07-cross-cutting}
+
+\part{Platform and operations}
+\input{chapters/08-aws-platform}
+\input{chapters/09-delivery}
+\input{chapters/10-operations}
+\input{chapters/11-security}
+\input{chapters/12-cost}
+
+\part{Lifecycle and governance}
+\input{chapters/13-aidlc}
+\input{chapters/14-decisions}
+\input{chapters/15-roadmap}
+
+\appendix
+\input{appendices/a-glossary}
+\input{appendices/b-configuration}
+\input{appendices/c-changelog}
+
+\end{document}

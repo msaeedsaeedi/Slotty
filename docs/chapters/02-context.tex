@@ -1,0 +1,58 @@
+\chapter{System context and quality goals}\label{ch:context}
+\chapterstatus{draft}{2026-11-16}{product owner, \src{infra/aws}, \src{package.json}}
+
+\section{Context}
+Slotty is one web application used by four roles. It sends email and push notifications and
+offers calendar entries; everything else happens inside it. \Cref{fig:context} shows what it
+talks to.
+
+\begin{figure}[htbp]
+  \centering
+  \input{figures/system-context}
+  \caption{System context: the people who use Slotty and the outside systems it relies on.}
+  \label{fig:context}
+\end{figure}
+
+\begin{xltabular}{\linewidth}{@{}P{32mm} L@{}}
+  \toprule
+  \thead{Actor or system} & \thead{Relationship}\\
+  \midrule
+  Student & Books, reschedules and cancels demo slots; sees released marks.\\
+  TA & Runs a course alone or with an instructor: roster, slots, demo day, marking.\\
+  Instructor & Everything a TA does, plus final review and release of marks.\\
+  Admin & Platform-wide: people, course staffing, email delivery, audit. Never a course member.\\
+  Email (\aws{Amazon SES}) & Outgoing transactional email only: invites, resets, booking changes, reminders, marks.\\
+  Push services & Browser vendors' Web Push endpoints, for device notifications (PWA).\\
+  Calendar apps & Google Calendar and Outlook links and \texttt{.ics} files; Slotty doesn't call them.\\
+  \bottomrule
+\end{xltabular}
+
+\section{Quality goals}
+In priority order. Each one is a reason behind a decision in \cref{ch:decisions}.
+\begin{enumerate}
+  \item \textbf{Rules hold under concurrency.} No slot over capacity, no double booking, no
+    lost change budget, even when many students book the same minute (\cref{ch:rules}).
+  \item \textbf{Marks stay private until released.} Students see only finalized results, never
+    private notes; every moderation-relevant change is audited.
+  \item \textbf{Available on demo days.} Demo days are the peak and the moment failure hurts
+    most: the web tier runs in two availability zones and scales out on load.
+  \item \textbf{Cheap at bootstrap.} Under \$50 a month on AWS, with growth by changing
+    variables rather than re-architecting (\cref{ch:cost}).
+  \item \textbf{Auditable and changeable.} Infrastructure is code, changes go through AI-DLC
+    with approval gates and an audit trail (\cref{ch:aidlc}), and this document is kept current.
+\end{enumerate}
+
+\section{Constraints}
+\begin{itemize}
+  \item One AWS region (us-east-1) in a dedicated account, enforced by service control policies (\cref{sec:aws-guardrails}).
+  \item Monthly budget of \$50 for the account.
+  \item Course times are shown in the course timezone; only Pakistan time is offered for now.
+  \item Stack: Next.js 16 (App Router), React 19, Prisma 7 with PostgreSQL 17, Bun for tooling
+    and the worker build; Node 22 in production.
+\end{itemize}
+
+\begin{todo}
+  Measurable targets for each quality goal (for example: booking latency at the 95th percentile
+  under N concurrent students; recovery point and recovery time objectives), agreed with the
+  product owner. Until then, the goals above are qualitative.
+\end{todo}

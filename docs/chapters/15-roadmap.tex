@@ -1,0 +1,56 @@
+\chapter{Roadmap and known issues}\label{ch:roadmap}
+\chapterstatus{complete}{2026-11-16}{product owner; \src{infra/aws}}
+
+Planned improvements, in build order. Each item has an ID so commits and tests can refer to it. When an item ships, remove it from here and update \cref{ch:journeys,ch:rules}.
+
+Priority: \textbf{P1} a user can bypass a rule, get stuck, or end up with wrong data · \textbf{P2} a real task is missing or awkward · \textbf{P3} polish.
+
+Finished work is removed from this chapter. What shipped is described in \cref{ch:journeys,ch:rules}, and git history has the details (phases 1--4 merged on 2026-09-25).
+
+\section{Next: check with users}
+
+Run short task-based sessions with the seed accounts: book, reschedule, cancel then rebook, run a demo day, mark and submit, review. Record task success, errors and time taken. Turn what you find into new roadmap items.
+
+\section{Proposed: notifications and calendar (needs a decision)}
+
+Feedback (2026-10-02): a subscribed feed is awkward, but per-demo calendar entries plus emails plus push could flood people with the same reminder. Proposal, one channel per purpose:
+
+{\tablefont
+\begin{xltabular}{\linewidth}{@{}P{30mm} P{16mm} P{30mm} P{30mm} L@{}}
+  \toprule
+  \thead{Purpose} & \thead{In-app} & \thead{Push (if the device opted in)} & \thead{Email} & \thead{Calendar}\\
+  \midrule
+  \endhead
+  Something to keep (booked, moved, cancelled, marks released) & yes & yes & yes & the booking emails carry an \code{.ics} invite (same UID, rising \code{SEQUENCE}; \code{METHOD:CANCEL} on cancel), so the calendar entry updates itself and no separate ``add to calendar'' step is needed\\
+  24 h reminder & yes & --- & yes (opt-out) & the calendar's own alert covers it\\
+  1 h reminder & yes & yes & only when the student has no push device & ---\\
+  Staff housekeeping (requests, returns) & yes & yes & daily digest instead of one email each & ---\\
+  \bottomrule
+\end{xltabular}}
+
+Needs: outbox emails with attachments, and an opt-in for the invites. Until then \ui{Add to calendar} (Google, Outlook, \code{.ics}) is offered on each booking and calendar sync shows as \ui{coming soon}.
+
+\section{Coming soon (shown disabled in the UI)}
+
+\begin{itemize}
+  \item Calendar sync (above).
+  \item Google Meet links created automatically for online venues.
+  \item More course timezones (only Pakistan time today).
+\end{itemize}
+
+\section{Open issues}
+
+\begin{itemize}
+  \item \textbf{Intermittent e2e timeout.} Once, the instructor test timed out on a page load after the service worker arrived (it passed on rerun). Watch for it; if it recurs, suspect \code{waitForLoadState("networkidle")} in \src{tests/e2e/helpers.ts} together with SW registration.
+  \item \textbf{E2E now runs on a production build} (\code{next build && next start}, see \code{playwright.config.ts}). Under \code{next dev}, Fast Refresh from on-demand compiling sometimes dropped the page refresh after an action in multi-browser tests. \route{/dev/mail} is enabled there through \code{ENABLE_DEV_MAIL=1}.
+\end{itemize}
+
+\section[Hosting (AWS, \texttt{infra/aws})]{Hosting (AWS, \code{infra/aws})}
+
+Bootstrap tier, about \$47/month against a \$50 budget. Next steps, in the order they're worth paying for:
+\begin{itemize}
+  \item \textbf{WAF} (\textasciitilde{}\$10/mo) or CloudFront's flat-rate plan once traffic is real; today API Gateway throttling is the only rate limit.
+  \item \textbf{Multi-AZ RDS} (\code{db_multi_az}, \textasciitilde{}+\$14/mo) when a few minutes of downtime during an AZ outage stops being acceptable.
+  \item \textbf{ALB instead of API Gateway} if responses need streaming, longer than 30 s, or larger than 10 MB.
+\end{itemize}
+

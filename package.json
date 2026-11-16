@@ -13,6 +13,8 @@
     "infra:cert": "docker compose -f infra/docker-compose.yml cp caddy:/data/caddy/pki/authorities/local/root.crt infra/caddy-root.crt",
     "infra:down": "docker compose -f infra/docker-compose.yml --profile app down",
     "app:up": "docker compose -f infra/docker-compose.yml --profile app up -d --build --wait",
+    "docs:build": "docs/tooling/build.sh",
+    "docs:watch": "docs/tooling/build.sh -pvc",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset --force",

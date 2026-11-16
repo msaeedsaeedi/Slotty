@@ -1,0 +1,32 @@
+\chapter{Configuration reference}\label{app:config}
+
+Every setting is an environment variable read at run time. Locally they come from \code{.env}
+(\src{.env.example}); on AWS from the task definitions in \src{infra/aws/app/ecs.tf}, with secrets
+from SSM (\cref{ch:aws}).
+
+{\tablefont
+\begin{xltabular}{\linewidth}{@{}P{40mm} P{22mm} L@{}}
+  \toprule
+  \thead{Variable} & \thead{On AWS} & \thead{Purpose}\\
+  \midrule
+  \endhead
+  \envvar{DATABASE_URL} & SSM & PostgreSQL connection. On AWS: \code{sslmode=verify-full}; for the migrate task, the Prisma form.\\
+  \envvar{DATABASE_POOL_MAX} & env (10) & Maximum connections per process.\\
+  \envvar{APP_URL} & env & Public base URL for links in emails and calendar files; also the host the origin lock restores. Required in production.\\
+  \envvar{ORIGIN_VERIFY_SECRET} & SSM & Secret header CloudFront sends; unset disables the origin lock.\\
+  \envvar{SMTP_HOST}, \envvar{SMTP_PORT} & env & SES SMTP endpoint, port 587. Empty host prints emails to the worker log instead.\\
+  \envvar{SMTP_USER}, \envvar{SMTP_PASS} & SSM & SES SMTP credentials (worker only).\\
+  \envvar{MAIL_FROM} & env & Sender, \code{Slotty <no-reply@<domain>>}.\\
+  \envvar{VAPID_PUBLIC_KEY}, \envvar{VAPID_PRIVATE_KEY} & SSM & Web Push keys; both empty turns push off.\\
+  \envvar{VAPID_SUBJECT} & env & Contact for push services (\code{mailto:}).\\
+  \envvar{NODE_EXTRA_CA_CERTS} & env & The RDS CA bundle in the image, for verified database TLS.\\
+  \envvar{SSL_CERT_FILE} & image & Migrate image only: OpenSSL's trust store, set to the RDS CA bundle.\\
+  \envvar{HOSTNAME}, \envvar{PORT} & env / image & Web server bind address (\code{0.0.0.0}) and port (3000).\\
+  \envvar{WORKER_INTERVAL_MS} & default & Poll interval when \code{LISTEN} is unavailable (15\,s).\\
+  \envvar{WORKER_SCHEDULE_MS} & default & How often scheduled jobs run (60\,s).\\
+  \envvar{ADMIN_EMAIL}, \envvar{ADMIN_NAME}, \envvar{ADMIN_PASSWORD} & one-off & Inputs to \code{create-admin.js}.\\
+  \envvar{NEXT_PUBLIC_ENABLE_SW} & --- & Development only: register the service worker under \code{next dev}.\\
+  \envvar{ENABLE_DEV_MAIL} & --- & Development and end-to-end tests: enable \route{/dev/mail}.\\
+  \envvar{NEXT_DIST_DIR} & --- & End-to-end tests: separate build directory.\\
+  \bottomrule
+\end{xltabular}}

@@ -1,0 +1,25 @@
+% Application layers (chapter 5). Callers on top, callees below; the worker sits beside the web app.
+\begin{tikzpicture}[node distance=5mm and 6mm, layer/.style={svc=50mm, minimum height=9mm}]
+  \node[actor] (browser) {Browser / PWA};
+  \node[layer, below=7mm of browser] (pages) {Pages and components\\[-1pt]{\scriptsize\color{muted}src/app, src/components}};
+  \node[layer, below=of pages] (actions) {Server Actions + \texttt{run()}\\[-1pt]{\scriptsize\color{muted}src/app/actions}};
+  \node[layer, below=of actions, minimum height=12mm] (services) {Services: access, rules, transaction,\\ notify, audit\\[-1pt]{\scriptsize\color{muted}src/server/services}};
+  \node[svc=30mm, below left=7mm and -14mm of services] (domain) {Domain rules\\[-1pt]{\scriptsize\color{muted}pure, no I/O}};
+  \node[svc=30mm, below right=7mm and -14mm of services] (infra) {Prisma client\\[-1pt]{\scriptsize\color{muted}src/server/db.ts}};
+  \node[aws=database, below=7mm of infra] (pg) {PostgreSQL 17};
+  \node[svc=28mm, right=16mm of services, minimum height=12mm] (worker) {Worker\\[-1pt]{\scriptsize\color{muted}outbox + schedule}};
+  \node[aws=business, box=20mm, above left=9mm and -12mm of worker] (ses) {SES (SMTP)};
+  \node[ext, box=20mm, above right=9mm and -12mm of worker] (push) {Push services};
+  \draw[flow] (browser) -- (pages);
+  \draw[flow] (pages) -- (actions);
+  \draw[flow] (actions) -- (services);
+  \draw[flow] (pages.west) -- ++(-5mm,0) |- node[edgelabel, pos=.25, left]{reads} (services.west);
+  \draw[flow] (services) -- (domain);
+  \draw[flow] (services) -- (infra);
+  \draw[flow] (infra) -- (pg);
+  \draw[flow] (worker) |- (infra.east);
+  \draw[flow] (worker) -- node[edgelabel, above]{jobs} (services);
+  \draw[async] (pg.east) -| node[edgelabel, pos=.75, right]{LISTEN / NOTIFY} ([xshift=6mm]worker.south);
+  \draw[async] (worker) -- (ses);
+  \draw[async] (worker) -- (push);
+\end{tikzpicture}

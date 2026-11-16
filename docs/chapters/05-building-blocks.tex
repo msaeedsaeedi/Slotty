@@ -1,0 +1,63 @@
+\chapter{Building blocks}\label{ch:blocks}
+\chapterstatus{draft}{2026-11-16}{\src{src}, \src{CLAUDE.md}, \src{Dockerfile}}
+
+Slotty is one Next.js application and one background worker, built from the same source tree
+into the same container image. The code is layered so that business rules can be tested without a
+database, and so that every change to data goes through a service that checks who is asking.
+
+\begin{figure}[htbp]
+  \centering
+  \input{figures/software-layers}
+  \caption{Layers of the application. Arrows point from caller to callee; nothing calls upward.}
+  \label{fig:layers}
+\end{figure}
+
+\section{Layers}
+\begin{xltabular}{\linewidth}{@{}P{30mm} P{38mm} L@{}}
+  \toprule
+  \thead{Layer} & \thead{Where} & \thead{Responsibility}\\
+  \midrule
+  \endhead
+  Pages and components & \src{src/app}, \src{src/components} & Server-rendered pages (App Router) and client components. Read through services; never write to the database.\\
+  Server Actions & \src{src/app/actions} & Form and button handlers. Each wraps a service call in \code{run()} (\src{src/server/action-utils.ts}), which refreshes the page and returns \code{{ok, message|error}} to \code{<ActionForm>}.\\
+  Services & \src{src/server/services} & One module per area (bookings, slots, evaluations, \dots). Each operation takes an \code{Actor}, checks access itself, enforces rules with \code{assertRule}, writes inside one transaction, and queues notifications and audit entries in that same transaction.\\
+  Domain & \src{src/domain} & Pure functions: booking rules, slot generation, evaluation transitions, roster parsing, calendar files. Return a \code{RuleResult} whose message is shown to the user. No I/O.\\
+  Infrastructure & \src{src/server}, \src{src/lib} & Database client (\src{src/server/db.ts}), mail and push delivery, sessions and passwords (\src{src/server/auth}), time formatting (\src{src/lib/time.ts}).\\
+  Worker & \src{src/jobs/worker.ts} & Delivers the email and push outboxes and runs scheduled jobs (\cref{sec:outbox}).\\
+  \bottomrule
+\end{xltabular}
+
+\begin{brule}{ARCH-1}
+  Business rules live in \src{src/domain} as pure functions returning \code{RuleResult}; services
+  call them with \code{assertRule}. Pages and actions never query Prisma for mutations.
+\end{brule}
+\begin{brule}{ARCH-2}
+  Every service takes an \code{Actor} and checks access itself, using \code{assertCourseRole},
+  \code{assertStaff} or \code{assertAdmin} (\src{src/server/services/access.ts}).
+\end{brule}
+\begin{brule}{ARCH-3}
+  Services throw \code{DomainError} for failures a user should see; anything else is a bug and
+  surfaces as a generic error.
+\end{brule}
+
+\section{Processes and images}
+One \src{Dockerfile} builds every process (\cref{sec:aws-compute}):
+\begin{xltabular}{\linewidth}{@{}P{26mm} P{56mm} L@{}}
+  \toprule
+  \thead{Process} & \thead{Command} & \thead{Notes}\\
+  \midrule
+  Web & \code{node server.js} & Next.js standalone output: only the files the server traces.\\
+  Worker & \code{node dist/jobs/worker.js} & Bundled by Bun at build time; runs on plain Node.\\
+  First admin & \code{node dist/jobs/create-admin.js} & One-off; reads \envvar{ADMIN_EMAIL}, \envvar{ADMIN_PASSWORD}, \envvar{ADMIN_NAME}.\\
+  Migrations & \code{prisma migrate deploy} & Separate \code{migrate} image target carrying the Prisma CLI.\\
+  \bottomrule
+\end{xltabular}
+
+\begin{todo}
+  \begin{itemize}
+    \item A module map of \src{src/server/services}: each service's operations, the rules it
+      enforces and the notifications it sends (generate from the code, then curate).
+    \item Request walkthrough: a booking from the button press to the email, naming each function.
+    \item Front-end structure: route groups \route{(app)} and \route{(auth)}, layouts, the PWA pieces.
+  \end{itemize}
+\end{todo}

@@ -1,0 +1,25 @@
+\chapter{Glossary}\label{app:glossary}
+
+\begin{description}
+  \item[Actor] The signed-in user on whose behalf a service runs; every service checks it.
+  \item[Assignment] One demo round in a course: its policy, rubric, slots and evaluations.
+  \item[Bolt] In AI-DLC, a short build cycle of hours or days.
+  \item[Booking] A student's place in a slot. \emph{Active} means \code{BOOKED}, \code{COMPLETED} or \code{NO_SHOW}.
+  \item[Change budget] How many times a student may reschedule or cancel themselves for one assignment.
+  \item[Circuit breaker] ECS's automatic rollback of a deployment whose tasks do not become healthy.
+  \item[Cloud Map] AWS service discovery; here, the list of healthy web tasks API Gateway routes to.
+  \item[Demo] A short session in which a student presents work and is marked against a rubric.
+  \item[Demo policy] An assignment's booking rules: window, slot length, capacity, freeze window, change budget.
+  \item[Evaluation] A student's marks for an assignment, moving through \code{DRAFT}, \code{SUBMITTED}, \code{RETURNED} and \code{FINALIZED}.
+  \item[Fargate Spot] Spare Fargate capacity at a discount, which AWS may reclaim with two minutes' notice.
+  \item[Freeze window] The hours before a slot during which students can no longer book, cancel or reschedule.
+  \item[Gate] In AI-DLC, a point where work stops for a person's approval.
+  \item[Intent] In AI-DLC, one piece of work stated as an outcome, with its own record and audit trail.
+  \item[OIDC] OpenID Connect; here, how GitHub Actions proves its identity to AWS without stored keys.
+  \item[Outbox] Rows written in the same transaction as a change, delivered later by the worker.
+  \item[PITR] Point-in-time recovery: restoring the database to any second in the last seven days.
+  \item[SCP] Service control policy: an Organization-level limit no permission in the account can exceed.
+  \item[Slot] A bookable time with a host, a venue and a capacity.
+  \item[Unit of work] In AI-DLC, a part of an intent that can be built and tested on its own.
+  \item[VPC link] API Gateway's private connection into the VPC's app subnets.
+\end{description}

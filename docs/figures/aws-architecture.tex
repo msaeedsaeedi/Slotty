@@ -1,0 +1,67 @@
+% AWS deployment (chapter 8), mirroring infra/aws/app. Grid: columns 25 mm apart, rows in mm.
+% Solid: requests and data. Dashed: egress and events. Dotted: deployment.
+% Not drawn (to keep the picture readable; see the text): image pulls through the S3 endpoint,
+% secrets from SSM at task start, logs to CloudWatch.
+\begin{tikzpicture}[x=1mm, y=1mm, every node/.append style={font=\sffamily\scriptsize},
+    n/.style={box=20mm, minimum height=9mm, inner sep=2pt},
+    sub/.style={font=\sffamily\tiny, text=muted}]
+  % ── top row: users and the edge ──
+  \node[actor, text width=17mm] (users) at (0,31) {Users};
+  \node[aws=network, n] (r53) at (25,0) {Route 53\\[-2pt]\textcolor{muted}{\tiny DNS zone}};
+  \node[aws=network, n] (cf) at (50,0) {CloudFront\\[-2pt]\textcolor{muted}{\tiny TLS, cache}};
+  \node[aws=network, n] (api) at (75,0) {API Gateway\\[-2pt]\textcolor{muted}{\tiny HTTP API}};
+  \node[aws=security, n] (acm) at (50,14) {ACM\\[-2pt]\textcolor{muted}{\tiny certificate}};
+  \node[ext, text width=20mm] (gh) at (125,31) {GitHub Actions\\[-2pt]\textcolor{muted}{\tiny OIDC}};
+  % ── VPC ──
+  \node[aws=compute, n] (nat) at (0,-28) {fck-nat\\[-2pt]\textcolor{muted}{\tiny t4g.nano}};
+  \node[aws=network, n] (s3e) at (25,-28) {S3 endpoint\\[-2pt]\textcolor{muted}{\tiny gateway}};
+  \node[aws=network, n] (vpcl) at (75,-44) {VPC link};
+  \node[aws=compute, n] (weba) at (0,-61) {web\\[-2pt]\textcolor{muted}{\tiny Fargate, AZ a}};
+  \node[aws=compute, n] (webb) at (25,-61) {web\\[-2pt]\textcolor{muted}{\tiny Spot, AZ b}};
+  \node[aws=compute, n] (wrk) at (50,-61) {worker\\[-2pt]\textcolor{muted}{\tiny Spot}};
+  \node[aws=compute, n] (mig) at (75,-61) {migrate\\[-2pt]\textcolor{muted}{\tiny one-off}};
+  \node[aws=database, box=34mm, minimum height=9mm, inner sep=2pt] (rds) at (37.5,-83) {RDS PostgreSQL 17\\[-2pt]\textcolor{muted}{\tiny encrypted, TLS only}};
+  % ── regional services ──
+  \node[aws=network, n] (cm) at (100,-44) {Cloud Map\\[-2pt]\textcolor{muted}{\tiny healthy tasks}};
+  \node[aws=compute, n] (ecr) at (125,-18) {ECR\\[-2pt]\textcolor{muted}{\tiny images}};
+  \node[aws=security, n] (ssm) at (125,-36) {SSM\\[-2pt]\textcolor{muted}{\tiny secrets}};
+  \node[aws=manage, n] (cw) at (125,-63) {CloudWatch\\[-2pt]\textcolor{muted}{\tiny logs, alarms}};
+  \node[aws=business, n] (ses) at (100,-83) {SES\\[-2pt]\textcolor{muted}{\tiny email}};
+  \node[aws=integration, n] (sns) at (125,-83) {SNS\\[-2pt]\textcolor{muted}{\tiny alerts}};
+
+  \begin{scope}[on background layer]
+    \node[subnet=public, fit=(nat), inner xsep=3mm, inner ysep=4mm] (pub) {};
+    \node[subnet=private, fit=(vpcl)(weba)(mig), inner xsep=3mm, inner ysep=4.5mm] (app) {};
+    \node[subnet=data, fit=(rds), inner xsep=3mm, inner ysep=4mm] (data) {};
+    \node[vpc, fit=(pub)(s3e)(app)(data), inner sep=2.5mm] (vpc) {};
+    \node[account, fit=(r53)(acm)(vpc)(cm)(ssm)(sns), inner sep=3.5mm] (acct) {};
+  \end{scope}
+  \node[grouplabel, text=awsgeneric] at (acct.north west) {Account slotty-prod, us-east-1};
+  \node[grouplabel, text=awsnetwork] at (vpc.north west) {VPC 10.0.0.0/16};
+  \node[sub, anchor=north west] at (pub.north west) {public};
+  \node[sub, anchor=north west] at (app.north west) {app subnets (2 AZs)};
+  \node[sub, anchor=north west] at (data.north west) {db subnets};
+
+  % request path
+  \draw[flow] (users.south) |- (r53.west);
+  \draw[flow] (users.east) -| ([xshift=-6mm]cf.north);
+  \draw[flow] (cf) -- (api);
+  \draw[ctrl] (acm) -- (cf);
+  \draw[flow] (api) -- (vpcl);
+  \draw[flow] (vpcl) -- (cm);
+  \draw[flow] (vpcl.west) -| (weba.north);
+  \draw[flow] (vpcl.west) -| (webb.north);
+  % data
+  \draw[flow] (weba.south) |- (rds.west);
+  \draw[flow] (webb.south) -- (webb.south |- rds.north);
+  \draw[flow] (wrk.south) -- (wrk.south |- rds.north);
+  \draw[flow] (mig.south) |- (rds.east);
+  % egress: the app subnets' default route goes through the NAT
+  \draw[async] (nat.south |- app.north) -- node[sub, right]{default route} (nat.south);
+  \draw[async] (app.east |- wrk) -| node[sub, pos=.25, above]{SMTP, via NAT} (ses.north);
+  \draw[async] (ses) -- node[sub, above]{bounces} (sns);
+  \draw[async] (cw) -- (sns);
+  % deployment
+  \draw[ctrl] (gh) -- node[sub, right]{push} (ecr);
+  \draw[ctrl] (gh.west) -| node[sub, pos=.88, right, align=left]{run task,\\update service} ([xshift=-3mm]app.north east);
+\end{tikzpicture}

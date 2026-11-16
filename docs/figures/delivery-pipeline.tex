@@ -1,0 +1,21 @@
+% CI/CD pipeline (chapter 9): .github/workflows/deploy.yml and infra/aws/deploy.sh.
+\begin{tikzpicture}[node distance=4mm and 4mm,
+    st/.style={svc=23mm, minimum height=11mm, font=\sffamily\scriptsize},
+    gate/.style={st, draw=ink, fill=wash}]
+  \node[ext, text width=16mm] (push) {push / PR};
+  \node[st, right=of push] (check) {check\\[-1pt]\textcolor{muted}{\tiny typecheck, lint, unit}};
+  \node[st, right=of check] (build) {build ARM64\\[-1pt]\textcolor{muted}{\tiny app + migrate}};
+  \node[aws=compute, box=20mm, minimum height=11mm, right=of build] (ecr) {ECR\\[-1pt]\textcolor{muted}{\tiny <sha>}};
+  \node[st, below=9mm of ecr] (td) {register task defs};
+  \node[gate, left=of td] (mig) {migrate task\\[-1pt]\textcolor{muted}{\tiny exit 0 or stop}};
+  \node[st, left=of mig] (roll) {update services\\[-1pt]\textcolor{muted}{\tiny circuit breaker}};
+  \node[gate, left=of roll] (verify) {verdict + /health};
+  \draw[flow] (push) -- (check);
+  \draw[flow] (check) -- node[edgelabel, above=1.5mm]{master} (build);
+  \draw[flow] (build) -- (ecr);
+  \draw[flow] (ecr) -- (td);
+  \draw[flow] (td) -- (mig);
+  \draw[flow] (mig) -- (roll);
+  \draw[flow] (roll) -- (verify);
+  \draw[ctrl] (check.north) -- ++(0,5mm) node[edgelabel, above]{pull requests stop here};
+\end{tikzpicture}

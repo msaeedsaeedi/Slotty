@@ -1,0 +1,60 @@
+% slottydiagrams.sty — one visual vocabulary for every diagram in the document.
+%   Nodes:   svc (our software), aws=<category> (an AWS service), ext (outside systems), actor
+%   Groups:  account, vpc, subnet=<public|private|data>, zone (a labelled dashed boundary)
+%   Edges:   flow (request/data), async (queued or event-driven), ctrl (deploy/management)
+% AWS nodes take the category colours of the AWS architecture icons, so readers who know
+% AWS diagrams can read ours at a glance.
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{slottydiagrams}[2026/11/16 Slotty diagram styles]
+\RequirePackage{tikz}
+\usetikzlibrary{positioning, fit, backgrounds, arrows.meta, calc, shapes.geometric,
+  shapes.misc, decorations.pathreplacing, matrix, chains}
+
+\tikzset{
+  every picture/.style={font=\sffamily\footnotesize, line cap=round, line join=round},
+  % ── nodes ──
+  box/.style={draw, rounded corners=2pt, align=center, inner sep=4pt, minimum height=8mm,
+    text width=#1, line width=.6pt},
+  box/.default=24mm,
+  svc/.style={box=#1, draw=accent, fill=accentwash},
+  svc/.default=24mm,
+  ext/.style={box=24mm, draw=muted, fill=white, dashed},
+  actor/.style={box=18mm, draw=ink, fill=white, rounded corners=7pt},
+  aws/.style={box=24mm, draw=aws#1, fill=aws#1!9,
+    path picture={\fill[aws#1] (path picture bounding box.north west) rectangle
+      ([xshift=2.4pt]path picture bounding box.south west);}},
+  awssub/.style={font=\sffamily\scriptsize\color{muted}},
+  % ── groups (drawn on the background layer with `fit`) ──
+  group/.style={draw, rounded corners=3pt, inner sep=7pt, line width=.6pt},
+  grouplabel/.style={anchor=north west, font=\sffamily\scriptsize\bfseries, inner sep=3pt},
+  account/.style={group, draw=awsgeneric, dashed},
+  vpc/.style={group, draw=awsnetwork},
+  subnet/.style={group, draw=none, fill=subnet#1},
+  zone/.style={group, draw=muted, dashed},
+  % ── edges ──
+  flow/.style={-{Stealth[length=2.4mm]}, line width=.7pt, draw=ink},
+  async/.style={-{Stealth[length=2.4mm]}, line width=.7pt, draw=ink, dash pattern=on 3pt off 2pt},
+  ctrl/.style={-{Stealth[length=2.2mm, open]}, line width=.6pt, draw=muted, dash pattern=on 1pt off 1.6pt},
+  edgelabel/.style={font=\sffamily\scriptsize, fill=white, inner sep=1.2pt, text=muted},
+  % ── state machines ──
+  state/.style={draw=accent, fill=accentwash, rounded corners=6pt, minimum height=7mm,
+    minimum width=20mm, font=\sffamily\footnotesize\bfseries},
+  terminal/.style={state, draw=ink, fill=wash},
+  trans/.style={-{Stealth[length=2.2mm]}, line width=.6pt, draw=ink},
+  translabel/.style={font=\sffamily\scriptsize, text=muted, fill=white, inner sep=1pt},
+  % ── phases (AI-DLC) ──
+  phase/.style={draw=#1, fill=#1!10, rounded corners=3pt, minimum height=9mm, text width=26mm,
+    align=center, font=\sffamily\footnotesize\bfseries, line width=.7pt},
+}
+\definecolor{subnetpublic}{HTML}{EAF4E4}
+\definecolor{subnetprivate}{HTML}{E6EEF8}
+\definecolor{subnetdata}{HTML}{F3E8F7}
+
+% \groupbox{style}{label}{nodes to fit}: a labelled group behind its nodes.
+\newcommand{\groupbox}[3]{%
+  \begin{scope}[on background layer]
+    \node[#1, fit=#3] (grp-\detokenize{#2}) {};
+    \node[grouplabel] at (grp-\detokenize{#2}.north west) {#2};
+  \end{scope}}
+
+\endinput
