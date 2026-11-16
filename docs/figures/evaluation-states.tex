@@ -1,0 +1,15 @@
+% Evaluation state machine — mirrors `transition` / `canTransition` in src/domain/evaluation.ts.
+\begin{tikzpicture}[node distance=10mm and 26mm]
+  \node[state] (draft) {DRAFT};
+  \node[state, right=of draft] (sub) {SUBMITTED};
+  \node[terminal, right=of sub] (fin) {FINALIZED};
+  \node[state, below=16mm of sub] (ret) {RETURNED};
+  \draw[trans] (draft) -- node[translabel, above]{submit} node[translabel, below]{\itshape instructor reviews} (sub);
+  \draw[trans] (sub) -- node[translabel, above]{finalize} (fin);
+  \draw[trans] (sub.south west) ++(4mm,0) -- node[translabel, left, align=right]{return\\\itshape comment required} ++(0,-16mm+7mm);
+  \draw[trans] (fin.south) |- node[translabel, pos=.25, right, align=left]{unlock\\\itshape reason required} (ret.east);
+  \draw[trans] (ret.north east) ++(-4mm,0) -- node[translabel, right]{submit} ++(0,16mm-7mm);
+  \draw[trans] (draft.north) to[out=50, in=130] node[translabel, above, align=center]{submit\\\itshape no reviewer: no instructor in the course, or an instructor submits} (fin.north);
+  \draw[trans] (draft.south west) ++(2mm,0) arc[start angle=0, end angle=-300, radius=2.6mm] node[translabel, left=1mm, pos=.5]{save};
+  \draw[trans] (ret.south west) ++(2mm,0) arc[start angle=0, end angle=-300, radius=2.6mm] node[translabel, left=1mm, pos=.5]{save};
+\end{tikzpicture}

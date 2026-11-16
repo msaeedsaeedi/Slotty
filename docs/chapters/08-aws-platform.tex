@@ -1,0 +1,211 @@
+\chapter{AWS platform}\label{ch:aws}
+\chapterstatus{complete}{2026-11-16}{\src{infra/aws/org}, \src{infra/aws/app}, \src{Dockerfile}}
+
+Slotty runs in its own AWS account, \code{slotty-prod}, in us-east-1. Everything in this chapter
+is created by Terraform from \src{infra/aws}; nothing was built by hand except the two steps AWS
+requires a person for (the SES production-access request and the DNS delegation from
+Cloudflare). \Cref{fig:aws} shows the whole deployment.
+
+\begin{figure}[p]
+  \centering
+  \makebox[\linewidth][c]{\input{figures/aws-architecture}}
+  \caption{The AWS deployment. Solid arrows: requests and data. Dashed: egress and events.
+    Dotted: deployment and configuration.}
+  \label{fig:aws}
+\end{figure}
+
+\section{Accounts and guardrails}\label{sec:aws-guardrails}
+An AWS Organization separates Slotty from the other workloads of the management account.
+\src{infra/aws/org} manages it, applied with the management account's credentials:
+
+\begin{xltabular}{\linewidth}{@{}P{34mm} L@{}}
+  \toprule
+  \thead{Resource} & \thead{What it does}\\
+  \midrule
+  Organization & All features, service control policies (SCPs) enabled. Protected with \code{prevent_destroy}: it can only be deleted after its member accounts are closed.\\
+  \code{Workloads} OU & Holds \code{slotty-prod}; the SCPs attach here.\\
+  \code{slotty-prod} account & Created by Terraform; administered by assuming \code{OrganizationAccountAccessRole} from the management account. Its ID is the \code{slotty_account_id} output.\\
+  SCP \code{slotty-region-lock} & Denies every action outside us-east-1, except global services (IAM, Organizations, Route 53, CloudFront, ACM, WAF, billing, support).\\
+  SCP \code{slotty-cost-guardrails} & EC2 only \code{t4g.nano/micro/small}; RDS only \code{db.t4g.micro/small}; denies Aurora, EKS, SageMaker, Redshift, ElastiCache, OpenSearch, MSK, Bedrock, NAT gateways, and every long-term purchase (Savings Plans, reservations, domain registration).\\
+  SCP \code{slotty-protect} & Denies leaving the Organization, closing the account, any root-user action, and stopping or changing CloudTrail.\\
+  Budget \code{slotty-prod-monthly} & \$50 a month, filtered to the account. Emails at 90\,\% and 100\,\% of actual spend and 100\,\% of forecast.\\
+  Cost anomaly monitor & Daily email when an anomaly's impact reaches \$5.\\
+  Organization CloudTrail & Management events from every account, to an encrypted, private S3 bucket in the management account, kept 90 days, with log-file validation.\\
+  State bucket & \code{slotty-tfstate-<mgmt account>}: versioned, encrypted, TLS-only, public access blocked; native S3 locking. Holds both stacks' state.\\
+  \bottomrule
+\end{xltabular}
+
+\begin{auditnote}
+  Confirm the guardrails from the management account:
+  \code{aws organizations list-policies-for-target --target-id <Workloads OU> --filter SERVICE_CONTROL_POLICY}
+  lists the three SCPs; \code{aws budgets describe-budgets} shows the budget. From
+  \code{slotty-prod}, try \code{aws ec2 run-instances --instance-type m5.large …} or any call in
+  another region: both are denied by an SCP.
+\end{auditnote}
+
+\begin{risk}
+  The SCPs also block things Slotty will want when it grows (a NAT gateway, a larger database).
+  Raising a limit is a reviewed change to \src{infra/aws/org/scp.tf}, on purpose.
+\end{risk}
+
+\section{Request path}\label{sec:aws-request-path}
+\begin{enumerate}
+  \item \textbf{Route 53} answers for \code{slotty.msaeedsaeedi.com}, a subdomain delegated from
+    the parent zone at Cloudflare by four NS records. A CAA record allows only Amazon to issue
+    certificates for it.
+  \item \textbf{CloudFront} terminates TLS (ACM certificate, TLS 1.2 minimum, HTTP/2 and HTTP/3),
+    redirects HTTP to HTTPS and adds HSTS (two years), \code{nosniff}, \code{X-Frame-Options: DENY}
+    and a strict referrer policy. \route{/_next/static/*} is cached at the edge (content-hashed,
+    immutable); everything else passes through uncached with all viewer headers and cookies except
+    \code{Host}. CloudFront adds the secret header \code{x-origin-verify} to every origin request.
+  \item \textbf{API Gateway} (HTTP API) is the load balancer. Stage throttling (50 requests per
+    second, bursts of 100) is the edge rate limit. Its \code{$default} route forwards everything
+    through a \textbf{VPC link} into the app subnets.
+  \item \textbf{Cloud Map} lists the healthy web tasks (SRV records registered by ECS); API Gateway
+    picks one.
+  \item The \textbf{web task} checks the secret header in \src{src/proxy.ts}, restores the public
+    host for Next's Server Actions check, and serves the request.
+\end{enumerate}
+
+\begin{decision}{ADR-002}
+  API Gateway instead of an Application Load Balancer: about \$1 a month at bootstrap volume
+  instead of about \$18. Its limits (30\,s per request, 10\,MB responses, buffered rather than
+  streamed responses) do not affect Slotty today.
+\end{decision}
+
+\begin{auditnote}
+  \code{curl -I https://slotty.msaeedsaeedi.com/login} returns 200 with
+  \code{strict-transport-security}; the API Gateway URL (output \code{api_endpoint}) returns 403
+  for \route{/login}, because it lacks the secret header.
+\end{auditnote}
+
+\section{Network}
+\begin{xltabular}{\linewidth}{@{}P{30mm} P{34mm} L@{}}
+  \toprule
+  \thead{Subnets (×2 AZs)} & \thead{CIDR} & \thead{Contents and routes}\\
+  \midrule
+  Public & \code{10.0.0.0/24}, \code{10.0.1.0/24} & The NAT instance only. Default route to the internet gateway.\\
+  App (private) & \code{10.0.10.0/24}, \code{10.0.11.0/24} & ECS tasks and the VPC link. Default route through the NAT; S3 gateway endpoint for image layers.\\
+  DB (private) & \code{10.0.20.0/24}, \code{10.0.21.0/24} & RDS. No default route at all.\\
+  \bottomrule
+\end{xltabular}
+
+Security groups allow only the next hop: the VPC link may reach web tasks on port 3000; web and
+worker tasks may reach RDS on 5432 (as may the NAT instance, for administrators' port forwarding);
+the NAT instance accepts only the app subnets. The VPC's default security group has no rules.
+
+\begin{decision}{ADR-003}
+  Egress through a NAT \emph{instance} (fck-nat on a \code{t4g.nano}, about \$7 a month) instead of a
+  managed NAT gateway (about \$33 plus traffic). It is a single instance with EC2 automatic
+  recovery; while it is down, running tasks keep serving users but cannot send email or pull
+  images. \tfvar{nat_mode = "gateway"} switches to a managed gateway (after lifting the SCP deny).
+\end{decision}
+
+\section{Compute}\label{sec:aws-compute}
+ECS on Fargate, ARM64 (Graviton), with Container Insights off to save cost.
+
+\begin{xltabular}{\linewidth}{@{}P{22mm} P{30mm} L@{}}
+  \toprule
+  \thead{Task} & \thead{Size} & \thead{Behaviour}\\
+  \midrule
+  web & 0.5 vCPU, 1 GB & Service, at least \tfvar{web_min} (2) tasks across both AZs, at most \tfvar{web_max} (4). The first task runs on regular Fargate, the rest on Fargate Spot. Scales on average CPU (target 60\,\%). Container health check on \route{/health/live}.\\
+  worker & 0.25 vCPU, 0.5 GB & Service, one task on Fargate Spot. Interruptions are safe: it drains on \code{SIGTERM} within 25\,s and delivery is at least once.\\
+  migrate & 0.25 vCPU, 0.5 GB & One-off task run by CI before each rollout (\cref{ch:delivery}); also used for administrative one-offs such as creating the first admin.\\
+  \bottomrule
+\end{xltabular}
+
+Rollouts keep 100\,\% of web capacity (up to 200\,\% during a deploy) and use the ECS deployment
+circuit breaker with automatic rollback. ECS Exec is enabled for debugging.
+
+\section{Database}
+\begin{xltabular}{\linewidth}{@{}P{38mm} L@{}}
+  \toprule
+  \thead{Setting} & \thead{Value}\\
+  \midrule
+  Engine and size & PostgreSQL 17, \code{db.t4g.micro}, single AZ (\tfvar{db_multi_az} switches)\\
+  Storage & gp3, 20 GB, autoscaling to 50 GB, encrypted with the AWS-managed key\\
+  Backups & Automated daily, 7-day point-in-time recovery, final snapshot on delete, deletion protection\\
+  Parameters & \code{rds.force_ssl = 1}; slow statements over 1\,s logged; idle-in-transaction sessions ended after 60\,s\\
+  Access & Private subnets only, not publicly accessible; credentials in SSM\\
+  \bottomrule
+\end{xltabular}
+
+TLS is verified in full. The image carries the RDS CA bundle (\code{/app/certs/rds-global-bundle.pem},
+checked against a pinned SHA-256 at build). The app and worker connect with
+\code{sslmode=verify-full}, trusting the bundle through \envvar{NODE_EXTRA_CA_CERTS}. Prisma's
+migration engine reads only the first certificate of an \code{sslcert} file, so the migrate image
+instead points OpenSSL's trust store at the bundle (\envvar{SSL_CERT_FILE}) and connects with
+\code{sslmode=require&sslaccept=strict}, which verifies the chain and the host name.
+
+\begin{decision}{ADR-004}
+  A single-AZ \code{db.t4g.micro} at bootstrap. A zone outage means downtime until RDS recovers
+  or the database is restored elsewhere; Multi-AZ doubles the database cost. Revisit when a
+  demo day's downtime would cost more than about \$14 a month.
+\end{decision}
+
+\section{Email}
+\aws{Amazon SES} sends from \code{no-reply@slotty.msaeedsaeedi.com} through the worker's existing
+SMTP transport (port 587, STARTTLS). The domain identity has Easy DKIM (three CNAME records), a
+custom MAIL FROM domain \code{mail.slotty.msaeedsaeedi.com} with SPF, and a DMARC policy of
+\code{p=quarantine} with strict DKIM alignment. A configuration set, the domain's default,
+publishes bounces, complaints and rejections to the alerts SNS topic; the account-level
+suppression list stops further sends to bounced or complaining addresses. The SMTP credentials
+belong to an IAM user that may only call \code{ses:SendRawEmail} with a \code{From} address on the
+domain.
+
+\begin{note}
+  The account was created in the SES sandbox, which only delivers to verified addresses.
+  Production access was requested on 2026-11-16; check \code{aws sesv2 get-account} for
+  \code{ProductionAccessEnabled}.
+\end{note}
+
+\section{Secrets and configuration}
+Runtime secrets are SSM Parameter Store \code{SecureString}s under \code{/slotty/}, encrypted with
+the AWS-managed key and injected by ECS at task start: \envvar{DATABASE_URL},
+\envvar{MIGRATE_DATABASE_URL}, \envvar{ORIGIN_VERIFY_SECRET}, \envvar{SMTP_USER},
+\envvar{SMTP_PASS}, \envvar{VAPID_PUBLIC_KEY}, \envvar{VAPID_PRIVATE_KEY}. Terraform generates
+them, so they are also in the Terraform state; the state bucket is private and encrypted. Only the
+ECS execution role may read them. Non-secret settings are plain environment variables in the task
+definitions (\cref{app:config}).
+
+\section{Observability}
+Container logs go to CloudWatch Logs (\code{/slotty/web}, \code{/slotty/worker},
+\code{/slotty/migrate}, \code{/slotty/api}), kept 14 days. Ten alarms (the free allowance) email
+the alerts topic:
+
+\begin{xltabular}{\linewidth}{@{}P{42mm} L@{}}
+  \toprule
+  \thead{Alarm} & \thead{Fires when}\\
+  \midrule
+  \code{slotty-web-down}, \code{slotty-worker-down} & The service reports no CPU samples for 10 minutes (no task running)\\
+  \code{slotty-web-cpu-high} & Web CPU above 85\,\% for 15 minutes despite autoscaling\\
+  \code{slotty-web-memory-high} & Web memory above 85\,\% for 10 minutes\\
+  \code{slotty-5xx} & More than 10 server errors in 5 minutes at API Gateway\\
+  \code{slotty-db-cpu-high} & Database CPU above 80\,\% for 15 minutes\\
+  \code{slotty-db-storage-low} & Less than 2 GB free\\
+  \code{slotty-db-connections-high} & More than 70 connections\\
+  \code{slotty-nat-status-failed} & The NAT instance fails its status checks\\
+  \code{slotty-worker-failures} & A worker job crashes, or 10 or more email sends fail within 30 minutes\\
+  \bottomrule
+\end{xltabular}
+
+\section{Terraform}
+\begin{xltabular}{\linewidth}{@{}P{36mm} L@{}}
+  \toprule
+  \thead{Path} & \thead{Contents}\\
+  \midrule
+  \src{infra/aws/org} & Organization, account, SCPs, budget, anomaly alerts, CloudTrail, state bucket. Applied with management-account credentials.\\
+  \src{infra/aws/app} & Everything inside \code{slotty-prod}, one file per concern (\code{network.tf}, \code{nat.tf}, \code{dns.tf}, \code{edge.tf}, \code{api.tf}, \code{discovery.tf}, \code{ecs.tf}, \code{rds.tf}, \code{ses.tf}, \code{secrets.tf}, \code{iam.tf}, \code{observability.tf}, \code{security.tf}). Its provider assumes \code{OrganizationAccountAccessRole}.\\
+  \src{infra/aws/deploy.sh} & The rollout script CI runs (\cref{ch:delivery}).\\
+  \bottomrule
+\end{xltabular}
+
+Variables and their defaults are in \src{infra/aws/app/variables.tf}; per-environment values in
+\code{terraform.tfvars} (not committed). Every apply is planned first and the plan reviewed.
+ECS services ignore changes to their task definition: CI owns the running image, so an
+environment change made in Terraform reaches the tasks on the next deploy.
+
+\begin{auditnote}
+  \code{terraform -chdir=infra/aws/app plan -detailed-exitcode} exits 0 when the account matches
+  the code. Any other exit code is drift to explain.
+\end{auditnote}

@@ -1,0 +1,7 @@
+# latexmk configuration for the system documentation (run inside docs/tooling's image).
+$pdf_mode = 4;               # LuaLaTeX (fontspec, OpenType fonts)
+$out_dir = 'build';
+$aux_dir = 'build/aux';
+$max_repeat = 6;             # cross-references, table widths and the TOC settle in a few runs
+$lualatex = 'lualatex -interaction=nonstopmode -halt-on-error -file-line-error %O %S';
+@default_files = ('slotty.tex');

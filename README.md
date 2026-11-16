@@ -107,13 +107,14 @@ src/app/actions/       Server Actions: thin wrappers that call services
 src/app/(auth)/        Sign in, invite, password reset
 src/app/(app)/         Signed-in app: dashboard, student pages, /courses/[id]/manage (staff), /admin
 src/jobs/worker.ts     Email/push outbox delivery, reminders, automations
-infra/                 Local Docker services (Postgres, Mailpit) and the production image for local runs
+infra/                 Local Docker services (Postgres, Mailpit, Caddy); infra/aws: AWS Terraform and deploy script
 deploy/                Production stack for one VPS (compose, Caddy, backups)
 prisma/                Schema, migrations, seed
-docs/                  User journeys, business rules, roadmap
+docs/                  System documentation (LaTeX): journeys, rules, architecture, AWS, operations, AI-DLC, decisions
+aidlc/                 AI-DLC workspace: intent records, code knowledge base, project rules
 ```
 
-See [docs/user-journeys.md](docs/user-journeys.md), [docs/business-rules.md](docs/business-rules.md) and [docs/roadmap.md](docs/roadmap.md).
+The system documentation is one LaTeX document in `docs/` (user journeys, business rules, architecture, AWS platform, operations, AI-DLC workflow, decision records, roadmap). Build it with `bun run docs:build` → `docs/build/slotty.pdf`; CI also attaches the PDF to every run that changes `docs/`.
 
 ## Key rules
 

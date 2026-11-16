@@ -1,0 +1,55 @@
+\chapter{Cost model}\label{ch:cost}
+\chapterstatus{complete}{2026-11-16}{AWS Price List API (us-east-1), \src{infra/aws/app/variables.tf}}
+
+The budget is \$50 a month for the \code{slotty-prod} account (\cref{sec:aws-guardrails}). The
+estimate below uses on-demand list prices for us-east-1, checked against the AWS Price List API on
+2026-11-16, and 730 hours a month. Fargate Spot has no list price; its line assumes the usual
+discount of about 70\,\%.
+
+{\tablefont
+\begin{xltabular}{\linewidth}{@{}P{38mm} L r@{}}
+  \toprule
+  \thead{Item} & \thead{Basis} & \thead{\$ / month}\\
+  \midrule
+  \endhead
+  Fargate web, on demand & 0.5 vCPU × \$0.03238 + 1 GB × \$0.00356 per hour (ARM) & 14.42\\
+  Fargate web, Spot & the same size, about 70\,\% off & 4.60\\
+  Fargate worker, Spot & 0.25 vCPU, 0.5 GB & 2.30\\
+  Migrate task & about a minute per deploy & 0.05\\
+  RDS \code{db.t4g.micro} & \$0.016 per hour, single AZ & 11.68\\
+  RDS storage & 20 GB gp3 × \$0.115; backups free up to the database size & 2.30\\
+  NAT instance & \code{t4g.nano} \$0.0042/h, 4 GB gp3, one public IPv4 at \$0.005/h & 7.04\\
+  API Gateway & about 1 million requests × \$1 per million & 1.00\\
+  Cloud Map & 3 registered instances × \$0.10, about 1 million lookups × \$1 per million & 1.30\\
+  Route 53 & two hosted zones (public, and Cloud Map's private zone) and queries & 1.10\\
+  CloudFront & inside the always-free allowance (1 TB, 10 million requests) & 0.00\\
+  CloudWatch & inside the free allowance (5 GB of logs, 10 alarms) & 0.30\\
+  ECR & about 450 MB × 20 images kept × \$0.10 per GB & 0.90\\
+  SES & about 5,000 emails & 0.50\\
+  Everything else & SSM, ACM, budgets, anomaly detection, CloudTrail (first trail), S3 state & 0.20\\
+  \midrule
+  \textbf{Total} & & \textbf{47.69}\\
+  \bottomrule
+\end{xltabular}}
+
+\section{Growth}
+Each step is a variable change in \src{infra/aws/app/variables.tf} (some also need an SCP
+change in \src{infra/aws/org/scp.tf}):
+
+\begin{xltabular}{\linewidth}{@{}L r@{}}
+  \toprule
+  \thead{Change} & \thead{About \$ / month}\\
+  \midrule
+  Bootstrap (above) & 48\\
+  \tfvar{web_max = 6}, \tfvar{db_instance_class = "db.t4g.small"} & 60\\
+  \quad + \tfvar{db_multi_az = true} and an Application Load Balancer & 90\\
+  \quad + \tfvar{nat_mode = "gateway"} and AWS WAF & 135\\
+  Steady state: one-year Compute Savings Plan and an RDS reservation & $-$25 to $-$35\,\%\\
+  \bottomrule
+\end{xltabular}
+
+\begin{auditnote}
+  Actual spend: Cost Explorer filtered to the linked account (from the management account).
+  Activate the \code{Project} and \code{Env} cost-allocation tags in the management account's
+  billing console to break it down by tag.
+\end{auditnote}

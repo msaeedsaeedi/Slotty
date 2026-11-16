@@ -1,6 +1,6 @@
 /* Slotty service worker: offline copies of a student's key pages + push notifications.
  *
- * Caching rules (see docs/business-rules.md → PWA):
+ * Caching rules (see the system documentation, Business rules → PWA):
  * - Only GET requests. Server Actions (POST) are never cached or replayed.
  * - Build assets (/_next/static) are immutable: cache-first.
  * - Page navigations to OFFLINE_PAGES are network-first; the last good copy is

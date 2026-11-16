@@ -1,0 +1,47 @@
+% One assignment's lifecycle (chapter 3): four lanes, read left to right, top to bottom.
+% Laid out on a grid (column × 27 mm, lane × 17 mm) so no arrow crosses another.
+\begin{tikzpicture}[x=27mm, y=-17mm,
+    lcstep/.style={svc=21mm, minimum height=9mm, font=\sffamily\scriptsize},
+    lane/.style={font=\sffamily\scriptsize\bfseries, text=muted, anchor=east, align=right}]
+  % lane 0: staff set up
+  \node[lcstep] (course)  at (0,0) {Create course};
+  \node[lcstep] (roster)  at (1,0) {Import roster};
+  \node[lcstep] (assign)  at (2,0) {Assignment, policy, rubric};
+  \node[lcstep] (slots)   at (3,0) {Add slots (draft)};
+  \node[lcstep] (publish) at (4,0) {Open booking};
+  % lane 1: students
+  \node[lcstep] (book)    at (2,1) {Book};
+  \node[lcstep] (change)  at (3,1) {Reschedule or cancel};
+  \node[lcstep] (remind)  at (4,1) {Reminders 24 h and 1 h};
+  % lane 2: demo day
+  \node[lcstep] (today)   at (2,2) {Demo day: now and next};
+  \node[lcstep] (mark)    at (3,2) {Attendance and marks};
+  \node[lcstep] (submit)  at (4,2) {Submit};
+  % lane 3: results
+  \node[lcstep] (review)  at (3,3) {Instructor review};
+  \node[lcstep] (fin)     at (4,3) {Finalized};
+  \node[lcstep] (see)     at (2,3) {Student sees marks};
+  \node[lcstep] (close)   at (1,3) {Export, close, archive};
+
+  \node[lane] at (-.5,0) {Staff};
+  \node[lane] at (-.5,1) {Students};
+  \node[lane] at (-.5,2) {Demo day};
+  \node[lane] at (-.5,3) {Results};
+
+  \draw[flow] (course) -- (roster);
+  \draw[flow] (roster) -- (assign);
+  \draw[flow] (assign) -- (slots);
+  \draw[flow] (slots) -- (publish);
+  \draw[async] (publish.south) -- ++(0,.22) -| node[edgelabel, pos=.25]{students notified} (book.north);
+  \draw[flow] (book) -- (change);
+  \draw[async] (change) -- (remind);
+  \draw[flow] (remind.south) -- ++(0,.22) -| (today.north);
+  \draw[flow] (today) -- (mark);
+  \draw[flow] (mark) -- (submit);
+  \draw[flow] (submit) -- node[edgelabel, right]{no instructor} (fin);
+  \draw[flow] (submit.south west) -- node[edgelabel, sloped, below]{to review} (review.north east);
+  \draw[flow] (review) -- node[edgelabel, below]{finalize} (fin);
+  \draw[ctrl] (review) -- node[edgelabel, left]{return} (mark);
+  \draw[flow] (fin.south) -- ++(0,.25) -| (see.south);
+  \draw[flow] (see) -- (close);
+\end{tikzpicture}

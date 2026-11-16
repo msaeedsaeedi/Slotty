@@ -1,0 +1,50 @@
+\chapter{Security}\label{ch:security}
+\chapterstatus{draft}{2026-11-16}{\src{infra/aws}, \src{src/server/auth}, \src{src/proxy.ts}}
+
+This chapter gathers the controls described elsewhere into one view an auditor can check.
+
+\section{Controls}
+\begin{xltabular}{\linewidth}{@{}P{30mm} L P{26mm}@{}}
+  \toprule
+  \thead{Area} & \thead{Control} & \thead{Where}\\
+  \midrule
+  \endhead
+  Account isolation & Dedicated account in an Organization; SCPs deny other regions, large or expensive resources, root-user actions, leaving the Organization and tampering with CloudTrail & \cref{sec:aws-guardrails}\\
+  Audit (cloud) & Organization CloudTrail with log-file validation, 90 days, in the management account & \src{infra/aws/org}\\
+  Audit (app) & Moderation-relevant changes written in the same transaction as the change & \cref{ch:crosscutting}\\
+  Network & Tasks and database in private subnets; database subnets have no route out; security groups allow only the next hop; no SSH anywhere & \cref{ch:aws}\\
+  Edge & TLS 1.2+ with HSTS; origin reachable only with CloudFront's secret header; API Gateway throttling & \cref{sec:aws-request-path}\\
+  Data at rest & RDS, EBS, S3 and SSM encrypted with AWS-managed keys & \src{infra/aws/app}\\
+  Data in transit & TLS everywhere; database connections verify the certificate and host name against the RDS CA & \cref{ch:aws}\\
+  Secrets & SSM SecureStrings readable only by the ECS execution role; none in the image or the repository; Terraform state private and encrypted & \src{infra/aws/app/secrets.tf}\\
+  Deploy identity & GitHub OIDC, master branch of this repository only, least-privilege role; no stored keys & \cref{ch:delivery}\\
+  Email & SPF, DKIM and DMARC (\code{p=quarantine}); sending identity limited to the domain & \src{infra/aws/app/ses.tf}\\
+  Application access & Every service checks the actor's role per course; archived courses read-only; admins never course members & \cref{ch:rules}\\
+  Accounts & Argon2 password hashes, database sessions (30 days), reset links valid 2 hours, invites 14 days, silent success on unknown emails & \cref{ch:rules}\\
+  Supply chain & Lockfile installs; pinned base images and TeX image by digest; RDS CA bundle checked by SHA-256; ECR scan on push & \src{Dockerfile}\\
+  \bottomrule
+\end{xltabular}
+
+\section{Known gaps}
+\begin{risk}
+  \textbf{No web application firewall.} AWS WAF costs about \$10 a month, which the bootstrap
+  budget does not cover; API Gateway throttling is the only rate limit (ADR-009).
+\end{risk}
+\begin{risk}
+  \textbf{Management-account access uses an IAM user with long-lived keys.} Moving operators to
+  IAM Identity Center with MFA would remove them.
+\end{risk}
+\begin{risk}
+  \textbf{SMTP uses long-lived IAM user credentials} (ADR-008), limited to sending from the
+  domain. Rotate them on a schedule.
+\end{risk}
+
+\begin{todo}
+  \begin{itemize}
+    \item Threat model: assets (marks, personal data, sessions), actors, entry points, and the
+      control for each threat (STRIDE per entry point).
+    \item Application security review: session cookie flags, CSRF (Server Actions' origin check),
+      content security policy, rate limiting on sign-in and password reset.
+    \item Personal-data inventory and retention (with \cref{ch:data}).
+  \end{itemize}
+\end{todo}

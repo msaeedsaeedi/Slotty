@@ -1,0 +1,77 @@
+\chapter{Build, test and delivery}\label{ch:delivery}
+\chapterstatus{complete}{2026-11-16}{\src{.github/workflows/deploy.yml}, \src{infra/aws/deploy.sh}, \src{Dockerfile}}
+
+Every push and pull request is checked; every push to \code{master} is deployed. Nobody deploys
+by hand and nobody holds long-lived AWS keys for it.
+
+\begin{figure}[htbp]
+  \centering
+  \input{figures/delivery-pipeline}
+  \caption{The pipeline. A failing step stops everything after it; production keeps the previous release.}
+  \label{fig:pipeline}
+\end{figure}
+
+\section{Checks}
+The \code{check} job runs on every push and pull request: \code{bun install --frozen-lockfile},
+\code{bun run typecheck}, \code{bun run lint}, \code{bun run test:unit}. Integration and end-to-end
+tests need PostgreSQL and run locally (\code{bun run test}, \code{bun run test:e2e}); see
+\cref{sec:local-checks}.
+
+\section{Images}
+The \code{deploy} job builds two images natively on GitHub's ARM64 runner, matching Fargate's
+Graviton CPUs, and pushes them to ECR tagged with the commit SHA:
+
+\begin{xltabular}{\linewidth}{@{}P{30mm} P{28mm} L@{}}
+  \toprule
+  \thead{Image} & \thead{Tag} & \thead{Contents}\\
+  \midrule
+  App (default target) & \code{<sha>} & Next.js standalone server, the worker and admin scripts bundled by Bun, the RDS CA bundle. About 450 MB.\\
+  Migrate (\code{--target migrate}) & \code{<sha>-migrate} & The app image plus the Prisma CLI and OpenSSL; trusts only the RDS CA bundle.\\
+  \bottomrule
+\end{xltabular}
+
+Tags are immutable, so a re-run of the same commit reuses its images instead of rebuilding.
+
+\section{Rollout}
+\src{infra/aws/deploy.sh} does the rest, and works the same by hand:
+\begin{enumerate}
+  \item Registers new revisions of the \code{slotty-migrate}, \code{slotty-web} and
+    \code{slotty-worker} task definitions: the latest revision with only the image changed.
+    Configuration changes made in Terraform therefore ride along with the next deploy.
+  \item Runs the migrate task, waits for it to stop and prints its log. A non-zero exit stops the
+    deploy; the services stay on the previous release.
+  \item Updates the web and worker services and waits until they are stable.
+  \item Waits for each new deployment's own verdict (completed or failed, up to 10 minutes) and
+    checks it is the one now running. A circuit-breaker rollback is reported as a failure.
+  \item Requests \route{/health} through CloudFront, which also checks the database.
+\end{enumerate}
+
+\begin{decision}{ADR-010}
+  CI owns which image runs; Terraform owns everything else. ECS services ignore task-definition
+  changes in Terraform, and CI's role can only push images, register task definitions, run the
+  migrate task and update the two services.
+\end{decision}
+
+\section{Identity}
+GitHub Actions assumes the \code{slotty-github-deploy} role with OpenID Connect. The role trusts
+only tokens whose subject is this repository's \code{master} branch, in GitHub's immutable form
+(\code{repo:<owner>@<owner-id>/<repo>@<repo-id>:ref:refs/heads/master}), so a renamed or
+re-created repository with the same name cannot deploy. Its permissions are listed in
+\src{infra/aws/app/iam.tf}.
+
+The workflow reads its targets from repository variables (\code{AWS_DEPLOY_ROLE_ARN},
+\code{ECR_REPOSITORY}, \code{ECS_CLUSTER}, \code{ECS_SUBNETS}, \code{ECS_SECURITY_GROUP},
+\code{APP_URL}), which \code{terraform output github_actions_variables} prints. None of them are
+secrets. Until \code{AWS_DEPLOY_ROLE_ARN} is set, only the checks run.
+
+\section{Local checks}\label{sec:local-checks}
+\begin{lstlisting}[language=bash]
+bun run infra:up        # Postgres, Mailpit, Caddy (Docker)
+bun run typecheck && bun run lint && bun run test && bun run test:e2e
+bun run app:up          # the production images locally at http://localhost:3001
+\end{lstlisting}
+
+\section{This document}
+\code{bun run docs:build} builds this PDF in a pinned TeX Live image (\src{docs/tooling}). CI
+builds it for every pull request and keeps the PDF as a build artifact, so a broken document
+fails like broken code.
