@@ -53,8 +53,16 @@ EXPOSE 3000
 CMD ["node", "server.js"]
 
 FROM app AS migrate
+USER root
+# Prisma's engine uses OpenSSL and detects its version from the openssl binary.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
+USER node
 COPY --from=migrate-deps --chown=node:node /app/migrate ./migrate
 WORKDIR /app/migrate
+# The schema engine's `sslcert` URL option reads only the first certificate of a file, and the RDS
+# bundle holds one root per region. So OpenSSL's default trust store is the whole bundle instead.
+# This container only ever talks to the database. Elsewhere (Postgres without TLS) it's unused.
+ENV SSL_CERT_FILE=/app/certs/rds-global-bundle.pem
 CMD ["node_modules/.bin/prisma", "migrate", "deploy"]
 
 # Default target: the app image.

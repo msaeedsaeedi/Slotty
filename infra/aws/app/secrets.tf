@@ -15,11 +15,13 @@ resource "aws_ssm_parameter" "database_url" {
   value = "${local.db_base}?sslmode=verify-full"
 }
 
-# The Prisma schema engine (migrations) has its own URL syntax: `sslcert` is the CA to trust.
+# The Prisma schema engine (migrations) has its own URL syntax. `sslaccept=strict` verifies the
+# chain and hostname against OpenSSL's trust store, which the migrate image points at the RDS bundle
+# (SSL_CERT_FILE in the Dockerfile). Don't use `sslcert`: it reads only the bundle's first root.
 resource "aws_ssm_parameter" "migrate_database_url" {
   name  = "${local.ssm_prefix}/MIGRATE_DATABASE_URL"
   type  = "SecureString"
-  value = "${local.db_base}?sslmode=require&sslcert=/app/certs/rds-global-bundle.pem&sslaccept=strict"
+  value = "${local.db_base}?sslmode=require&sslaccept=strict"
 }
 
 resource "aws_ssm_parameter" "origin_verify" {
