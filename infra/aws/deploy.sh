@@ -54,15 +54,23 @@ aws ecs update-service --cluster "$ECS_CLUSTER" --service worker --task-definiti
 log "rolling out web and worker"
 aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services web worker
 
-# A circuit-breaker rollback also ends "stable", on the old revision: check we're on the new one.
+# "Stable" can come before the deployment's own verdict, and a circuit-breaker rollback also ends
+# stable (on the old revision). Wait for our deployment to finish, then check it's the one running.
 for pair in "web $web_td" "worker $worker_td"; do
   read -r service wanted <<< "$pair"
-  read -r running state < <(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$service" \
-    --query 'services[0].deployments[?status==`PRIMARY`] | [0].[taskDefinition, rolloutState]' --output text)
-  if [ "$running" != "$wanted" ] || [ "$state" != "COMPLETED" ]; then
-    log "$service did not roll out (running $running, $state); the circuit breaker rolled it back"
+  for _ in $(seq 60); do
+    read -r state reason < <(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$service" \
+      --query "services[0].deployments[?taskDefinition=='$wanted'] | [0].[rolloutState, rolloutStateReason]" --output text)
+    [ "$state" = "IN_PROGRESS" ] || break
+    sleep 10
+  done
+  primary=$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$service" \
+    --query 'services[0].deployments[?status==`PRIMARY`] | [0].taskDefinition' --output text)
+  if [ "$state" != "COMPLETED" ] || [ "$primary" != "$wanted" ]; then
+    log "$service did not roll out: ${state:-no deployment} (${reason:-}); running $primary"
     exit 1
   fi
+  log "$service: $reason"
 done
 
 if [ -n "${APP_URL:-}" ]; then
