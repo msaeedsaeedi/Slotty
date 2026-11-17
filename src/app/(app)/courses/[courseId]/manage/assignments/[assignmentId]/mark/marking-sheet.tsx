@@ -511,7 +511,7 @@ export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, embedd
         </fieldset>
 
         {embedded && !locked(current) && (
-          <ActionForm action={submitManyAction} compact className="flex flex-wrap items-center gap-3 border-t pt-3 text-sm">
+          <ActionForm action={submitManyAction} track="marking" compact className="flex flex-wrap items-center gap-3 border-t pt-3 text-sm">
             <input type="hidden" name="evaluationId" value={st.evaluationId ?? ""} />
             <span className="flex-1 text-muted-foreground">
               {!canSubmitThis
@@ -596,7 +596,7 @@ export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, embedd
         {stillRunning ? (
           <p className="text-xs text-muted-foreground">Marks save as you type. {finalOnSubmit ? "Release" : "Submit"} them once today&apos;s demos are over.</p>
         ) : ready.length > 0 ? (
-          <ActionForm action={submitManyAction} compact className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3 text-sm">
+          <ActionForm action={submitManyAction} track="marking" compact className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3 text-sm">
             {ready.map((id) => (
               <input key={id} type="hidden" name="evaluationId" value={id} />
             ))}

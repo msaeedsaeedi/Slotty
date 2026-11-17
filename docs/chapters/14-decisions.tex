@@ -1,5 +1,5 @@
 \chapter{Architecture decisions}\label{ch:decisions}
-\chapterstatus{complete}{2026-11-16}{pull requests \#14–\#18, \src{infra/aws}}
+\chapterstatus{complete}{2026-11-17}{pull requests \#14–\#19 and the analytics change, \src{infra/aws}}
 
 Each record states a choice, what it was chosen over, what it costs, and when to look at it
 again. Records are never deleted: a later decision \emph{supersedes} an earlier one and says so.
@@ -127,3 +127,46 @@ Add one for every deliberate trade-off (AI-DLC's design stages propose them).
   {A heavier toolchain (a 3 GB build image, used only for the documentation). The old Markdown
    files were folded into \cref{ch:journeys,ch:rules,ch:roadmap}.}
   {The document stops being kept up to date: then prefer fewer chapters over stale ones.}
+
+\adr{015}{First-party usage analytics and anonymous feedback}{2026-11-17}{Accepted}
+  {Before launch to about 300 students and 15 staff, improvements should rest on evidence: where
+   booking and marking get stuck, how fast pages are on phones, what breaks, what nobody uses, and
+   what people say. The budget has about \$2 a month left; the users are students whose data
+   includes marks.}
+  {Collect it ourselves: a small browser tracker beaconing a fixed event catalog to
+   \route{/api/events}, stored in PostgreSQL under a pseudonymous HMAC visitor key with route
+   templates only, rolled up daily by the worker, kept 90 days raw and 13 months as totals, and
+   reported to the product team (ADR-016). Workflow numbers (reschedules, no-shows, time to mark) are
+   queried from the existing tables. Feedback and one-question surveys are stored without the
+   user. Usage data is on by default with an opt-out in Account, explained at \route{/privacy};
+   errors and feedback are collected either way. A report-only content security policy limits
+   the page to its own origin.}
+  {About \$0.05 a month; no new AWS service or third party, and the data can be joined with
+   Slotty's own (role, flow, release). In exchange we build and maintain the reports ourselves,
+   there is no session replay or heat map, and blocked or closed tabs can lose their last few
+   events. Rejected: CloudWatch RUM (about \$0.50 a month at this scale, but it needs a Cognito
+   identity pool and its data can't be joined with ours), a SaaS such as PostHog or Plausible
+   (student data leaves our account; consent banner; vendor lock-in), self-hosted PostHog (needs
+   more memory than the whole budget buys), session replay (records marks and personal data).}
+  {Traffic grows past about 5 million events a month (move raw events out of RDS), the team
+   needs replay or heat maps, or the policy for student data changes (for example opt-in
+   consent).}
+
+\adr{016}{Usage insights belong to the product team, not to administration}{2026-11-17}{Accepted}
+  {Admins run the deployment (users, courses, email). Usage data and feedback are evidence for
+   whoever builds Slotty. Putting them in the admin console widens who can see them, and any
+   bug in admin or course code would sit one step from internal data.}
+  {A separate \route{/platform} area and permission, \code{User.platformAccess}, checked by
+   \code{assertPlatform}. A platform account is dedicated: never an admin and never a course
+   member, enforced by \code{canGrantPlatform} and every enrolment path. It is granted only by a
+   command-line job (the same way the first admin is created), and the admin console neither
+   lists nor changes it, nor shows its activity in the audit log.}
+  {Two kinds of console account to operate; the product team needs a second login if they also
+   teach or administer. A university admin can't see adoption numbers unless the product team
+   shares them. Rejected: an extra flag for admins (keeps the data one bug away from the
+   console), a separate dashboard tool such as Metabase or Grafana (its own compute, over the
+   budget, and a network path into the private database), a separate deployment (doubles the
+   cost).}
+  {Admins need adoption numbers for their own courses: add an aggregate, course-level view for
+   them rather than opening \route{/platform}.}
+

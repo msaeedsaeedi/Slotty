@@ -19,6 +19,8 @@ from SSM (\cref{ch:aws}).
   \envvar{MAIL_FROM} & env & Sender, \code{Slotty <no-reply@<domain>>}.\\
   \envvar{VAPID_PUBLIC_KEY}, \envvar{VAPID_PRIVATE_KEY} & SSM & Web Push keys; both empty turns push off.\\
   \envvar{VAPID_SUBJECT} & env & Contact for push services (\code{mailto:}).\\
+  \envvar{ANALYTICS_SECRET} & SSM & Key for the pseudonymous visitor code. Unset turns usage analytics off (development and tests); feedback and surveys still work.\\
+  \envvar{APP_VERSION} & deploy & The release recorded with events, feedback and survey answers; \src{infra/aws/deploy.sh} sets it to the image tag. Falls back to the package version.\\
   \envvar{NODE_EXTRA_CA_CERTS} & env & The RDS CA bundle in the image, for verified database TLS.\\
   \envvar{SSL_CERT_FILE} & image & Migrate image only: OpenSSL's trust store, set to the RDS CA bundle.\\
   \envvar{HOSTNAME}, \envvar{PORT} & env / image & Web server bind address (\code{0.0.0.0}) and port (3000).\\

@@ -90,6 +90,7 @@ resource "aws_ecs_task_definition" "web" {
     secrets = concat([
       { name = "DATABASE_URL", valueFrom = aws_ssm_parameter.database_url.arn },
       { name = "ORIGIN_VERIFY_SECRET", valueFrom = aws_ssm_parameter.origin_verify.arn },
+      { name = "ANALYTICS_SECRET", valueFrom = aws_ssm_parameter.analytics_secret.arn },
     ], local.push_secrets)
     healthCheck = {
       command     = ["CMD", "node", "-e", "fetch('http://localhost:3000/health/live').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]

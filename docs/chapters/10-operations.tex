@@ -44,6 +44,16 @@ aws ecs run-task --profile slotty-prod --cluster slotty --task-definition slotty
   as temporary and change it after the first sign-in.
 \end{risk}
 
+\subsection{Give someone platform access}\label{sec:ops-platform}
+Usage insights and feedback (\route{/platform}) need a dedicated account: not an admin and not in
+any course. Grant it as a one-off command, like creating an admin, with
+\code{["node","dist/jobs/platform-access.js","grant"]} and \envvar{PLATFORM_EMAIL},
+\envvar{PLATFORM_NAME}, \envvar{PLATFORM_PASSWORD} (locally: \code{bun run platform:grant}). An
+existing account keeps its password; a new one is created active. \code{revoke} (needs only
+\envvar{PLATFORM_EMAIL}) removes access and signs the account out. Both are audited as
+\code{platform.grant} / \code{platform.revoke}, which only the database shows. There is
+deliberately no button for this anywhere in the app.
+
 \subsection{Reach the database}
 Port-forward through the NAT instance with Session Manager (no SSH, no bastion), then connect
 with the credentials in \code{/slotty/DATABASE_URL}:
@@ -59,6 +69,16 @@ credential error affects every message (\code{slotty-worker-failures} fires); a 
 complaint arrives as an SNS email and the address is suppressed. Retry from the console after
 fixing the cause. Rotate the SMTP credentials with
 \code{terraform apply -replace=aws_iam_access_key.ses_smtp}, then redeploy.
+
+\subsection{Usage data looks wrong or empty}
+\route{/platform/insights} says so when \envvar{ANALYTICS_SECRET} isn't set on the web tasks (check
+the task definition's secrets). Raw events appear within about 10 seconds of a visit; the
+13-month trend fills from the next hourly worker run (look for \code{analyticsRolled=} in
+\code{/slotty/worker}; an \code{analytics failed} line names the error). The ingest endpoint logs
+\code{[analytics] could not record events} in \code{/slotty/web} and still answers 204, so the
+app keeps working. Rotating the secret
+(\code{terraform apply -replace=random_password.analytics}, then a deploy) makes every person
+count as new from then on. No alarm is spent on analytics: it is not part of the service.
 
 \subsection{An alarm fired}
 \begin{xltabular}{\linewidth}{@{}P{40mm} L@{}}

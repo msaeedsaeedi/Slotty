@@ -11,7 +11,7 @@ import { CourseFields } from "../../courses/course-fields";
 import { Input } from "@/components/ui/input";
 import { requireAdminUser } from "@/server/auth/session";
 import { adminListCourses, type CourseFilter } from "@/server/services/admin";
-import { FilterTabs, query } from "../filter-tabs";
+import { FilterTabs, query } from "@/components/filter-tabs";
 
 export const metadata = { title: "All courses" };
 

@@ -1,5 +1,5 @@
 \chapter{Roles and user journeys}\label{ch:journeys}
-\chapterstatus{complete}{2026-11-16}{\src{src/app}, \src{src/server/services}}
+\chapterstatus{complete}{2026-11-17}{\src{src/app}, \src{src/server/services}}
 
 How each role uses Slotty from start to finish, with the screen, the service that runs, and what the user gets back. Update this chapter whenever a flow changes.
 
@@ -96,6 +96,36 @@ Admins run the platform from the web console. They are never students or staff o
   \bottomrule
 \end{xltabular}}
 
+
+\section{Platform team}\label{sec:journey-platform}
+
+The product team (whoever builds Slotty) reads the evidence for what to improve. That is not the
+admins' job: admins run the deployment. A platform account is a \textbf{dedicated account}: never
+an admin, never in a course, granted only from the command line (\code{bun run platform:grant},
+\cref{sec:ops-platform}), and invisible to the admin console (ADR-016). It lands on
+\route{/platform}; the header shows only \ui{Platform}. It isn't tracked, surveyed or offered the
+feedback button.
+
+{\tablefont
+\begin{xltabular}{\linewidth}{@{}l P{34mm} P{30mm} L@{}}
+  \toprule
+  \thead{\#} & \thead{Step and screen} & \thead{Service} & \thead{What happens / feedback}\\
+  \midrule
+  \endhead
+  P1 & Looks for evidence of what to improve\newline{\color{muted}\footnotesize \route{/platform/insights}} & \code{usageOverview}, \code{workflowMetrics}, \code{funnels}, \code{performance}, \code{clientErrors}, \code{surveys} & Six reports over 7, 30 or 90 days. \ui{Usage}: people active this week by role, people per day, pages by views (the bottom of the list is what hardly anyone opens), features used, and a 13-month trend. \ui{Booking \& marking}: reschedules, cancellations (and how many were rebooked within 30 minutes), no-shows, waitlist conversion, requests and how fast they were answered, demo-to-marks time, unlocks; these come from the booking tables, so they count everyone. \ui{Funnels}: visits that saw the slot picker or marking sheet, pressed submit, succeeded or got an error, by device. \ui{Speed}: Core Web Vitals at the 75th percentile by device, and the slowest pages. \ui{Errors}: browser errors grouped by message, with pages and releases. \ui{Surveys}: answers to the one-question surveys. See \cref{sec:rules-usage}.\\
+  P2 & Reads feedback\newline{\color{muted}\footnotesize \route{/platform/feedback} (badge = new count)} & \code{listFeedback}, \code{setFeedbackStatus} & Anonymous messages from the feedback button with rating, role, page type and release. \ui{Mark triaged} once it's noted somewhere (a roadmap item), \ui{Mark done} once acted on, \ui{Reopen}. Status changes are audited under \code{platform.*}, which the admin audit log leaves out.\\
+  \bottomrule
+\end{xltabular}}
+
+\section{Feedback and surveys (students and staff)}\label{sec:journey-feedback}
+
+Everyone except admins has a \ui{Send feedback} button (speech-bubble icon) in the header: a
+message and an optional 1--5 rating, sent anonymously (\code{submitFeedback}). After a student
+books or moves a demo, and after staff submit marks, a small card in the corner asks one question
+(``How easy was it to book your demo?'') with answers 1--5 or \ui{Not now}; each question is asked
+at most once every 14 days (\code{claimSurvey}, \code{answerSurvey}). \route{/account} has
+\ui{Usage data}, on by default, and \route{/privacy} explains what is collected
+(\cref{sec:rules-usage}).
 
 \section{End-to-end lifecycle (one assignment)}
 

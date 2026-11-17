@@ -30,6 +30,19 @@ resource "aws_ssm_parameter" "origin_verify" {
   value = random_password.origin_verify.result
 }
 
+# Key for the pseudonymous visitor code in usage analytics (ADR-015). Rotating it makes everyone
+# look like a new visitor; it never leaves SSM and the app never shows it.
+resource "random_password" "analytics" {
+  length  = 48
+  special = false
+}
+
+resource "aws_ssm_parameter" "analytics_secret" {
+  name  = "${local.ssm_prefix}/ANALYTICS_SECRET"
+  type  = "SecureString"
+  value = random_password.analytics.result
+}
+
 resource "aws_ssm_parameter" "smtp_user" {
   name  = "${local.ssm_prefix}/SMTP_USER"
   type  = "SecureString"

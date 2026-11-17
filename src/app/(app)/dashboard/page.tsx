@@ -22,6 +22,8 @@ export default async function DashboardPage() {
   const user = await requireUser();
   // Admins run the platform and never join courses: the console is their home.
   if (user.isAdmin) redirect("/admin");
+  // Platform accounts (product team) have no courses either: their home is /platform.
+  if (user.isPlatform) redirect("/platform");
   const now = new Date();
   const home = await getHome(user, now);
   const roles = home.teaching ? await myRoleKinds(user) : null;

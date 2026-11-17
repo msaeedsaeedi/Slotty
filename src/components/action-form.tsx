@@ -9,7 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { ActionState } from "@/server/action-utils";
+import type { Flow } from "@/domain/analytics";
 import { useOnline } from "@/components/pwa";
+import { openSurvey } from "@/components/survey";
+import { trackStep } from "@/lib/analytics";
 
 type Action = (state: ActionState, formData: FormData) => Promise<ActionState>;
 
@@ -29,6 +32,7 @@ export function ActionForm({
   confirm,
   confirmLabel = "Confirm",
   onSuccess,
+  track,
 }: {
   action: Action;
   children: ReactNode;
@@ -42,6 +46,8 @@ export function ActionForm({
   confirmLabel?: string;
   /** Called after a successful submit (client components only). */
   onSuccess?: () => void;
+  /** Record this form's submit and its outcome as steps of a usage funnel. */
+  track?: Flow;
 }) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
@@ -54,12 +60,15 @@ export function ActionForm({
   // so they still happen if the refreshed page no longer renders this form
   // (e.g. the slot a student just booked leaves the picker).
   const [state, formAction, pending] = useActionState(async (prev: ActionState, fd: FormData) => {
+    if (track) trackStep(track, "submit");
     const result = await action(prev, fd);
+    if (track && result) trackStep(track, result.ok ? "done" : "error");
     if (result?.ok) {
       if (result.message) toast.success(result.message);
       if (resetOnSuccess) formRef.current?.reset();
       onSuccessRef.current?.();
       if (result.navigate) router.replace(result.navigate);
+      if (result.survey) openSurvey(result.survey);
     } else if (result && compact) {
       toast.error(result.error);
     }

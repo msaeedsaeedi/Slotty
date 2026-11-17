@@ -8,6 +8,8 @@ export interface Actor {
   email: string;
   name: string;
   isAdmin: boolean;
+  /** Product team (usage insights and feedback). Never set together with isAdmin. */
+  isPlatform?: boolean;
 }
 
 export const STAFF: CourseRole[] = ["INSTRUCTOR", "TA"];
@@ -55,7 +57,17 @@ export const assertStaff = (tx: Tx, actor: Actor, courseId: string, opts?: Acces
   assertCourseRole(tx, actor, courseId, STAFF, opts);
 
 export function assertAdmin(actor: Actor): void {
-  if (!actor.isAdmin) throw new DomainError("Admins only.", "FORBIDDEN");
+  if (!actor.isAdmin || actor.isPlatform) throw new DomainError("Admins only.", "FORBIDDEN");
+}
+
+/** Usage insights and feedback: the product team's dedicated account only, never an admin. */
+export function assertPlatform(actor: Actor): void {
+  if (!actor.isPlatform || actor.isAdmin) throw new DomainError("Platform team only.", "FORBIDDEN");
+}
+
+/** Platform accounts never join courses; refuse wherever someone is added to one. */
+export function assertCanJoinCourses(user: { platformAccess: boolean }): void {
+  if (user.platformAccess) throw new DomainError("That account can't join courses.", "FORBIDDEN");
 }
 
 /** Does the course have an instructor to review TA submissions? */

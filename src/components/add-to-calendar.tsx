@@ -1,5 +1,6 @@
 "use client";
 
+import { trackFeature } from "@/lib/analytics";
 import { CalendarPlus, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -22,7 +23,7 @@ export function AddToCalendar({ options, size = "sm", variant = "outline" }: { o
           <CalendarPlus /> Add to calendar <ChevronDown className="opacity-60" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
+      <DropdownMenuContent align="start" onClick={() => trackFeature("add_to_calendar")}>
         <DropdownMenuItem asChild>
           <a href={options.google} target="_blank" rel="noreferrer">
             Google Calendar

@@ -7,6 +7,8 @@
     "build": "next build",
     "worker": "bun src/jobs/worker.ts",
     "admin:create": "bun src/jobs/create-admin.ts",
+    "platform:grant": "bun src/jobs/platform-access.ts grant",
+    "platform:revoke": "bun src/jobs/platform-access.ts revoke",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "infra:up": "docker compose -f infra/docker-compose.yml up -d --wait postgres mailpit caddy",

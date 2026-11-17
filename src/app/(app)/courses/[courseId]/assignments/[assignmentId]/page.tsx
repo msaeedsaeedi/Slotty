@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CalendarClock, ExternalLink, MapPin, User } from "lucide-react";
 import { AddToCalendar } from "@/components/add-to-calendar";
+import { TrackView } from "@/components/analytics";
 import { bookingCalendarOptions } from "@/server/services/calendar";
 import { bookSlotAction, cancelBookingAction, joinWaitlistAction, leaveWaitlistAction, rescheduleAction } from "@/app/actions/bookings";
 import { LocalTimeHint } from "@/components/local-time-hint";
@@ -260,8 +261,9 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
               </Link>
             </EmptyState>
           ) : (
-            [...days.entries()].map(([day, daySlots]) => (
+            [...days.entries()].map(([day, daySlots], i) => (
               <div key={day} className="space-y-2">
+                {i === 0 && <TrackView flow={rescheduling ? "reschedule" : "booking"} />}
                 <h3 className="text-sm font-medium">{day}</h3>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {daySlots.map((s) => {
@@ -276,6 +278,7 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
                       <ActionForm
                         key={s.id}
                         action={rescheduling ? rescheduleAction : bookSlotAction}
+                        track={rescheduling ? "reschedule" : "booking"}
                         compact
                         confirm={rescheduling ? `Move your demo to ${fmtRange(s.startsAt, s.endsAt, tz)}? ${rescheduleConsequence(budget)}` : undefined}
                         confirmLabel="Move my demo"

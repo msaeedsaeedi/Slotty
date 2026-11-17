@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireAdminUser } from "@/server/auth/session";
 import { adminEmailQueue } from "@/server/services/admin";
-import { FilterTabs } from "../filter-tabs";
+import { FilterTabs } from "@/components/filter-tabs";
 
 export const metadata = { title: "Email delivery" };
 

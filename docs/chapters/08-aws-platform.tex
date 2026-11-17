@@ -163,10 +163,12 @@ domain.
 Runtime secrets are SSM Parameter Store \code{SecureString}s under \code{/slotty/}, encrypted with
 the AWS-managed key and injected by ECS at task start: \envvar{DATABASE_URL},
 \envvar{MIGRATE_DATABASE_URL}, \envvar{ORIGIN_VERIFY_SECRET}, \envvar{SMTP_USER},
-\envvar{SMTP_PASS}, \envvar{VAPID_PUBLIC_KEY}, \envvar{VAPID_PRIVATE_KEY}. Terraform generates
+\envvar{SMTP_PASS}, \envvar{VAPID_PUBLIC_KEY}, \envvar{VAPID_PRIVATE_KEY}, \envvar{ANALYTICS_SECRET}
+(the key for the pseudonymous visitor code, web tasks only; ADR-015). Terraform generates
 them, so they are also in the Terraform state; the state bucket is private and encrypted. Only the
 ECS execution role may read them. Non-secret settings are plain environment variables in the task
-definitions (\cref{app:config}).
+definitions (\cref{app:config}); \src{infra/aws/deploy.sh} sets \envvar{APP_VERSION} to the
+image tag on every revision it registers.
 
 \section{Observability}
 Container logs go to CloudWatch Logs (\code{/slotty/web}, \code{/slotty/worker},

@@ -47,9 +47,9 @@ export const getCurrentUser = cache(async (): Promise<Actor | null> => {
     include: { user: true },
   });
   if (!session || session.expiresAt < new Date() || session.user.status !== "ACTIVE") return null;
-  const { id, email, name, isAdmin, timeFormat } = session.user;
+  const { id, email, name, isAdmin, platformAccess, timeFormat } = session.user;
   setRequestClock(timeFormat === "H24" ? "24h" : "12h");
-  return { id, email, name, isAdmin };
+  return { id, email, name, isAdmin, isPlatform: platformAccess };
 });
 
 /** For pages and actions: the signed-in user, or a redirect to /login. */
@@ -61,6 +61,12 @@ export async function requireUser(): Promise<Actor> {
 
 export async function requireAdminUser(): Promise<Actor> {
   const user = await requireUser();
-  if (!user.isAdmin) redirect("/");
+  if (!user.isAdmin || user.isPlatform) redirect("/");
+  return user;
+}
+
+export async function requirePlatformUser(): Promise<Actor> {
+  const user = await requireUser();
+  if (!user.isPlatform || user.isAdmin) redirect("/");
   return user;
 }

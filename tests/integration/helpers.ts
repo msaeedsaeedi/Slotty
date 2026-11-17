@@ -13,12 +13,18 @@ export async function resetDb() {
 }
 
 let n = 0;
-export async function makeUser(name: string, opts: { isAdmin?: boolean } = {}): Promise<Actor> {
+export async function makeUser(name: string, opts: { isAdmin?: boolean; isPlatform?: boolean } = {}): Promise<Actor> {
   n++;
   const user = await db.user.create({
-    data: { email: `${name.toLowerCase().replace(/\s+/g, ".")}.${n}@test.edu`, name, status: "ACTIVE", isAdmin: opts.isAdmin ?? false },
+    data: {
+      email: `${name.toLowerCase().replace(/\s+/g, ".")}.${n}@test.edu`,
+      name,
+      status: "ACTIVE",
+      isAdmin: opts.isAdmin ?? false,
+      platformAccess: opts.isPlatform ?? false,
+    },
   });
-  return { id: user.id, email: user.email, name: user.name, isAdmin: user.isAdmin };
+  return { id: user.id, email: user.email, name: user.name, isAdmin: user.isAdmin, isPlatform: user.platformAccess };
 }
 
 export const inHours = (h: number, from = new Date()) => new Date(from.getTime() + h * 3_600_000);

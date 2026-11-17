@@ -125,7 +125,7 @@ export async function resetPassword(token: string, newPassword: string) {
 export async function getAccount(actor: Actor) {
   return db.user.findUniqueOrThrow({
     where: { id: actor.id },
-    select: { name: true, email: true, emailReminders: true, emailAgenda: true, timeFormat: true, _count: { select: { sessions: true } } },
+    select: { name: true, email: true, emailReminders: true, emailAgenda: true, timeFormat: true, shareUsageData: true, _count: { select: { sessions: true } } },
   });
 }
 
@@ -158,6 +158,17 @@ export async function setEmailPreferences(actor: Actor, prefs: { emailReminders?
 
 export async function setTimeFormat(actor: Actor, timeFormat: "H12" | "H24") {
   await db.user.update({ where: { id: actor.id }, data: { timeFormat } });
+}
+
+/** "Share usage data" (on by default). Off: only errors are recorded, without the visitor key. */
+export async function setShareUsageData(actor: Actor, share: boolean) {
+  await db.user.update({ where: { id: actor.id }, data: { shareUsageData: share } });
+}
+
+/** Whether this user shares usage data, for the page tracker. */
+export async function sharesUsageData(actor: Actor): Promise<boolean> {
+  const u = await db.user.findUnique({ where: { id: actor.id }, select: { shareUsageData: true } });
+  return u?.shareUsageData ?? false;
 }
 
 /** Sign out everywhere except this browser. Returns how many sessions ended. */

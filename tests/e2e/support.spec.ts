@@ -13,7 +13,7 @@ test("a stuck student asks for help, staff move them, and their calendar file fo
   const ria = await login(browser, "ria@e2e.test");
   await open(ria, `/courses/${courseId}/assignments/${assignmentId}`);
   await ria.getByRole("button", { name: "Book" }).first().click();
-  await expect(ria.getByText("Your demo")).toBeVisible();
+  await expect(ria.getByText("Your demo", { exact: true })).toBeVisible();
   await expect(ria.getByRole("button", { name: "Add to calendar" })).toBeVisible();
 
   // She can't make it and asks staff instead of spending changes.
@@ -38,7 +38,7 @@ test("a stuck student asks for help, staff move them, and their calendar file fo
   await expect(ria.getByText("Handled")).toBeVisible();
   // The move answers her request automatically, and her demo card shows the new time.
   await expect(ria.getByText(/Placed in .*2:15–2:30 PM/)).toBeVisible();
-  await expect(ria.getByText("Your demo")).toBeVisible();
+  await expect(ria.getByText("Your demo", { exact: true })).toBeVisible();
   await expect(ria.getByText("2:15–2:30 PM", { exact: false }).first()).toBeVisible();
 
   // "Add to calendar" offers Google, Outlook, or a file for the booking as it is now.

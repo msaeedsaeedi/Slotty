@@ -23,7 +23,8 @@ database, and so that every change to data goes through a service that checks wh
   Services & \src{src/server/services} & One module per area (bookings, slots, evaluations, \dots). Each operation takes an \code{Actor}, checks access itself, enforces rules with \code{assertRule}, writes inside one transaction, and queues notifications and audit entries in that same transaction.\\
   Domain & \src{src/domain} & Pure functions: booking rules, slot generation, evaluation transitions, roster parsing, calendar files. Return a \code{RuleResult} whose message is shown to the user. No I/O.\\
   Infrastructure & \src{src/server}, \src{src/lib} & Database client (\src{src/server/db.ts}), mail and push delivery, sessions and passwords (\src{src/server/auth}), time formatting (\src{src/lib/time.ts}).\\
-  Worker & \src{src/jobs/worker.ts} & Delivers the email and push outboxes and runs scheduled jobs (\cref{sec:outbox}).\\
+  Worker & \src{src/jobs/worker.ts} & Delivers the email and push outboxes and runs scheduled jobs (\cref{sec:outbox}), including the hourly usage-data totals and clean-up.\\
+  Usage analytics & \src{src/lib/analytics.ts}, \src{src/components/analytics.tsx}, \src{src/app/api/events/route.ts}, \src{src/server/services/analytics.ts}, \code{insights.ts}, \code{feedback.ts} & Browser tracker (page views, Web Vitals, errors, funnel steps), the ingest endpoint, daily totals, the platform team's reports at \route{/platform}, feedback and surveys (\cref{sec:usage-analytics}).\\
   \bottomrule
 \end{xltabular}
 
@@ -49,6 +50,7 @@ One \src{Dockerfile} builds every process (\cref{sec:aws-compute}):
   Web & \code{node server.js} & Next.js standalone output: only the files the server traces.\\
   Worker & \code{node dist/jobs/worker.js} & Bundled by Bun at build time; runs on plain Node.\\
   First admin & \code{node dist/jobs/create-admin.js} & One-off; reads \envvar{ADMIN_EMAIL}, \envvar{ADMIN_PASSWORD}, \envvar{ADMIN_NAME}.\\
+  Platform access & \code{node dist/jobs/platform-access.js grant|revoke} & One-off; reads \envvar{PLATFORM_EMAIL}, \envvar{PLATFORM_PASSWORD}, \envvar{PLATFORM_NAME} (\cref{sec:ops-platform}).\\
   Migrations & \code{prisma migrate deploy} & Separate \code{migrate} image target carrying the Prisma CLI.\\
   \bottomrule
 \end{xltabular}

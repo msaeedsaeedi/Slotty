@@ -2,6 +2,7 @@
 #   web (default)   node server.js
 #   worker          node dist/jobs/worker.js
 #   first admin     node dist/jobs/create-admin.js   (ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_NAME)
+#   platform team   node dist/jobs/platform-access.js grant|revoke   (PLATFORM_EMAIL / PLATFORM_PASSWORD / PLATFORM_NAME)
 # Migrations need the Prisma CLI (~270 MB), so they get their own image, the `migrate` target:
 #   docker build -t slotty-app .                                  # web, worker, admin
 #   docker build --target migrate -t slotty-app:migrate .         # prisma migrate deploy
@@ -25,7 +26,7 @@ RUN DATABASE_URL=postgres://build@localhost/build bun install --frozen-lockfile
 FROM deps AS build
 COPY . .
 RUN DATABASE_URL=postgres://build@localhost/build bun run build \
- && bun build src/jobs/worker.ts src/jobs/create-admin.ts --target=node --outdir dist/jobs --external @node-rs/argon2 \
+ && bun build src/jobs/worker.ts src/jobs/create-admin.ts src/jobs/platform-access.ts --target=node --outdir dist/jobs --external @node-rs/argon2 \
  && echo '{"type":"module"}' > dist/jobs/package.json
 
 # Just the Prisma CLI (and the dotenv its config imports), for `migrate deploy`.
