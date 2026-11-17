@@ -1,9 +1,9 @@
 \chapter{Architecture decisions}\label{ch:decisions}
-\chapterstatus{complete}{2026-11-17}{pull requests \#14–\#19 and the analytics change, \src{infra/aws}}
+\chapterstatus{complete}{2026-11-17}{pull requests \#14–\#20 and AI-DLC's removal, \src{infra/aws}}
 
 Each record states a choice, what it was chosen over, what it costs, and when to look at it
 again. Records are never deleted: a later decision \emph{supersedes} an earlier one and says so.
-Add one for every deliberate trade-off (AI-DLC's design stages propose them).
+Add one for every deliberate trade-off.
 
 % \adr{number}{title}{date}{status}{context}{decision}{consequences}{revisit when}
 \newcommand{\adr}[8]{%
@@ -119,7 +119,7 @@ Add one for every deliberate trade-off (AI-DLC's design stages propose them).
   {If Spot capacity is unavailable, emails wait and the web tier runs on one task.}
   {Spot interruptions are seen on demo days.}
 
-\adr{014}{Documentation in LaTeX; changes through AI-DLC}{2026-11-16}{Accepted}
+\adr{014}{Documentation in LaTeX; changes through AI-DLC}{2026-11-16}{Accepted; AI-DLC part superseded by ADR-017}
   {Experts must be able to audit and extend the system; Markdown files had grown into tables that
    were hard to keep coherent, and changes had no recorded reasoning.}
   {One LaTeX document with a shared design and diagrams, built in a pinned TeX Live image and in
@@ -169,4 +169,20 @@ Add one for every deliberate trade-off (AI-DLC's design stages propose them).
    cost).}
   {Admins need adoption numbers for their own courses: add an aggregate, course-level view for
    them rather than opening \route{/platform}.}
+
+\adr{017}{Changes without AI-DLC}{2026-11-17}{Accepted; supersedes the AI-DLC part of ADR-014}
+  {Running one feature (usage analytics, \cref{sec:rules-usage}) through AI-DLC's \code{feature}
+   profile meant 30 stages and 30 approval gates for a design already agreed in conversation. The
+   framework added about 400 vendored files, hooks on every tool call, and its own record tree,
+   which typecheck and lint had to be told to skip. For a project and team this size the ceremony
+   outweighed what it caught.}
+  {Remove AI-DLC (\src{.claude} framework, \code{aidlc/} workspace, its git-ignore block and check
+   exclusions). Keep its useful part, the project rules, in \src{CLAUDE.md}; changes follow
+   \cref{ch:changes}: agree the design, branch, checks, documentation in the same pull request,
+   review, merge. The LaTeX documentation stays (ADR-014).}
+  {Less structure is enforced by tooling: the documentation and decision-record rules are now kept
+   by review and by \src{CLAUDE.md}, not by gates. Past AI-DLC records live only in git history.
+   Rejected: keeping AI-DLC with the lightest profiles (\code{express}, \code{bugfix}) still runs
+   its hooks and record keeping on every change.}
+  {Several people change Slotty at once and need a recorded, gated process again.}
 

@@ -16,9 +16,6 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "src/generated/**",
-    // AI-DLC framework install and workspace: vendored, not project code.
-    ".claude/**",
-    "aidlc/**",
   ]),
 ]);
 

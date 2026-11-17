@@ -1,6 +1,0 @@
-{
-  "schemaVersion": 1,
-  "frameworkVersion": "2.11.4",
-  "distribution": "claude",
-  "harnessDir": ".claude"
-}

@@ -1,0 +1,51 @@
+\chapter{How Slotty is changed}\label{ch:changes}
+\chapterstatus{complete}{2026-11-17}{\src{CLAUDE.md}, \src{.github/workflows}, ADR-017}
+
+Every change, whether a person or an AI coding agent writes it, follows the same short path. The
+standing rules an agent needs (stack, architecture rules, decisions, what is forbidden and what is
+mandatory) are in \src{CLAUDE.md}, which Claude Code reads automatically; people follow the same
+file.
+
+\section{The path of a change}
+\begin{enumerate}
+  \item \textbf{Agree the design first.} Describe the outcome, read the chapter for the area,
+    and settle the open questions in conversation (or an issue) before writing code. A deliberate
+    trade-off becomes a decision record (\cref{ch:decisions}).
+  \item \textbf{Branch off \code{master}} and implement under the architecture rules
+    (\cref{ch:blocks}): business rules in \src{src/domain} with unit tests, services that check the
+    actor, notifications through the outbox, audited moderation changes.
+  \item \textbf{Run the checks}: \code{bun run typecheck}, \code{bun run lint},
+    \code{bun run test}, and \code{bun run test:e2e} for anything a user sees (\cref{ch:delivery}).
+  \item \textbf{Update this document} in the same pull request (table below), add a change-log
+    line (\cref{app:changelog}) and check \code{bun run docs:build}.
+  \item \textbf{Open a pull request.} CI runs the checks; merging to \code{master} deploys
+    (\cref{ch:delivery}). Migrations must keep the previous release working.
+  \item \textbf{Infrastructure} (\src{infra/aws}): show the \code{terraform plan}, get it approved,
+    then apply exactly that plan. Task-definition changes go live on the next deploy.
+\end{enumerate}
+
+\section{Which chapters a change updates}
+\begin{xltabular}{\linewidth}{@{}P{58mm} L@{}}
+  \toprule
+  \thead{The change affects} & \thead{Update}\\
+  \midrule
+  User flows and screens & \cref{ch:journeys}\\
+  A business rule & \cref{ch:rules}, with the domain function and its unit test\\
+  Modules and processes & \cref{ch:blocks}\\
+  The schema & \cref{ch:data}\\
+  A cross-cutting pattern & \cref{ch:crosscutting}\\
+  AWS resources & \cref{ch:aws}, and \cref{ch:cost} for anything that costs money\\
+  CI/CD & \cref{ch:delivery}\\
+  Runbooks and alarms & \cref{ch:ops}\\
+  Security controls & \cref{ch:security}\\
+  A deliberate trade-off & a new record in \cref{ch:decisions}\\
+  What's next & \cref{ch:roadmap}\\
+  \bottomrule
+\end{xltabular}
+
+\begin{auditnote}
+  The reasoning for a change is in its pull request (description and review), the decision
+  records it adds, and the change log. From 16 to 17 November 2026 changes also ran through AWS's
+  AI-DLC framework; its intent records and audit trails were removed with it (ADR-017) and remain
+  in git history up to commit \code{e2edfa9}.
+\end{auditnote}

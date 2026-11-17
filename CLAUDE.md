@@ -2,16 +2,48 @@
 
 # Slotty — working notes
 
+Slotty: demo scheduling and evaluation for university courses. System documentation is one LaTeX document in `docs/` (`bun run docs:build`); read the chapter for the area you change before designing.
+
 - Package manager/runner is **bun** (`bun run …`, `bunx …`). No pnpm or sudo.
 - Local services run in Docker: `bun run infra:up` (infra/docker-compose.yml) starts Postgres 17 on :5432, Mailpit (SMTP :1025, inbox http://localhost:8025) and Caddy, which serves `bun run dev` at https://slotty.local. One server holds three databases: `slotty` (dev, `.env`), `slotty_test` (tests, `.env.test`), and `slotty_app` (`bun run app:up`, the production image on :3001).
 - If `docker` says permission denied in an agent shell, run it through `sg docker -c "…"`.
 - `prisma migrate reset` is blocked for agents. Ask the user before wiping the dev DB.
-- Checks: `bun run typecheck`, `bun run lint`, `bun run test` (unit + integration), `bun run test:e2e`.
+- Checks before a pull request: `bun run typecheck`, `bun run lint`, `bun run test` (unit + integration), and `bun run test:e2e` for user-facing changes.
+
+## Way of working
+- Work on a branch off `master` and open a pull request. Merging to `master` deploys to production automatically (`.github/workflows/deploy.yml`).
+- Iterate on the design in conversation first; implement when the user says go.
 
 ## Architecture rules
-- Business rules go in `src/domain/*` as pure functions returning `RuleResult`. Services call them with `assertRule`.
-- Every service takes an `Actor` and checks access itself (`assertCourseRole` / `assertStaff` / `assertAdmin` in `services/access.ts`). Pages and actions never query Prisma for mutations.
+- Business rules go in `src/domain/*` as pure functions returning `RuleResult`. Services call them with `assertRule`. Change the rule, its unit test and docs chapter 4 together.
+- Every service takes an `Actor` and checks access itself (`assertCourseRole` / `assertStaff` / `assertAdmin` / `assertPlatform` in `services/access.ts`). Pages and actions never query Prisma for mutations.
 - Services throw `DomainError` for user-facing failures. Server Actions wrap calls in `run()` (`server/action-utils.ts`), which refreshes the page and returns `{ok, message|error}` for `<ActionForm>`.
-- Send notifications with `notify(tx, …)` inside the same transaction as the change (outbox pattern). Never send email directly from a request.
+- Send notifications with `notify(tx, …)` inside the same transaction as the change (outbox pattern). Never send email or push directly from a request.
 - Times are stored in UTC; display and input use the course timezone (`lib/time.ts`: `fmt`, `fromLocalInput`).
 - Record moderation-relevant changes with `audit(tx, actor, …)`.
+- Admins and platform accounts never join courses; a platform account is never an admin (ADR-016).
+
+## Testing
+- Business rules in `src/domain` have unit tests (`tests/unit`).
+- Services are covered by integration tests against the `slotty_test` database (`tests/integration`, `bun run test`); user flows by Playwright (`tests/e2e`, `bun run test:e2e`, a production build on :3100).
+
+## Deployment
+- Application: merge to `master`; CI builds ARM64 images, runs migrations as a one-off ECS task, rolls out web and worker (`infra/aws/deploy.sh`).
+- Infrastructure: Terraform in `infra/aws/org` (management account) and `infra/aws/app` (slotty-prod). Always show `terraform plan` and get approval before `apply`; never apply unreviewed.
+- Migrations must keep the previous release working (expand, then contract in a later release): rollback does not undo them.
+
+## Decided (don't re-ask; propose a superseding ADR instead)
+- AWS architecture and its trade-offs are ADR-001… in docs chapter 14 (`docs/chapters/14-decisions.tex`).
+- Budget is $50/month for slotty-prod, enforced by SCPs and AWS Budgets; estimate cost changes in docs chapter 12.
+- No RDS Proxy or transaction-mode pooler: the worker needs LISTEN/NOTIFY.
+
+## Never
+- Run `prisma migrate reset` or otherwise wipe a database without the user's explicit approval.
+- Send email or push directly from a request; always through the outbox.
+- Mutate data from pages or Server Actions with Prisma directly; go through a service.
+- Commit `terraform.tfvars`, Terraform state or plans, `.env` files, or print secrets from SSM.
+
+## Always
+- Update the documentation chapters a change affects in the same pull request, and add a line to `docs/appendices/c-changelog.tex`. Map: user flows → ch. 3; rules → ch. 4; modules → ch. 5; schema → ch. 6; patterns → ch. 7; AWS → ch. 8 (and ch. 12 for cost); CI/CD → ch. 9; runbooks and alarms → ch. 10; security controls → ch. 11; roadmap → ch. 15.
+- Record a deliberate trade-off as a new ADR in `docs/chapters/14-decisions.tex`.
+- Check `bun run docs:build` succeeds when `docs/` changes.

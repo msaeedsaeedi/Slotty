@@ -110,11 +110,10 @@ src/jobs/worker.ts     Email/push outbox delivery, reminders, automations
 infra/                 Local Docker services (Postgres, Mailpit, Caddy); infra/aws: AWS Terraform and deploy script
 deploy/                Production stack for one VPS (compose, Caddy, backups)
 prisma/                Schema, migrations, seed
-docs/                  System documentation (LaTeX): journeys, rules, architecture, AWS, operations, AI-DLC, decisions
-aidlc/                 AI-DLC workspace: intent records, code knowledge base, project rules
+docs/                  System documentation (LaTeX): journeys, rules, architecture, AWS, operations, decisions
 ```
 
-The system documentation is one LaTeX document in `docs/` (user journeys, business rules, architecture, AWS platform, operations, AI-DLC workflow, decision records, roadmap). Build it with `bun run docs:build` → `docs/build/slotty.pdf`; CI also attaches the PDF to every run that changes `docs/`.
+The system documentation is one LaTeX document in `docs/` (user journeys, business rules, architecture, AWS platform, operations, how changes are made, decision records, roadmap). Build it with `bun run docs:build` → `docs/build/slotty.pdf`; CI also attaches the PDF to every run that changes `docs/`.
 
 ## Key rules
 
