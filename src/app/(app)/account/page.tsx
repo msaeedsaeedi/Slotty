@@ -1,5 +1,6 @@
 import { CalendarSync, Video } from "lucide-react";
-import { changePasswordAction, setEmailPreferencesAction, setTimeFormatAction, signOutOthersAction, updateProfileAction } from "@/app/actions/account";
+import Link from "next/link";
+import { changePasswordAction, setEmailPreferencesAction, setShareUsageAction, setTimeFormatAction, signOutOthersAction, updateProfileAction } from "@/app/actions/account";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { PageHeader } from "@/components/page-header";
 import { PushToggle } from "@/components/pwa";
@@ -72,6 +73,31 @@ export default async function AccountPage() {
           </ActionForm>
         </CardContent>
       </Card>
+
+      {!user.isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Usage data</CardTitle>
+            <CardDescription>
+              Which pages you open, how fast they load and where a booking or marking gets stuck, under a code instead of your name. It helps us
+              find what to fix. Errors and feedback are reported either way.{" "}
+              <Link href="/privacy" className="underline underline-offset-2">
+                What Slotty collects
+              </Link>
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ActionForm action={setShareUsageAction} className="flex flex-wrap items-center gap-4 text-sm">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="shareUsageData" defaultChecked={account.shareUsageData} /> Share usage data
+              </label>
+              <SubmitButton variant="outline" size="sm">
+                Save
+              </SubmitButton>
+            </ActionForm>
+          </CardContent>
+        </Card>
+      )}
 
       {(student || staff) && (
         <Card>

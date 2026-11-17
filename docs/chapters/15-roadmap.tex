@@ -11,6 +11,19 @@ Finished work is removed from this chapter. What shipped is described in \cref{c
 
 Run short task-based sessions with the seed accounts: book, reschedule, cancel then rebook, run a demo day, mark and submit, review. Record task success, errors and time taken. Turn what you find into new roadmap items.
 
+After launch, \route{/admin/insights} and \route{/admin/feedback} give the same evidence continuously (\cref{sec:rules-usage}). Start with these questions, and change the event catalog as they are answered:
+
+\begin{itemize}
+  \item \textbf{Q1} Can students book without help? Booking funnel by device, the post-booking survey, booking-change requests.
+  \item \textbf{Q2} Do reschedule and cancel confuse people? Reschedules vs cancellations rebooked within 30 minutes, the reschedule funnel and survey.
+  \item \textbf{Q3} Is it fast enough on phones? Web Vitals by device; the slowest pages.
+  \item \textbf{Q4} Do staff manage demo days and marking smoothly? Demo-to-marks time, unlocks, the marking funnel and survey.
+  \item \textbf{Q5} Which features does nobody use? Pages and features by role.
+  \item \textbf{Q6} Where does it break? Errors by page and release.
+\end{itemize}
+
+Known follow-ups: enforce the content security policy (zod \code{jitless}, script nonces); remove AI-DLC from the repository as a separate change (its ceremony outweighs its value at this size; supersede ADR-014).
+
 \section{Proposed: notifications and calendar (needs a decision)}
 
 Feedback (2026-10-02): a subscribed feed is awkward, but per-demo calendar entries plus emails plus push could flood people with the same reminder. Proposal, one channel per purpose:

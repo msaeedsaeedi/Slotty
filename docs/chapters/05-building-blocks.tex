@@ -23,7 +23,8 @@ database, and so that every change to data goes through a service that checks wh
   Services & \src{src/server/services} & One module per area (bookings, slots, evaluations, \dots). Each operation takes an \code{Actor}, checks access itself, enforces rules with \code{assertRule}, writes inside one transaction, and queues notifications and audit entries in that same transaction.\\
   Domain & \src{src/domain} & Pure functions: booking rules, slot generation, evaluation transitions, roster parsing, calendar files. Return a \code{RuleResult} whose message is shown to the user. No I/O.\\
   Infrastructure & \src{src/server}, \src{src/lib} & Database client (\src{src/server/db.ts}), mail and push delivery, sessions and passwords (\src{src/server/auth}), time formatting (\src{src/lib/time.ts}).\\
-  Worker & \src{src/jobs/worker.ts} & Delivers the email and push outboxes and runs scheduled jobs (\cref{sec:outbox}).\\
+  Worker & \src{src/jobs/worker.ts} & Delivers the email and push outboxes and runs scheduled jobs (\cref{sec:outbox}), including the hourly usage-data totals and clean-up.\\
+  Usage analytics & \src{src/lib/analytics.ts}, \src{src/components/analytics.tsx}, \src{src/app/api/events/route.ts}, \src{src/server/services/analytics.ts}, \code{insights.ts}, \code{feedback.ts} & Browser tracker (page views, Web Vitals, errors, funnel steps), the ingest endpoint, daily totals, admin reports, feedback and surveys (\cref{sec:usage-analytics}).\\
   \bottomrule
 \end{xltabular}
 

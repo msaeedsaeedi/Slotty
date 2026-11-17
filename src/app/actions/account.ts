@@ -2,7 +2,7 @@
 
 import { currentSessionHash, requireUser } from "@/server/auth/session";
 import { bool, run, str, type ActionState } from "@/server/action-utils";
-import { changePassword, setEmailPreferences, setTimeFormat, signOutOtherSessions, updateProfile } from "@/server/services/accounts";
+import { changePassword, setEmailPreferences, setShareUsageData, setTimeFormat, signOutOtherSessions, updateProfile } from "@/server/services/accounts";
 import { DomainError } from "@/domain/result";
 
 export async function updateProfileAction(_: ActionState, fd: FormData): Promise<ActionState> {
@@ -34,6 +34,14 @@ export async function setTimeFormatAction(_: ActionState, fd: FormData): Promise
   return run(async () => {
     await setTimeFormat(await requireUser(), str(fd, "timeFormat") === "H24" ? "H24" : "H12");
     return "Time format saved.";
+  });
+}
+
+export async function setShareUsageAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run(async () => {
+    const share = bool(fd, "shareUsageData");
+    await setShareUsageData(await requireUser(), share);
+    return share ? "Thanks — usage data helps us improve Slotty." : "Usage data is off. Errors are still reported, without your visitor key.";
   });
 }
 

@@ -4,6 +4,7 @@ import { requireUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import { load } from "@/server/page-utils";
 import { getMarkingSheet } from "@/server/services/evaluations";
+import { TrackView } from "@/components/analytics";
 import { MarkingSheet, type SheetRow } from "./marking-sheet";
 
 export const metadata = { title: "Marking" };
@@ -77,36 +78,39 @@ export default async function MarkPage({ params, searchParams }: PageProps<"/cou
           : format(dayDate, "EEEE d MMMM");
 
   return (
-    <MarkingSheet
-      // Remount after a submit refreshes the page, so statuses come from the server again.
-      key={sheet.rows.map((r) => `${r.student.id}:${r.evaluation?.status}:${r.booking?.status}`).join("|")}
-      assignment={{ id: sheet.assignment.id, title: sheet.assignment.title, maxMarks: sheet.assignment.maxMarks, courseId, courseCode: sheet.assignment.course.code }}
-      criteria={sheet.criteria.map((c) => ({ id: c.id, label: c.label, maxPoints: c.maxPoints }))}
-      rows={rows}
-      hasInstructor={sheet.hasInstructor}
-      finalOnSubmit={!sheet.hasInstructor || sheet.role === "INSTRUCTOR"}
-      mode={mode}
-      isToday={mode === "day" && shownDay === today}
-      title={title}
-      timezoneLabel={tzLabel(tz)}
-      initialBookingId={bookingId}
-      now={now.toISOString()}
-      links={{
-        back: back?.startsWith("/") && !back.startsWith("//") ? back : base,
-        course: `/courses/${courseId}/manage`,
-        assignment: base,
-        details: `${base}/evaluate`,
-        prevDay: mode === "day" ? sheetHref({ day: format(addDays(dayDate, -1), "yyyy-MM-dd") }) : undefined,
-        nextDay: mode === "day" ? sheetHref({ day: format(addDays(dayDate, 1), "yyyy-MM-dd") }) : undefined,
-        scope:
-          mode === "student"
-            ? undefined
-            : {
-                current: scope,
-                mine: `${base}/mark?${new URLSearchParams(Object.entries({ day: mode === "day" ? shownDay : undefined, todo: todo ? "1" : undefined, back }).filter(([, v]) => v) as [string, string][])}`,
-                everyone: `${base}/mark?${new URLSearchParams(Object.entries({ day: mode === "day" ? shownDay : undefined, todo: todo ? "1" : undefined, back, scope: "everyone" }).filter(([, v]) => v) as [string, string][])}`,
-              },
-      }}
-    />
+    <>
+      <TrackView flow="marking" />
+      <MarkingSheet
+        // Remount after a submit refreshes the page, so statuses come from the server again.
+        key={sheet.rows.map((r) => `${r.student.id}:${r.evaluation?.status}:${r.booking?.status}`).join("|")}
+        assignment={{ id: sheet.assignment.id, title: sheet.assignment.title, maxMarks: sheet.assignment.maxMarks, courseId, courseCode: sheet.assignment.course.code }}
+        criteria={sheet.criteria.map((c) => ({ id: c.id, label: c.label, maxPoints: c.maxPoints }))}
+        rows={rows}
+        hasInstructor={sheet.hasInstructor}
+        finalOnSubmit={!sheet.hasInstructor || sheet.role === "INSTRUCTOR"}
+        mode={mode}
+        isToday={mode === "day" && shownDay === today}
+        title={title}
+        timezoneLabel={tzLabel(tz)}
+        initialBookingId={bookingId}
+        now={now.toISOString()}
+        links={{
+          back: back?.startsWith("/") && !back.startsWith("//") ? back : base,
+          course: `/courses/${courseId}/manage`,
+          assignment: base,
+          details: `${base}/evaluate`,
+          prevDay: mode === "day" ? sheetHref({ day: format(addDays(dayDate, -1), "yyyy-MM-dd") }) : undefined,
+          nextDay: mode === "day" ? sheetHref({ day: format(addDays(dayDate, 1), "yyyy-MM-dd") }) : undefined,
+          scope:
+            mode === "student"
+              ? undefined
+              : {
+                  current: scope,
+                  mine: `${base}/mark?${new URLSearchParams(Object.entries({ day: mode === "day" ? shownDay : undefined, todo: todo ? "1" : undefined, back }).filter(([, v]) => v) as [string, string][])}`,
+                  everyone: `${base}/mark?${new URLSearchParams(Object.entries({ day: mode === "day" ? shownDay : undefined, todo: todo ? "1" : undefined, back, scope: "everyone" }).filter(([, v]) => v) as [string, string][])}`,
+                },
+        }}
+      />
+    </>
   );
 }

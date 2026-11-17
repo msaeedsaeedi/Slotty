@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Bell, CalendarCheck, CalendarClock, LogOut, Shield, UserRound } from "lucide-react";
+import { FeedbackButton } from "@/components/feedback-button";
 import { Button } from "@/components/ui/button";
 import type { Actor } from "@/server/services/access";
 import { myRoleKinds } from "@/server/services/courses";
@@ -43,6 +44,7 @@ export async function AppHeader({ user }: { user: Actor }) {
           )}
         </nav>
         <div className="ml-auto flex items-center gap-1">
+          {!admin && <FeedbackButton />}
           <Button asChild variant="ghost" size="icon" aria-label={`Notifications (${unread} unread)`} className="relative">
             <Link href="/notifications">
               <Bell />

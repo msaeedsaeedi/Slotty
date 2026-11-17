@@ -1,5 +1,5 @@
 \chapter{Roles and user journeys}\label{ch:journeys}
-\chapterstatus{complete}{2026-11-16}{\src{src/app}, \src{src/server/services}}
+\chapterstatus{complete}{2026-11-17}{\src{src/app}, \src{src/server/services}}
 
 How each role uses Slotty from start to finish, with the screen, the service that runs, and what the user gets back. Update this chapter whenever a flow changes.
 
@@ -93,9 +93,21 @@ Admins run the platform from the web console. They are never students or staff o
   A2 & Keeps courses staffed\newline{\color{muted}\footnotesize \route{/admin/courses}} & \code{adminCreateCourse}, \code{adminListCourses}, \code{adminAssignStaff}, \code{adminSetCourseArchived} & \ui{New course}: code, title, term and the instructor or TA who runs it (invited if new). Filters: active, no staff, archived. Each course shows its staff, students, open assignments and upcoming demos. \ui{Assign staff} adds an instructor or TA by email (never an admin): new people get an invite, existing ones a notification. Archive or restore. Opening a course shows its manage pages with full rights (``Viewing as admin'').\\
   A3 & Fixes email delivery\newline{\color{muted}\footnotesize \route{/admin/email} (badge = failed count)} & \code{adminEmailQueue}, \code{adminRetryEmails} & Failed, waiting and sent emails with the SMTP error. Retry one, or all after fixing the cause.\\
   A4 & Audits\newline{\color{muted}\footnotesize \route{/admin/audit}} & \code{adminAuditLog} & Readable sentences (``Ada Admin assigned staff to MATH 210'') with links to users and courses, filtered by area or person, 100 per page, with before/after details on demand.\\
+  A5 & Looks for evidence of what to improve\newline{\color{muted}\footnotesize \route{/admin/insights}} & \code{usageOverview}, \code{workflowMetrics}, \code{funnels}, \code{performance}, \code{clientErrors}, \code{surveys} & Six reports over 7, 30 or 90 days. \ui{Usage}: people active this week by role, people per day, pages by views (the bottom of the list is what hardly anyone opens), features used, and a 13-month trend. \ui{Booking \& marking}: reschedules, cancellations (and how many were rebooked within 30 minutes), no-shows, waitlist conversion, requests and how fast they were answered, demo-to-marks time, unlocks; these come from the booking tables, so they count everyone. \ui{Funnels}: visits that saw the slot picker or marking sheet, pressed submit, succeeded or got an error, by device. \ui{Speed}: Core Web Vitals at the 75th percentile by device, and the slowest pages. \ui{Errors}: browser errors grouped by message, with pages and releases. \ui{Surveys}: answers to the one-question surveys. See \cref{sec:rules-usage}.\\
+  A6 & Reads feedback\newline{\color{muted}\footnotesize \route{/admin/feedback} (badge = new count)} & \code{listFeedback}, \code{setFeedbackStatus} & Anonymous messages from the feedback button with rating, role, page type and release. \ui{Mark triaged} once it's noted somewhere (a roadmap item), \ui{Mark done} once acted on, \ui{Reopen}. Status changes are audited.\\
   \bottomrule
 \end{xltabular}}
 
+
+\section{Feedback and surveys (students and staff)}\label{sec:journey-feedback}
+
+Everyone except admins has a \ui{Send feedback} button (speech-bubble icon) in the header: a
+message and an optional 1--5 rating, sent anonymously (\code{submitFeedback}). After a student
+books or moves a demo, and after staff submit marks, a small card in the corner asks one question
+(``How easy was it to book your demo?'') with answers 1--5 or \ui{Not now}; each question is asked
+at most once every 14 days (\code{claimSurvey}, \code{answerSurvey}). \route{/account} has
+\ui{Usage data}, on by default, and \route{/privacy} explains what is collected
+(\cref{sec:rules-usage}).
 
 \section{End-to-end lifecycle (one assignment)}
 

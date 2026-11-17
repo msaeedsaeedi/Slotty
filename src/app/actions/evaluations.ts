@@ -3,15 +3,18 @@
 import { requireUser } from "@/server/auth/session";
 import { attempt, run, str, type ActionState } from "@/server/action-utils";
 import { markAttendance } from "@/server/services/bookings";
+import { claimSurvey } from "@/server/services/feedback";
 import { clearMarks, reviewEvaluation, saveDraft, submitEvaluations, unlockEvaluation, finalizeMany } from "@/server/services/evaluations";
 
 export async function submitManyAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return run(async () => {
     const ids = fd.getAll("evaluationId").map(String);
     if (ids.length === 0) return "Nothing selected.";
-    const res = await submitEvaluations(await requireUser(), ids);
+    const user = await requireUser();
+    const res = await submitEvaluations(user, ids);
     const finalized = res.filter((r) => r.status === "FINALIZED").length;
-    return `${res.length} submitted${finalized ? ` (${finalized} finalized)` : ""}.`;
+    const survey = (await claimSurvey(user, "marking")) ? "marking" : undefined;
+    return { message: `${res.length} submitted${finalized ? ` (${finalized} finalized)` : ""}.`, survey };
   });
 }
 

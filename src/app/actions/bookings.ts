@@ -12,21 +12,26 @@ import {
   staffCancelBooking,
   staffPlaceStudent,
 } from "@/server/services/bookings";
+import { claimSurvey } from "@/server/services/feedback";
 import { createRequest, resolveRequest } from "@/server/services/requests";
 import { joinWaitlist, leaveWaitlist } from "@/server/services/waitlist";
 
 export async function bookSlotAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return run(async () => {
-    await bookSlot(await requireUser(), str(fd, "slotId"));
-    return "Booked! A confirmation has been sent to your email.";
+    const user = await requireUser();
+    await bookSlot(user, str(fd, "slotId"));
+    const survey = (await claimSurvey(user, "booking")) ? "booking" : undefined;
+    return { message: "Booked! A confirmation has been sent to your email.", survey };
   });
 }
 
 export async function rescheduleAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return run(async () => {
-    await rescheduleBooking(await requireUser(), str(fd, "bookingId"), str(fd, "slotId"));
+    const user = await requireUser();
+    await rescheduleBooking(user, str(fd, "bookingId"), str(fd, "slotId"));
     const back = str(fd, "returnTo");
-    return { message: "Rescheduled.", navigate: back.startsWith("/") && !back.startsWith("//") ? back : undefined };
+    const survey = (await claimSurvey(user, "reschedule")) ? "reschedule" : undefined;
+    return { message: "Rescheduled.", navigate: back.startsWith("/") && !back.startsWith("//") ? back : undefined, survey };
   });
 }
 

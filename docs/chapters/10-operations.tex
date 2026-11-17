@@ -60,6 +60,16 @@ complaint arrives as an SNS email and the address is suppressed. Retry from the 
 fixing the cause. Rotate the SMTP credentials with
 \code{terraform apply -replace=aws_iam_access_key.ses_smtp}, then redeploy.
 
+\subsection{Usage data looks wrong or empty}
+\route{/admin/insights} says so when \envvar{ANALYTICS_SECRET} isn't set on the web tasks (check
+the task definition's secrets). Raw events appear within about 10 seconds of a visit; the
+13-month trend fills from the next hourly worker run (look for \code{analyticsRolled=} in
+\code{/slotty/worker}; an \code{analytics failed} line names the error). The ingest endpoint logs
+\code{[analytics] could not record events} in \code{/slotty/web} and still answers 204, so the
+app keeps working. Rotating the secret
+(\code{terraform apply -replace=random_password.analytics}, then a deploy) makes every person
+count as new from then on. No alarm is spent on analytics: it is not part of the service.
+
 \subsection{An alarm fired}
 \begin{xltabular}{\linewidth}{@{}P{40mm} L@{}}
   \toprule

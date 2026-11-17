@@ -1,7 +1,7 @@
 \chapter{Data model}\label{ch:data}
 \chapterstatus{stub}{2026-11-16}{\src{prisma/schema.prisma}, \src{prisma/migrations}}
 
-The schema has 22 models and 11 enums in \src{prisma/schema.prisma}; migrations are plain SQL under
+The schema has 27 models and 12 enums in \src{prisma/schema.prisma}; migrations are plain SQL under
 \src{prisma/migrations} and are applied by the one-off migrate task on every deploy
 (\cref{ch:delivery}). All timestamps are stored in UTC.
 
@@ -18,8 +18,16 @@ The schema has 22 models and 11 enums in \src{prisma/schema.prisma}; migrations 
   Evaluation & \code{Evaluation}, \code{EvaluationScore}\\
   Messaging & \code{Notification}, \code{EmailOutbox}, \code{PushMessage}\\
   Audit & \code{AuditLog}\\
+  Usage and feedback & \code{AnalyticsEvent} (raw, 90 days), \code{AnalyticsDaily} (daily totals, 13 months), \code{Feedback}, \code{SurveyResponse}, \code{SurveyPrompt}; \code{User.shareUsageData}\\
   \bottomrule
 \end{xltabular}
+
+\begin{note}
+  The usage and feedback tables hold no user id. \code{AnalyticsEvent.visitor} is a keyed hash
+  (null for errors from people who opted out); \code{Feedback} and \code{SurveyResponse} have no
+  user column and coarsened times; \code{SurveyPrompt} references the user but stores only when
+  they were asked and whether they answered, never the answer (\cref{sec:rules-usage}).
+\end{note}
 
 \begin{todo}
   \begin{itemize}

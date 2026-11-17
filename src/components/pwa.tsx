@@ -1,5 +1,6 @@
 "use client";
 
+import { trackFeature } from "@/lib/analytics";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { BellRing, Download, WifiOff, X } from "lucide-react";
 import { toast } from "sonner";
@@ -181,6 +182,7 @@ function usePush(publicKey: string | null) {
         return setState("off");
       }
       toast.success(res.message ?? "Notifications are on.");
+      trackFeature("push_enabled");
       setSub(next);
       setState("on");
     } catch {

@@ -43,6 +43,7 @@ const VERBS: Record<string, string> = {
   "evaluation.unlock": "unlocked marks",
   "request.resolved": "handled a request",
   "request.declined": "declined a request",
+  "feedback.status": "updated the status of feedback",
 };
 
 export const AUDIT_AREAS = [
@@ -55,6 +56,7 @@ export const AUDIT_AREAS = [
   ["evaluation", "Marks"],
   ["request", "Requests"],
   ["email", "Email"],
+  ["feedback", "Feedback"],
 ] as const;
 
 export function entityHref(entityType: string, entityId: string) {

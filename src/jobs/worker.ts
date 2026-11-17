@@ -8,7 +8,8 @@
  *   arrive (e.g. behind a transaction-mode pooler such as PgBouncer), it polls
  *   every WORKER_INTERVAL_MS instead.
  * - schedule: time-based jobs (booking opens, nudges, auto-close, agendas,
- *   reminders) every WORKER_SCHEDULE_MS.
+ *   reminders) every WORKER_SCHEDULE_MS, and once an hour the usage-analytics
+ *   daily totals and retention clean-up.
  *
  * Every job claims its rows with a conditional update, so a second worker would
  * share the work rather than duplicate it. Delivery is at-least-once: a crash
@@ -22,6 +23,7 @@ import { closeMailer, deliverPendingEmails } from "@/server/mailer";
 import { OUTBOX_CHANNEL } from "@/server/outbox-signal";
 import { deliverPendingPush } from "@/server/push";
 import { isPushConfigured } from "@/server/push-config";
+import { rollupAndPrune } from "@/server/services/analytics";
 import { announceOpenedBookings, closeEndedAssignments, nudgeUnbookedStudents, sendDailyAgendas } from "@/server/services/automations";
 import { queueDueReminders } from "@/server/services/reminders";
 
@@ -34,6 +36,10 @@ const PUSH_BATCH = 100;
 const MAX_ROUNDS = 20;
 /** Docker's stop_grace_period for the worker is longer than this. */
 const SHUTDOWN_TIMEOUT_MS = 25_000;
+
+/** Analytics totals and retention run at most this often (they're idempotent, so a restart just reruns them). */
+const ANALYTICS_EVERY_MS = 60 * 60_000;
+let analyticsRanAt = 0;
 
 let stopping = false;
 let listening = false;
@@ -107,6 +113,11 @@ async function scheduleLoop() {
       reminders: await job("reminders", () => queueDueReminders()),
     };
     report(counts);
+    if (Date.now() - analyticsRanAt >= ANALYTICS_EVERY_MS) {
+      analyticsRanAt = Date.now();
+      const a = await job("analytics", () => rollupAndPrune());
+      if (a) report({ analyticsRolled: a.rolled, analyticsPruned: a.prunedRaw + a.prunedDaily });
+    }
     // Deliver what was just queued without waiting for the next poll (NOTIFY also does this when available).
     if (Object.values(counts).some(Boolean)) delivery.wake();
     await schedule.wait(SCHEDULE_MS);

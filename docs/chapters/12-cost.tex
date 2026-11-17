@@ -32,6 +32,13 @@ discount of about 70\,\%.
   \bottomrule
 \end{xltabular}}
 
+\begin{note}
+  Usage analytics adds no AWS service (ADR-015). About 300 users send roughly 50\,000 events a
+  month, batched into a few thousand extra API Gateway requests (a few cents) and well under
+  100 MB of database storage at 90 days' retention. It stays inside the API Gateway and RDS lines
+  above.
+\end{note}
+
 \section{Growth}
 Each step is a variable change in \src{infra/aws/app/variables.tf} (some also need an SCP
 change in \src{infra/aws/org/scp.tf}):

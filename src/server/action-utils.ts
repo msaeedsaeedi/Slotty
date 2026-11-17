@@ -2,12 +2,16 @@ import "server-only";
 import { refresh } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
 import { ZodError } from "zod";
+import type { SurveyPromptId } from "@/domain/analytics";
 import { DomainError } from "@/domain/result";
 
-export type ActionState = { ok: true; message?: string; navigate?: string } | { ok: false; error: string } | null;
+export type ActionState = { ok: true; message?: string; navigate?: string; survey?: SurveyPromptId } | { ok: false; error: string } | null;
 
-/** What a mutation may return: a success message, and optionally a URL the client should move to. */
-export type ActionOutcome = string | void | { message?: string; navigate?: string };
+/**
+ * What a mutation may return: a success message, optionally a URL the client
+ * should move to, and a one-question survey to show (see `claimSurvey`).
+ */
+export type ActionOutcome = string | void | { message?: string; navigate?: string; survey?: SurveyPromptId };
 
 /**
  * Run a mutation for a Server Action: refresh the page on success and turn rule

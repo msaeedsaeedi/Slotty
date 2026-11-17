@@ -14,12 +14,15 @@ trap 'rm -rf "$work"' EXIT
 
 log() { echo "[deploy] $*"; }
 
-# New revision of a family's latest task definition, with only the image changed.
+# New revision of a family's latest task definition, with only the image (and APP_VERSION, the
+# release recorded with usage events and feedback) changed.
 register() {
   local family=$1 image=$2
   aws ecs describe-task-definition --task-definition "$family" --query taskDefinition --output json \
-    | jq --arg image "$image" '
+    | jq --arg image "$image" --arg version "$IMAGE_TAG" '
         .containerDefinitions[0].image = $image
+        | .containerDefinitions[0].environment = ([.containerDefinitions[0].environment[]? | select(.name != "APP_VERSION")]
+            + [{name: "APP_VERSION", value: $version}])
         | {family, taskRoleArn, executionRoleArn, networkMode, containerDefinitions, volumes,
            placementConstraints, requiresCompatibilities, cpu, memory, runtimePlatform}
         | with_entries(select(.value != null))' > "$work/$family.json"

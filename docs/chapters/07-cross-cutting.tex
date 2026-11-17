@@ -52,6 +52,30 @@ data formats (CSV, form values) stay 24-hour.
 Moderation-relevant changes are recorded with \code{audit(tx, actor, …)} in the same transaction
 as the change (\src{src/server/services/audit.ts}). Admins read them at \route{/admin/audit}.
 
+\section{Usage analytics}\label{sec:usage-analytics}
+First-party only (ADR-015). In the signed-in layout, \code{<Analytics>} configures the tracker
+(\src{src/lib/analytics.ts}) and records page views on navigation, Core Web Vitals through
+\code{useReportWebVitals}, uncaught errors and rejections, and app installs; the \route{(app)}
+error boundary (\src{src/app/(app)/error.tsx}) reports render errors with their digest.
+\code{<ActionForm track="booking">} records a flow's \code{submit} and its \code{done} or
+\code{error}; \code{<TrackView>} records its \code{view}. Events queue in memory and are sent to
+\route{/api/events} with \code{sendBeacon} every 10 seconds, at 20 events, and when the tab is
+hidden or closed; a per-tab random id in \code{sessionStorage} (no cookie) lets funnels follow one
+visit. The route handler checks the origin and the session, then \code{recordEvents} validates
+every event against the catalog and stores it (\cref{sec:rules-usage}). Analytics never breaks
+the app: the endpoint always answers 204 and logs its own failures. The worker folds events into
+\code{AnalyticsDaily} once an hour (the last 7 full days, idempotently) and deletes expired rows.
+
+Surveys ride on Server Actions: a successful booking, reschedule or mark submission calls
+\code{claimSurvey}, and the action's result carries \code{survey}, which \code{<ActionForm>} hands
+to \code{<SurveyHost>}. A problem in \code{claimSurvey} is logged and never turns the successful
+action into an error.
+
+Production sends a \code{Content-Security-Policy-Report-Only} header (\src{next.config.ts}):
+browsers report, without blocking, anything outside \code{'self'}. The first finding is an
+\code{eval} probe (zod's JIT check); enforcing the policy needs zod's \code{jitless} setting and
+script nonces first.
+
 \section{Configuration and start-up}
 All configuration is read from the environment at run time (\cref{app:config}), so one image runs
 locally, on a VPS and on AWS. Production refuses to start with configuration that would silently

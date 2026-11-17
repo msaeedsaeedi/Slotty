@@ -36,6 +36,9 @@ model User {
   timeFormat     TimeFormat @default(H12)
   /// Last time the worker sent this staff member their daily agenda.
   agendaSentAt   DateTime?
+  /// Share pseudonymous usage data (page views, timings, funnel steps). Errors and
+  /// feedback are collected either way. See the privacy page.
+  shareUsageData Boolean    @default(true)
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
@@ -58,6 +61,7 @@ model User {
   requests          StudentRequest[]    @relation("RequestStudent")
   requestsHandled   StudentRequest[]    @relation("RequestResolvedBy")
   pushSubscriptions PushSubscription[]
+  surveyPrompts     SurveyPrompt[]
 }
 
 model Session {
@@ -506,4 +510,95 @@ model PushMessage {
   subscription PushSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt])
+}
+
+// ─── Usage analytics & feedback ──────────────────────────────────────────────
+// First-party only (ADR-015). Nothing here names a user: `visitor` is a keyed
+// hash of the user id, and feedback and survey answers carry no user at all.
+
+/// One client event (see `src/domain/analytics.ts` for the catalog). Raw rows are
+/// kept 90 days; `AnalyticsDaily` keeps the daily totals for 13 months.
+model AnalyticsEvent {
+  id         String   @id @default(cuid())
+  occurredAt DateTime @default(now())
+  name       String
+  /// HMAC-SHA256(user id, ANALYTICS_SECRET), truncated. Null for opted-out users' errors.
+  visitor    String?
+  /// Random per browser tab, so funnels can follow one visit.
+  sessionId  String
+  /// student, staff, both or admin.
+  role       String
+  /// Route template, e.g. /courses/:id/assignments/:id (never a real id or token).
+  path       String
+  /// mobile, tablet or desktop.
+  device     String
+  version    String
+  props      Json?
+
+  @@index([occurredAt])
+  @@index([name, occurredAt])
+}
+
+/// Daily totals per event, path, role and device (written by the worker).
+model AnalyticsDaily {
+  day      DateTime @db.Date
+  name     String
+  path     String
+  role     String
+  device   String
+  events   Int
+  visitors Int
+  /// 75th percentile of `props.value` for web-vital events.
+  p75      Float?
+
+  @@id([day, name, path, role, device])
+}
+
+enum FeedbackStatus {
+  NEW
+  TRIAGED
+  DONE
+}
+
+/// Anonymous feedback from the in-app button. No user id, by design; `createdAt`
+/// is rounded to the hour so it can't be matched against usage events.
+model Feedback {
+  id        String         @id @default(cuid())
+  message   String
+  rating    Int?
+  path      String
+  role      String
+  version   String
+  status    FeedbackStatus @default(NEW)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([status, createdAt])
+}
+
+/// An answer to a one-question survey (score null = dismissed). Anonymous;
+/// `createdAt` is the UTC day only.
+model SurveyResponse {
+  id        String   @id @default(cuid())
+  prompt    String
+  score     Int?
+  role      String
+  version   String
+  createdAt DateTime @default(now())
+
+  @@index([prompt, createdAt])
+}
+
+/// When a user was last asked a survey prompt: enforces "at most once per 14
+/// days". It records that they were asked, never what they answered (and no
+/// answer time, which could be matched against the response).
+model SurveyPrompt {
+  userId   String
+  prompt   String
+  shownAt  DateTime
+  answered Boolean  @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, prompt])
 }
