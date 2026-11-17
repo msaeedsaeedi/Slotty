@@ -13,9 +13,7 @@ by hand and nobody holds long-lived AWS keys for it.
 
 \section{Checks}
 The \code{check} job runs on every push and pull request: \code{bun install --frozen-lockfile},
-\code{bun run typecheck}, \code{bun run lint}, \code{bun run test:unit}. Typecheck and lint cover the
-project's own code and skip the AI-DLC folders \src{.claude} and \src{aidlc} (\cref{ch:aidlc}), which are
-vendored and replaced on each framework update. Integration and end-to-end
+\code{bun run typecheck}, \code{bun run lint}, \code{bun run test:unit}. Integration and end-to-end
 tests need PostgreSQL and run locally (\code{bun run test}, \code{bun run test:e2e}); see
 \cref{sec:local-checks}.
 

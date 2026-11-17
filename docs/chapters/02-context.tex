@@ -38,8 +38,9 @@ In priority order. Each one is a reason behind a decision in \cref{ch:decisions}
     most: the web tier runs in two availability zones and scales out on load.
   \item \textbf{Cheap at bootstrap.} Under \$50 a month on AWS, with growth by changing
     variables rather than re-architecting (\cref{ch:cost}).
-  \item \textbf{Auditable and changeable.} Infrastructure is code, changes go through AI-DLC
-    with approval gates and an audit trail (\cref{ch:aidlc}), and this document is kept current.
+  \item \textbf{Auditable and changeable.} Infrastructure is code, every change goes through a
+    reviewed pull request with its reasoning recorded (\cref{ch:changes}), and this document is
+    kept current.
 \end{enumerate}
 
 \section{Constraints}

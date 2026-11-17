@@ -16,10 +16,10 @@ claim points to the code or configuration it describes.
   \thead{Reader} & \thead{Needs to} & \thead{Start with}\\
   \midrule
   Auditor (security, architecture, cost) & Verify that controls exist and match intent & \cref{ch:aws,ch:security,ch:decisions,ch:cost}; the \emph{For auditors} boxes\\
-  Developer & Change behaviour without breaking rules & \cref{ch:rules,ch:blocks,ch:crosscutting,ch:aidlc}\\
+  Developer & Change behaviour without breaking rules & \cref{ch:rules,ch:blocks,ch:crosscutting,ch:changes}\\
   Operator & Deploy, watch and repair production & \cref{ch:aws,ch:delivery,ch:ops}\\
   Product owner & Know what the product does for each role & \cref{ch:journeys,ch:roadmap}\\
-  AI coding agent & Work inside the method with the right context & \cref{ch:aidlc}, then the chapter for the area being changed\\
+  AI coding agent & Change Slotty within its rules & \src{CLAUDE.md} and \cref{ch:changes}, then the chapter for the area being changed\\
   \bottomrule
 \end{xltabular}
 
@@ -27,8 +27,8 @@ claim points to the code or configuration it describes.
 The five parts follow the questions an expert asks, in order: \emph{what is it}
 (Foundations), \emph{what does it do} (Product), \emph{how is it built} (Software
 architecture), \emph{where and how does it run} (Platform and operations), and \emph{how is it
-changed and why is it this way} (Lifecycle and governance). The last part also maps each AI-DLC
-phase onto the chapters it reads and updates (\cref{fig:aidlc-docs}).
+changed and why is it this way} (Lifecycle and governance). The last part also says which chapters
+each kind of change must update (\cref{ch:changes}).
 
 \section{Conventions}
 \subsection{Callouts}
