@@ -1,9 +1,9 @@
 import { FLOW_STEPS, FLOWS, SURVEY_PROMPTS, VITALS, type Flow, type FlowStep, type Vital } from "@/domain/analytics";
 import { db } from "@/server/db";
-import { assertAdmin, type Actor } from "./access";
+import { assertPlatform, type Actor } from "./access";
 
 /**
- * Admin reports for /admin/insights (docs chapter 3, "Usage insights"). Raw
+ * Product-team reports for /platform/insights (docs chapter 3, "Usage insights"). Raw
  * events cover the last 90 days; the monthly trend reads the daily totals.
  * Workflow numbers come from the booking and marking tables, not from events.
  */
@@ -16,7 +16,7 @@ const since = (days: number, now: Date) => new Date(now.getTime() - days * DAY);
 // ─── Overview ────────────────────────────────────────────────────────────────
 
 export async function usageOverview(actor: Actor, days: RangeDays, now = new Date()) {
-  assertAdmin(actor);
+  assertPlatform(actor);
   const from = since(days, now);
   const week = since(7, now);
   const [activeWeek, totals, daily, pages, features, trend] = await Promise.all([
@@ -54,7 +54,7 @@ export type FunnelRow = { flow: Flow; device: string; counts: Record<FlowStep, n
 
 /** Distinct visits (browser tabs) reaching each step of each flow, by device. */
 export async function funnels(actor: Actor, days: RangeDays, now = new Date()) {
-  assertAdmin(actor);
+  assertPlatform(actor);
   const rows = await db.$queryRaw<{ flow: Flow; step: FlowStep; device: string; sessions: number }[]>`
     SELECT "props"->>'flow' AS flow, "props"->>'step' AS step, "device", count(DISTINCT "sessionId")::int AS sessions
     FROM "AnalyticsEvent" WHERE "name" = 'funnel' AND "occurredAt" >= ${since(days, now)} GROUP BY 1, 2, 3`;
@@ -76,7 +76,7 @@ export async function funnels(actor: Actor, days: RangeDays, now = new Date()) {
 export const VITAL_GOOD: Record<Vital, number> = { LCP: 2500, INP: 200, CLS: 0.1, FCP: 1800, TTFB: 800 };
 
 export async function performance(actor: Actor, days: RangeDays, now = new Date()) {
-  assertAdmin(actor);
+  assertPlatform(actor);
   const from = since(days, now);
   const [byDevice, slowRoutes] = await Promise.all([
     db.$queryRaw<{ metric: Vital; device: string; samples: number; p75: number; good: number }[]>`
@@ -96,7 +96,7 @@ export async function performance(actor: Actor, days: RangeDays, now = new Date(
 // ─── Errors ──────────────────────────────────────────────────────────────────
 
 export async function clientErrors(actor: Actor, days: RangeDays, now = new Date()) {
-  assertAdmin(actor);
+  assertPlatform(actor);
   return db.$queryRaw<{ kind: string; message: string; paths: string[]; versions: string[]; count: number; sessions: number; lastSeen: Date }[]>`
     SELECT "props"->>'kind' AS kind, "props"->>'message' AS message,
            (array_agg(DISTINCT "path"))[1:5] AS paths, (array_agg(DISTINCT "version"))[1:5] AS versions,
@@ -108,7 +108,7 @@ export async function clientErrors(actor: Actor, days: RangeDays, now = new Date
 // ─── Surveys ─────────────────────────────────────────────────────────────────
 
 export async function surveys(actor: Actor, days: RangeDays, now = new Date()) {
-  assertAdmin(actor);
+  assertPlatform(actor);
   const from = since(days, now);
   const [responses, shown] = await Promise.all([
     db.$queryRaw<{ prompt: string; role: string; score: number | null; n: number }[]>`
@@ -140,7 +140,7 @@ export async function surveys(actor: Actor, days: RangeDays, now = new Date()) {
  * the same moment; a "cancel then rebook" is a new booking 5 s – 30 min later.
  */
 export async function workflowMetrics(actor: Actor, days: RangeDays, now = new Date()) {
-  assertAdmin(actor);
+  assertPlatform(actor);
   const from = since(days, now);
   const [changes, bookings, requests, waitlist, marking, audits] = await Promise.all([
     db.$queryRaw<{ reschedules: number; cancellations: number; quickRebooks: number; staffCancels: number }[]>`

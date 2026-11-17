@@ -189,13 +189,14 @@ Limits: push arrives even when the app is closed, but the device needs a connect
 \section[Access]{Access (\src{src/server/services/access.ts})}
 
 \begin{itemize}
-  \item Every service takes an \code{Actor} and checks the role itself: \code{assertCourseRole}, \code{assertStaff}, \code{assertAdmin}.
+  \item Every service takes an \code{Actor} and checks the role itself: \code{assertCourseRole}, \code{assertStaff}, \code{assertAdmin}, \code{assertPlatform}.
   \item \textbf{One kind of staff per person.} A TA can be a student elsewhere, but an instructor is never a TA in another course and a TA never an instructor (\src{src/domain/roles.ts}). Imports skip such rows with a reason; other paths refuse.
   \item \textbf{Admins are only admins.} They count as instructors in any course (to manage it), but are never enrolled: roster imports skip admin emails, \ui{Assign staff} and \ui{Add someone} refuse them, they can't create a course for themselves (they create it from the console and name its instructor or TA), and a course member can't be made admin.
   \item Only instructors can add or remove instructors. Nobody can remove themselves or demote themselves through a CSV import.
   \item \textbf{Archived courses are read-only.} Mutations pass \code{{ write: true }} to \code{assertCourseRole} / \code{assertStaff} / \code{assertAssignmentRole}, or call \code{assertCourseWritable}. Only restoring the course is allowed.
   \item Removing a student cancels their upcoming bookings and notifies them. Removing staff is refused while they host upcoming slots.
   \item Admins disabling an account can also release that user's upcoming bookings.
+  \item \textbf{Platform accounts are only platform accounts} (\code{User.platformAccess}, \code{canGrantPlatform}). Usage insights and feedback need \code{assertPlatform}, which refuses admins (and any record with both flags). Access is granted only by \src{src/jobs/platform-access.ts}, which refuses admins, course members and inactive accounts; \src{src/jobs/create-admin.ts} refuses platform accounts. Platform accounts are never enrolled (roster imports skip them, \ui{Assign staff} and course creation refuse them, \code{assertCanJoinCourses}), and the admin console doesn't list, count, open or change them; their activity and \code{platform.*} entries are left out of the admin audit log.
 \end{itemize}
 
 \section{Accounts}
@@ -263,14 +264,14 @@ Each notification creates an in-app entry and, for people who have activated the
   \thead{Rule} & \thead{Behaviour}\\
   \midrule
   \endhead
-  Collection switch & Usage events are recorded only where \envvar{ANALYTICS_SECRET} is set (production). Development, integration and end-to-end runs record nothing. Feedback and surveys work everywhere.\\
+  Collection switch & Usage events are recorded only where \envvar{ANALYTICS_SECRET} is set (production), and never for platform accounts. Development, integration and end-to-end runs record nothing. Feedback and surveys work everywhere.\\
   Consent & \code{User.shareUsageData}, on by default (opt-out, explained at \route{/privacy}). Off: only \code{client_error} events are kept, and without the visitor key (\code{allowedWithoutConsent}).\\
   Event catalog & \code{clientEventSchema}: \code{page_view}; \code{web_vital} (LCP, INP, CLS, FCP, TTFB, value 0--600\,000); \code{funnel} (flow \code{booking}, \code{reschedule} or \code{marking}; step \code{view}, \code{submit}, \code{done} or \code{error}); \code{feature} (\code{add_to_calendar}, \code{push_enabled}, \code{app_installed}); \code{client_error}. Anything else, and any event with an unknown field value, is dropped one by one. At most 50 events per request and 240 per person per minute.\\
   No identifiers & Paths are stored as route templates (\code{routeTemplate}: any segment that isn't a plain word becomes \code{:id}; query strings dropped). The person is a keyed hash of their user id (\code{pseudonym}). The device is reduced to mobile, tablet or desktop (\code{deviceClass}); neither IP address nor user agent is stored. Error messages lose emails, links, long numbers and token-like strings (\code{scrubErrorMessage}), and are cut to 200 characters.\\
   Times & A client timestamp is used only if it is within the last hour (\code{eventTime}), else the server's time.\\
   Retention & Raw events 90 days, daily totals 400 days (about 13 months), deleted hourly by the worker (\code{retentionCutoffs}, \code{rollupAndPrune}).\\
   Feedback & A message (up to 2000 characters) is required, the rating 1--5 is optional; at most 5 per person per hour (\code{canSendFeedback}, counted in memory so nothing links a message to its sender). Stored without the user, with the time rounded to the hour.\\
-  Surveys & One question each after a booking, a reschedule and a mark submission (\code{SURVEY_PROMPTS}); never for admins. Asked at most once per question every 14 days, answered or not (\code{canPromptSurvey}). An answer (1--5, or dismissed) counts only within 24 hours of being asked and only once (\code{canAnswerSurvey}). Responses are stored without the user, dated to the day; \code{SurveyPrompt} keeps only when each person was asked and whether they answered.\\
+  Surveys & One question each after a booking, a reschedule and a mark submission (\code{SURVEY_PROMPTS}); never for admins or platform accounts. Asked at most once per question every 14 days, answered or not (\code{canPromptSurvey}). An answer (1--5, or dismissed) counts only within 24 hours of being asked and only once (\code{canAnswerSurvey}). Responses are stored without the user, dated to the day; \code{SurveyPrompt} keeps only when each person was asked and whether they answered.\\
   \bottomrule
 \end{xltabular}}
 
@@ -280,4 +281,4 @@ Times are stored in UTC. They're shown and entered in the \textbf{course timezon
 
 \section{Audit}
 
-Moderation-relevant changes go through \code{audit(tx, actor, …)}: courses, roster, assignments, availability, slot cancellation and venue changes, attendance, staff cancellations, evaluation transitions, admin actions, and feedback status changes.
+Moderation-relevant changes go through \code{audit(tx, actor, …)}: courses, roster, assignments, availability, slot cancellation and venue changes, attendance, staff cancellations, evaluation transitions, and admin actions. Platform actions (access grants, feedback status) are recorded as \code{platform.*}, outside the admin audit log.

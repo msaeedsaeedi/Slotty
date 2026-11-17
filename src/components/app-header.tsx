@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bell, CalendarCheck, CalendarClock, LogOut, Shield, UserRound } from "lucide-react";
+import { BarChart3, Bell, CalendarCheck, CalendarClock, LogOut, Shield, UserRound } from "lucide-react";
 import { FeedbackButton } from "@/components/feedback-button";
 import { Button } from "@/components/ui/button";
 import type { Actor } from "@/server/services/access";
@@ -10,27 +10,30 @@ export async function AppHeader({ user }: { user: Actor }) {
   const [unread, roles] = await Promise.all([unreadCount(user), myRoleKinds(user)]);
   // Admins run the platform and never join courses, so the console is all they need.
   const admin = user.isAdmin;
+  // The product team's dedicated account sees only its own area.
+  const platform = Boolean(user.isPlatform);
+  const outsideCourses = admin || platform;
   return (
     <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4">
-        <Link href={admin ? "/admin" : "/dashboard"} className="mr-2 flex items-center gap-2 font-semibold">
+        <Link href={admin ? "/admin" : platform ? "/platform" : "/dashboard"} className="mr-2 flex items-center gap-2 font-semibold">
           <CalendarCheck className="size-5 text-primary" />
           Slotty
         </Link>
         <nav className="flex items-center gap-1 text-sm">
-          {!admin && (
+          {!outsideCourses && (
             <Button asChild variant="ghost" size="sm">
               <Link href="/dashboard">Home</Link>
             </Button>
           )}
-          {!admin && roles.hosts && (
+          {!outsideCourses && roles.hosts && (
             <Button asChild variant="ghost" size="sm">
               <Link href="/today">
                 <CalendarClock /> Demo day
               </Link>
             </Button>
           )}
-          {!admin && roles.student && (
+          {!outsideCourses && roles.student && (
             <Button asChild variant="ghost" size="sm">
               <Link href="/bookings">My demos</Link>
             </Button>
@@ -42,9 +45,16 @@ export async function AppHeader({ user }: { user: Actor }) {
               </Link>
             </Button>
           )}
+          {platform && (
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/platform">
+                <BarChart3 /> Platform
+              </Link>
+            </Button>
+          )}
         </nav>
         <div className="ml-auto flex items-center gap-1">
-          {!admin && <FeedbackButton />}
+          {!outsideCourses && <FeedbackButton />}
           <Button asChild variant="ghost" size="icon" aria-label={`Notifications (${unread} unread)`} className="relative">
             <Link href="/notifications">
               <Bell />

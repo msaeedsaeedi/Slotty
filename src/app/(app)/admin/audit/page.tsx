@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { requireAdminUser } from "@/server/auth/session";
 import { adminAuditLog } from "@/server/services/admin";
 import { AUDIT_AREAS, AuditSentence } from "../audit-text";
-import { FilterTabs, query } from "../filter-tabs";
+import { FilterTabs, query } from "@/components/filter-tabs";
 
 export const metadata = { title: "Audit log" };
 

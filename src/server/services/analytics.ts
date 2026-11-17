@@ -46,7 +46,8 @@ function withinRate(userId: string, n: number, now: number): number {
  * off still report errors, with no visitor key. Returns how many were stored.
  */
 export async function recordEvents(actor: Actor, input: unknown, ctx: { userAgent?: string | null; now?: Date } = {}): Promise<number> {
-  if (!analyticsEnabled()) return 0;
+  // The product team's own browsing would only skew the numbers it reads.
+  if (!analyticsEnabled() || actor.isPlatform) return 0;
   const now = ctx.now ?? new Date();
   const batch = batchSchema.safeParse(input);
   if (!batch.success) return 0;

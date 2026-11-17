@@ -21,7 +21,8 @@ This chapter gathers the controls described elsewhere into one view an auditor c
   Email & SPF, DKIM and DMARC (\code{p=quarantine}); sending identity limited to the domain & \src{infra/aws/app/ses.tf}\\
   Application access & Every service checks the actor's role per course; archived courses read-only; admins never course members & \cref{ch:rules}\\
   Accounts & Argon2 password hashes, database sessions (30 days), reset links valid 2 hours, invites 14 days, silent success on unknown emails & \cref{ch:rules}\\
-  Usage data & First-party only, stored in RDS; pseudonymous visitor key (HMAC with an SSM secret), route templates instead of paths, no IP or user agent, scrubbed error text; opt-out in Account; feedback and survey answers stored without the user and with coarsened times; raw events 90 days, totals 13 months; admins only & \cref{sec:rules-usage}, ADR-015\\
+  Usage data & First-party only, stored in RDS; pseudonymous visitor key (HMAC with an SSM secret), route templates instead of paths, no IP or user agent, scrubbed error text; opt-out in Account; feedback and survey answers stored without the user and with coarsened times; raw events 90 days, totals 13 months & \cref{sec:rules-usage}, ADR-015\\
+  Platform separation & Insights and feedback readable only by a dedicated platform account (never an admin, never in a course), granted from the command line only; hidden from the admin console and its audit log; never tracked itself & \cref{ch:rules}, ADR-016\\
   Browser policy & \code{Content-Security-Policy-Report-Only} (\code{'self'} only) in production; \code{X-Frame-Options}, \code{nosniff}, referrer policy & \src{next.config.ts}\\
   Supply chain & Lockfile installs; pinned base images and TeX image by digest; RDS CA bundle checked by SHA-256; ECR scan on push & \src{Dockerfile}\\
   \bottomrule

@@ -62,7 +62,9 @@ error boundary (\src{src/app/(app)/error.tsx}) reports render errors with their 
 \route{/api/events} with \code{sendBeacon} every 10 seconds, at 20 events, and when the tab is
 hidden or closed; a per-tab random id in \code{sessionStorage} (no cookie) lets funnels follow one
 visit. The route handler checks the origin and the session, then \code{recordEvents} validates
-every event against the catalog and stores it (\cref{sec:rules-usage}). Analytics never breaks
+every event against the catalog and stores it (\cref{sec:rules-usage}). Reports and feedback are
+read only by the platform account at \route{/platform} (ADR-016), whose own browsing is never
+recorded. Analytics never breaks
 the app: the endpoint always answers 204 and logs its own failures. The worker folds events into
 \code{AnalyticsDaily} once an hour (the last 7 full days, idempotently) and deletes expired rows.
 

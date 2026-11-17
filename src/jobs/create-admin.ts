@@ -15,6 +15,7 @@ async function main() {
   if (!email) throw new Error("Set ADMIN_EMAIL.");
 
   const existing = await db.user.findUnique({ where: { email } });
+  if (existing?.platformAccess) throw new Error(`${email} has platform access; admins need their own account.`);
   if (existing) {
     await db.user.update({ where: { id: existing.id }, data: { isAdmin: true } });
     console.log(`${email} already exists — made them an admin (password unchanged).`);

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireAdminUser } from "@/server/auth/session";
 import { adminListUsers, STALE_INVITE_DAYS, type UserFilter } from "@/server/services/admin";
-import { FilterTabs, query } from "../filter-tabs";
+import { FilterTabs, query } from "@/components/filter-tabs";
 
 export const metadata = { title: "Users" };
 

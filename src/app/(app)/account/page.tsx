@@ -74,7 +74,7 @@ export default async function AccountPage() {
         </CardContent>
       </Card>
 
-      {!user.isAdmin && (
+      {!user.isAdmin && !user.isPlatform && (
         <Card>
           <CardHeader>
             <CardTitle>Usage data</CardTitle>

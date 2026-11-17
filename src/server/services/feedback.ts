@@ -4,7 +4,7 @@ import { canAnswerSurvey, canPromptSurvey, canSendFeedback, FEEDBACK_MAX_LENGTH,
 import { assertRule, DomainError } from "@/domain/result";
 import { appVersion } from "@/server/analytics-config";
 import { db } from "@/server/db";
-import { assertAdmin, type Actor } from "./access";
+import { assertPlatform, type Actor } from "./access";
 import { roleKindOf } from "./analytics";
 import { audit } from "./audit";
 
@@ -30,6 +30,7 @@ function sentLastHour(userId: string, now: number): number {
  * (as a route template), role and release; never the user.
  */
 export async function submitFeedback(actor: Actor, input: z.input<typeof feedbackInput>, now = new Date()) {
+  if (actor.isPlatform) throw new DomainError("Platform accounts don't send feedback.", "FORBIDDEN");
   const data = feedbackInput.parse(input);
   const message = data.message.trim();
   assertRule(canSendFeedback({ message, rating: data.rating }, sentLastHour(actor.id, now.getTime())));
@@ -43,7 +44,7 @@ export async function submitFeedback(actor: Actor, input: z.input<typeof feedbac
 export const FEEDBACK_STATUSES: FeedbackStatus[] = ["NEW", "TRIAGED", "DONE"];
 
 export async function listFeedback(actor: Actor, opts: { status?: FeedbackStatus; page?: number } = {}) {
-  assertAdmin(actor);
+  assertPlatform(actor);
   const take = 50;
   const page = Math.max(0, Math.floor(opts.page ?? 0));
   const rows = await db.feedback.findMany({
@@ -61,14 +62,15 @@ export async function listFeedback(actor: Actor, opts: { status?: FeedbackStatus
 }
 
 export async function setFeedbackStatus(actor: Actor, id: string, status: FeedbackStatus) {
-  assertAdmin(actor);
+  assertPlatform(actor);
   if (!FEEDBACK_STATUSES.includes(status)) throw new DomainError("Unknown status.");
   return db.$transaction(async (tx) => {
     const before = await tx.feedback.findUnique({ where: { id }, select: { status: true } });
     if (!before) throw new DomainError("Feedback not found.", "NOT_FOUND");
     if (before.status === status) return;
     await tx.feedback.update({ where: { id }, data: { status } });
-    await audit(tx, actor, { action: "feedback.status", entityType: "Feedback", entityId: id, before, after: { status } });
+    // Recorded under platform.*, which the admin audit log leaves out.
+    await audit(tx, actor, { action: "platform.feedback_status", entityType: "Feedback", entityId: id, before, after: { status } });
   });
 }
 
@@ -80,7 +82,7 @@ export async function setFeedbackStatus(actor: Actor, id: string, status: Feedba
  * prompt waits 14 days whether or not they answer. Admins are never asked.
  */
 export async function claimSurvey(actor: Actor, prompt: SurveyPromptId, now = new Date()): Promise<boolean> {
-  if (actor.isAdmin) return false;
+  if (actor.isAdmin || actor.isPlatform) return false;
   try {
     const last = await db.surveyPrompt.findUnique({ where: { userId_prompt: { userId: actor.id, prompt } } });
     if (!canPromptSurvey(last, now).ok) return false;

@@ -5,7 +5,7 @@ import { parseRoster, type RosterError, type RosterRow } from "@/domain/csv-rost
 import { canTakeRole } from "@/domain/roles";
 import { fmtRange, isValidTimezone } from "@/lib/time";
 import { db, type Tx } from "@/server/db";
-import { assertCourseRole, assertStaff, courseRoleOf, type Actor } from "./access";
+import { assertCanJoinCourses, assertCourseRole, assertStaff, courseRoleOf, type Actor } from "./access";
 import { audit } from "./audit";
 import { issueInvite } from "./accounts";
 import { notify } from "./notify";
@@ -19,6 +19,7 @@ export const courseInput = z.object({
 
 export async function createCourse(actor: Actor, input: z.input<typeof courseInput> & { myRole: "TA" | "INSTRUCTOR" }) {
   if (actor.isAdmin) throw new DomainError("Admins don't join courses. Create it from the admin console and name its instructor or TA.", "FORBIDDEN");
+  if (actor.isPlatform) throw new DomainError("That account can't join courses.", "FORBIDDEN");
   const data = courseInput.parse(input);
   const myRole = input.myRole === "INSTRUCTOR" ? "INSTRUCTOR" : "TA";
   return db.$transaction(async (tx) => {
@@ -116,7 +117,7 @@ export async function rolesElsewhere(tx: Tx, userId: string, courseId: string) {
 async function screenRows(tx: Tx, courseId: string, parsed: { rows: RosterRow[]; errors: RosterError[] }) {
   const users = await tx.user.findMany({
     where: { email: { in: parsed.rows.map((r) => r.email) } },
-    select: { email: true, isAdmin: true, enrollments: { where: { courseId: { not: courseId } }, select: { role: true, course: { select: { code: true } } } } },
+    select: { email: true, isAdmin: true, platformAccess: true, enrollments: { where: { courseId: { not: courseId } }, select: { role: true, course: { select: { code: true } } } } },
   });
   const byEmail = new Map(users.map((u) => [u.email, u]));
   const rows: RosterRow[] = [];
@@ -125,6 +126,10 @@ async function screenRows(tx: Tx, courseId: string, parsed: { rows: RosterRow[];
     const u = byEmail.get(r.email);
     if (u?.isAdmin) {
       errors.push({ line: r.line, message: `${r.email} is a Slotty admin, so can't be added to a course.` });
+      continue;
+    }
+    if (u?.platformAccess) {
+      errors.push({ line: r.line, message: `${r.email} can't be added to a course.` });
       continue;
     }
     const fits = canTakeRole(r.role, (u?.enrollments ?? []).map((e) => ({ role: e.role, course: e.course.code })));
@@ -223,6 +228,7 @@ async function importRows(actor: Actor, courseId: string, parsed: { rows: Roster
           summary.updated++;
           continue;
         }
+        assertCanJoinCourses(user);
         await tx.enrollment.create({ data: { courseId, userId: user.id, role: row.role, section: row.section } });
         summary.enrolled++;
         const context = `${actor.name} added you to ${course.code} — ${course.title} (${course.term}) as ${row.role.toLowerCase()}.${

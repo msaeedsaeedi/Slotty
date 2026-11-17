@@ -93,11 +93,29 @@ Admins run the platform from the web console. They are never students or staff o
   A2 & Keeps courses staffed\newline{\color{muted}\footnotesize \route{/admin/courses}} & \code{adminCreateCourse}, \code{adminListCourses}, \code{adminAssignStaff}, \code{adminSetCourseArchived} & \ui{New course}: code, title, term and the instructor or TA who runs it (invited if new). Filters: active, no staff, archived. Each course shows its staff, students, open assignments and upcoming demos. \ui{Assign staff} adds an instructor or TA by email (never an admin): new people get an invite, existing ones a notification. Archive or restore. Opening a course shows its manage pages with full rights (``Viewing as admin'').\\
   A3 & Fixes email delivery\newline{\color{muted}\footnotesize \route{/admin/email} (badge = failed count)} & \code{adminEmailQueue}, \code{adminRetryEmails} & Failed, waiting and sent emails with the SMTP error. Retry one, or all after fixing the cause.\\
   A4 & Audits\newline{\color{muted}\footnotesize \route{/admin/audit}} & \code{adminAuditLog} & Readable sentences (``Ada Admin assigned staff to MATH 210'') with links to users and courses, filtered by area or person, 100 per page, with before/after details on demand.\\
-  A5 & Looks for evidence of what to improve\newline{\color{muted}\footnotesize \route{/admin/insights}} & \code{usageOverview}, \code{workflowMetrics}, \code{funnels}, \code{performance}, \code{clientErrors}, \code{surveys} & Six reports over 7, 30 or 90 days. \ui{Usage}: people active this week by role, people per day, pages by views (the bottom of the list is what hardly anyone opens), features used, and a 13-month trend. \ui{Booking \& marking}: reschedules, cancellations (and how many were rebooked within 30 minutes), no-shows, waitlist conversion, requests and how fast they were answered, demo-to-marks time, unlocks; these come from the booking tables, so they count everyone. \ui{Funnels}: visits that saw the slot picker or marking sheet, pressed submit, succeeded or got an error, by device. \ui{Speed}: Core Web Vitals at the 75th percentile by device, and the slowest pages. \ui{Errors}: browser errors grouped by message, with pages and releases. \ui{Surveys}: answers to the one-question surveys. See \cref{sec:rules-usage}.\\
-  A6 & Reads feedback\newline{\color{muted}\footnotesize \route{/admin/feedback} (badge = new count)} & \code{listFeedback}, \code{setFeedbackStatus} & Anonymous messages from the feedback button with rating, role, page type and release. \ui{Mark triaged} once it's noted somewhere (a roadmap item), \ui{Mark done} once acted on, \ui{Reopen}. Status changes are audited.\\
   \bottomrule
 \end{xltabular}}
 
+
+\section{Platform team}\label{sec:journey-platform}
+
+The product team (whoever builds Slotty) reads the evidence for what to improve. That is not the
+admins' job: admins run the deployment. A platform account is a \textbf{dedicated account}: never
+an admin, never in a course, granted only from the command line (\code{bun run platform:grant},
+\cref{sec:ops-platform}), and invisible to the admin console (ADR-016). It lands on
+\route{/platform}; the header shows only \ui{Platform}. It isn't tracked, surveyed or offered the
+feedback button.
+
+{\tablefont
+\begin{xltabular}{\linewidth}{@{}l P{34mm} P{30mm} L@{}}
+  \toprule
+  \thead{\#} & \thead{Step and screen} & \thead{Service} & \thead{What happens / feedback}\\
+  \midrule
+  \endhead
+  P1 & Looks for evidence of what to improve\newline{\color{muted}\footnotesize \route{/platform/insights}} & \code{usageOverview}, \code{workflowMetrics}, \code{funnels}, \code{performance}, \code{clientErrors}, \code{surveys} & Six reports over 7, 30 or 90 days. \ui{Usage}: people active this week by role, people per day, pages by views (the bottom of the list is what hardly anyone opens), features used, and a 13-month trend. \ui{Booking \& marking}: reschedules, cancellations (and how many were rebooked within 30 minutes), no-shows, waitlist conversion, requests and how fast they were answered, demo-to-marks time, unlocks; these come from the booking tables, so they count everyone. \ui{Funnels}: visits that saw the slot picker or marking sheet, pressed submit, succeeded or got an error, by device. \ui{Speed}: Core Web Vitals at the 75th percentile by device, and the slowest pages. \ui{Errors}: browser errors grouped by message, with pages and releases. \ui{Surveys}: answers to the one-question surveys. See \cref{sec:rules-usage}.\\
+  P2 & Reads feedback\newline{\color{muted}\footnotesize \route{/platform/feedback} (badge = new count)} & \code{listFeedback}, \code{setFeedbackStatus} & Anonymous messages from the feedback button with rating, role, page type and release. \ui{Mark triaged} once it's noted somewhere (a roadmap item), \ui{Mark done} once acted on, \ui{Reopen}. Status changes are audited under \code{platform.*}, which the admin audit log leaves out.\\
+  \bottomrule
+\end{xltabular}}
 
 \section{Feedback and surveys (students and staff)}\label{sec:journey-feedback}
 

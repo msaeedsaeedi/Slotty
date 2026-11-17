@@ -4,9 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FLOW_STEPS, type Flow } from "@/domain/analytics";
 import { analyticsEnabled } from "@/server/analytics-config";
-import { requireAdminUser } from "@/server/auth/session";
+import { requirePlatformUser } from "@/server/auth/session";
 import { clientErrors, funnels, performance, RANGES, surveys, usageOverview, VITAL_GOOD, workflowMetrics, type RangeDays } from "@/server/services/insights";
-import { FilterTabs, query } from "../filter-tabs";
+import { FilterTabs, query } from "@/components/filter-tabs";
 
 export const metadata = { title: "Insights" };
 
@@ -49,12 +49,12 @@ function Stat({ label, value, sub }: { label: string; value: React.ReactNode; su
   );
 }
 
-export default async function InsightsPage({ searchParams }: PageProps<"/admin/insights">) {
+export default async function InsightsPage({ searchParams }: PageProps<"/platform/insights">) {
   const sp = await searchParams;
   const tab: Tab = TABS.find(([t]) => t === sp.tab)?.[0] ?? "overview";
   const days: RangeDays = RANGES.find((d) => String(d) === sp.days) ?? 30;
-  const user = await requireAdminUser();
-  const href = (p: { tab?: string; days?: string }) => query("/admin/insights", { tab: p.tab ?? (tab === "overview" ? undefined : tab), days: p.days ?? (days === 30 ? undefined : String(days)) });
+  const user = await requirePlatformUser();
+  const href = (p: { tab?: string; days?: string }) => query("/platform/insights", { tab: p.tab ?? (tab === "overview" ? undefined : tab), days: p.days ?? (days === 30 ? undefined : String(days)) });
 
   return (
     <div className="space-y-4">
@@ -81,7 +81,7 @@ export default async function InsightsPage({ searchParams }: PageProps<"/admin/i
   );
 }
 
-type Props = { user: Awaited<ReturnType<typeof requireAdminUser>>; days: RangeDays };
+type Props = { user: Awaited<ReturnType<typeof requirePlatformUser>>; days: RangeDays };
 
 async function Overview({ user, days }: Props) {
   const o = await usageOverview(user, days);

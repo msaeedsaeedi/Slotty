@@ -138,3 +138,12 @@ describe("coarse times and retention", () => {
     expect(c.rollup.toISOString()).toBe("2025-10-13T00:00:00.000Z");
   });
 });
+
+describe("canGrantPlatform", () => {
+  it("needs a dedicated account: not an admin, in no course", async () => {
+    const { canGrantPlatform } = await import("@/domain/roles");
+    expect(canGrantPlatform({ isAdmin: false, courses: [] }).ok).toBe(true);
+    expect(canGrantPlatform({ isAdmin: true, courses: [] })).toEqual({ ok: false, reason: expect.stringMatching(/admin/) });
+    expect(canGrantPlatform({ isAdmin: false, courses: ["CS101"] })).toEqual({ ok: false, reason: expect.stringMatching(/CS101/) });
+  });
+});

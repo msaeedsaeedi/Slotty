@@ -58,7 +58,8 @@ export default function PrivacyPage() {
         <h2 className="text-base font-semibold">How long it&apos;s kept, and who sees it</h2>
         <p>
           Individual events are deleted after {RAW_RETENTION_DAYS} days. Daily totals (for example &ldquo;120 people booked a demo on Monday&rdquo;)
-          are kept for 13 months. Only Slotty administrators can see this data, in its summary reports.
+          are kept for 13 months. Only the team that builds Slotty can see this data, in summary reports; course staff and administrators
+          can&apos;t.
         </p>
       </section>
     </main>

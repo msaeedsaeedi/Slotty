@@ -136,7 +136,7 @@ Add one for every deliberate trade-off (AI-DLC's design stages propose them).
   {Collect it ourselves: a small browser tracker beaconing a fixed event catalog to
    \route{/api/events}, stored in PostgreSQL under a pseudonymous HMAC visitor key with route
    templates only, rolled up daily by the worker, kept 90 days raw and 13 months as totals, and
-   reported on an admin-only page. Workflow numbers (reschedules, no-shows, time to mark) are
+   reported to the product team (ADR-016). Workflow numbers (reschedules, no-shows, time to mark) are
    queried from the existing tables. Feedback and one-question surveys are stored without the
    user. Usage data is on by default with an opt-out in Account, explained at \route{/privacy};
    errors and feedback are collected either way. A report-only content security policy limits
@@ -151,4 +151,22 @@ Add one for every deliberate trade-off (AI-DLC's design stages propose them).
   {Traffic grows past about 5 million events a month (move raw events out of RDS), the team
    needs replay or heat maps, or the policy for student data changes (for example opt-in
    consent).}
+
+\adr{016}{Usage insights belong to the product team, not to administration}{2026-11-17}{Accepted}
+  {Admins run the deployment (users, courses, email). Usage data and feedback are evidence for
+   whoever builds Slotty. Putting them in the admin console widens who can see them, and any
+   bug in admin or course code would sit one step from internal data.}
+  {A separate \route{/platform} area and permission, \code{User.platformAccess}, checked by
+   \code{assertPlatform}. A platform account is dedicated: never an admin and never a course
+   member, enforced by \code{canGrantPlatform} and every enrolment path. It is granted only by a
+   command-line job (the same way the first admin is created), and the admin console neither
+   lists nor changes it, nor shows its activity in the audit log.}
+  {Two kinds of console account to operate; the product team needs a second login if they also
+   teach or administer. A university admin can't see adoption numbers unless the product team
+   shares them. Rejected: an extra flag for admins (keeps the data one bug away from the
+   console), a separate dashboard tool such as Metabase or Grafana (its own compute, over the
+   budget, and a network path into the private database), a separate deployment (doubles the
+   cost).}
+  {Admins need adoption numbers for their own courses: add an aggregate, course-level view for
+   them rather than opening \route{/platform}.}
 

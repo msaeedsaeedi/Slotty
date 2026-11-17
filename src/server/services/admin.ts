@@ -6,7 +6,7 @@ import { canTakeRole } from "@/domain/roles";
 import { courseInput, rolesElsewhere } from "./courses";
 import { signalOutbox } from "@/server/outbox-signal";
 import { issueInvite, requestPasswordReset } from "./accounts";
-import { assertAdmin, STAFF, type Actor } from "./access";
+import { assertAdmin, assertCanJoinCourses, STAFF, type Actor } from "./access";
 import { audit } from "./audit";
 import { notify } from "./notify";
 import { ACTIVE_BOOKING } from "./slots";
@@ -14,6 +14,20 @@ import { ACTIVE_BOOKING } from "./slots";
 const DAY = 86_400_000;
 /** An invite still unaccepted after this long probably went to spam or a typo'd address. */
 export const STALE_INVITE_DAYS = 7;
+
+/**
+ * Platform (product-team) accounts are invisible to the admin console: not
+ * listed, not counted, and not editable here. They're managed from the command
+ * line only (`bun run platform:grant`), so neither an admin nor a bug in admin
+ * code can reach them.
+ */
+const NOT_PLATFORM = { platformAccess: false } as const;
+
+async function adminTarget(tx: Tx, userId: string) {
+  const user = await tx.user.findFirst({ where: { id: userId, ...NOT_PLATFORM } });
+  if (!user) throw new DomainError("User not found.", "NOT_FOUND");
+  return user;
+}
 
 // ─── Overview ────────────────────────────────────────────────────────────────
 
@@ -27,16 +41,16 @@ export async function adminOverview(actor: Actor, now = new Date()) {
   const weekAhead = new Date(now.getTime() + 7 * DAY);
   const [byStatus, admins, newUsers, staleInvites, staleInviteCount, courses, staffless, emails, oldestPending, pushFailed, demosWeek, recent] =
     await Promise.all([
-      db.user.groupBy({ by: ["status"], _count: true }),
+      db.user.groupBy({ by: ["status"], _count: true, where: NOT_PLATFORM }),
       db.user.count({ where: { isAdmin: true } }),
-      db.user.count({ where: { createdAt: { gte: new Date(now.getTime() - 7 * DAY) } } }),
+      db.user.count({ where: { createdAt: { gte: new Date(now.getTime() - 7 * DAY) }, ...NOT_PLATFORM } }),
       db.user.findMany({
-        where: { status: "INVITED", createdAt: { lt: staleBefore } },
+        where: { status: "INVITED", createdAt: { lt: staleBefore }, ...NOT_PLATFORM },
         select: { id: true, name: true, email: true, createdAt: true },
         orderBy: { createdAt: "asc" },
         take: 5,
       }),
-      db.user.count({ where: { status: "INVITED", createdAt: { lt: staleBefore } } }),
+      db.user.count({ where: { status: "INVITED", createdAt: { lt: staleBefore }, ...NOT_PLATFORM } }),
       db.course.groupBy({ by: ["archived"], _count: true }),
       db.course.findMany({
         where: { archived: false, enrollments: { none: { role: { in: STAFF } } } },
@@ -81,6 +95,7 @@ export async function adminListUsers(actor: Actor, opts: { q?: string; filter?: 
   const { q, filter = "all" } = typeof opts === "string" ? { q: opts } : opts;
   const term = q?.trim();
   const where: Prisma.UserWhereInput = {
+    ...NOT_PLATFORM,
     ...(term ? { OR: [{ email: { contains: term, mode: "insensitive" } }, { name: { contains: term, mode: "insensitive" } }] } : {}),
     ...(filter === "active" && { status: "ACTIVE" }),
     ...(filter === "invited" && { status: "INVITED" }),
@@ -121,8 +136,8 @@ export async function adminListUsers(actor: Actor, opts: { q?: string; filter?: 
 /** One user's account, courses, upcoming demos and history, for the admin user page. */
 export async function adminGetUser(actor: Actor, userId: string, now = new Date()) {
   assertAdmin(actor);
-  const user = await db.user.findUnique({
-    where: { id: userId },
+  const user = await db.user.findFirst({
+    where: { id: userId, ...NOT_PLATFORM },
     select: {
       id: true,
       name: true,
@@ -169,8 +184,7 @@ export async function adminGetUser(actor: Actor, userId: string, now = new Date(
 /** Send a fresh invite (not activated yet) or a password-reset link (active account). */
 export async function adminSendAccessEmail(actor: Actor, userId: string) {
   assertAdmin(actor);
-  const user = await db.user.findUnique({ where: { id: userId } });
-  if (!user) throw new DomainError("User not found.", "NOT_FOUND");
+  const user = await adminTarget(db, userId);
   if (user.status === "DISABLED") throw new DomainError("Enable the account first.");
   if (user.status === "INVITED") {
     await db.$transaction(async (tx) => {
@@ -194,8 +208,7 @@ export async function adminUpdateUser(actor: Actor, userId: string, input: { nam
     })
     .parse(input);
   return db.$transaction(async (tx) => {
-    const user = await tx.user.findUnique({ where: { id: userId } });
-    if (!user) throw new DomainError("User not found.", "NOT_FOUND");
+    const user = await adminTarget(tx, userId);
     if (data.email !== user.email) {
       if (user.status !== "INVITED") throw new DomainError("Only invited (not yet activated) accounts can change email here.");
       if (await tx.user.findUnique({ where: { email: data.email } })) throw new DomainError("Another account already uses that email.", "CONFLICT");
@@ -214,7 +227,7 @@ export async function adminSetUserDisabled(actor: Actor, userId: string, disable
   assertAdmin(actor);
   if (userId === actor.id) throw new DomainError("You can't disable your own account.");
   return db.$transaction(async (tx) => {
-    const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+    const user = await adminTarget(tx, userId);
     const status = disabled ? "DISABLED" : user.passwordHash ? "ACTIVE" : "INVITED";
     await tx.user.update({ where: { id: userId }, data: { status } });
     let released = 0;
@@ -243,6 +256,7 @@ export async function adminSetAdmin(actor: Actor, userId: string, isAdmin: boole
   assertAdmin(actor);
   if (userId === actor.id && !isAdmin) throw new DomainError("You can't remove your own admin rights.");
   return db.$transaction(async (tx) => {
+    await adminTarget(tx, userId);
     if (isAdmin) {
       // Admins run the platform; they're never a student or staff member of a course.
       const courses = await tx.enrollment.findMany({ where: { userId }, select: { course: { select: { code: true } } } });
@@ -329,6 +343,7 @@ async function assignStaff(tx: Tx, actor: Actor, course: { id: string; code: str
   let user = await tx.user.findUnique({ where: { email: data.email } });
   if (user?.status === "DISABLED") throw new DomainError("That account is disabled. Enable it first.");
   if (user?.isAdmin) throw new DomainError(`${user.name} is a Slotty admin, so can't be course staff.`);
+  if (user) assertCanJoinCourses(user);
   if (user) {
     const fits = canTakeRole(data.role, await rolesElsewhere(tx, user.id, courseId));
     if (!fits.ok) throw new DomainError(`${user.name} ${fits.reason}`);
@@ -370,6 +385,7 @@ export async function adminInviteUser(actor: Actor, input: z.input<typeof invite
   const data = inviteInput.parse(input);
   return db.$transaction(async (tx) => {
     const existing = await tx.user.findUnique({ where: { email: data.email } });
+    if (existing?.platformAccess) throw new DomainError("That email already has an account.", "CONFLICT");
     if (existing) throw new DomainError(`${existing.name} already has an account (${existing.status.toLowerCase()}).`, "CONFLICT");
     const user = await tx.user.create({ data: { email: data.email, name: data.name, isAdmin: data.isAdmin, status: "INVITED" } });
     await issueInvite(
@@ -446,6 +462,8 @@ export async function adminAuditLog(actor: Actor, opts: { take?: number; area?: 
   const term = opts.q?.trim();
   const rows = await db.auditLog.findMany({
     where: {
+      // Platform activity (feedback triage, access grants) stays out of the admin console.
+      NOT: [{ action: { startsWith: "platform." } }, { action: { startsWith: "feedback." } }, { actor: { is: { platformAccess: true } } }],
       ...(opts.area ? { action: { startsWith: `${opts.area}.` } } : {}),
       ...(term
         ? { OR: [{ entityId: term }, { actor: { OR: [{ name: { contains: term, mode: "insensitive" } }, { email: { contains: term, mode: "insensitive" } }] } }] }

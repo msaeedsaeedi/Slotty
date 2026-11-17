@@ -31,7 +31,7 @@ test("TA runs the whole loop alone: roster → slots → booking → marking →
   await student.getByRole("link", { name: /SOLO101 Title/ }).click();
   await student.getByRole("link", { name: /Sprint demo/ }).click();
   await student.getByRole("button", { name: "Book" }).first().click();
-  await expect(student.getByText("Your demo")).toBeVisible();
+  await expect(student.getByText("Your demo", { exact: true })).toBeVisible();
   await expect(student.getByText("9:00–9:15 AM")).toBeVisible();
   await student.getByRole("link", { name: "Reschedule" }).click();
   await student.getByRole("button", { name: "Move here" }).first().click();
@@ -88,7 +88,7 @@ test("with an instructor, TA submissions wait for review and the instructor fina
   const student = await login(browser, "sam@e2e.test");
   await open(student, `/courses/${courseId}/assignments/${assignmentId}`);
   await student.getByRole("button", { name: "Book" }).first().click();
-  await expect(student.getByText("Your demo")).toBeVisible();
+  await expect(student.getByText("Your demo", { exact: true })).toBeVisible();
 
   const ta = await login(browser, "ta@e2e.test");
   await open(ta, `/courses/${courseId}/manage/assignments/${assignmentId}?tab=students`);

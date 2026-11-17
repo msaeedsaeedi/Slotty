@@ -134,17 +134,19 @@ describe("feedback", () => {
     await expect(submitFeedback(s, { message: " ", rating: null, path: "/" })).rejects.toThrow(/few words/);
   });
 
-  it("is triaged by admins only, with an audit entry", async () => {
+  it("is triaged by the platform account only, with an audit entry", async () => {
+    const platform = await makeUser("Pat Platform", { isPlatform: true });
     const admin = await makeUser("Ada Admin", { isAdmin: true });
     const s = await makeUser("Sam");
     await submitFeedback(s, { message: "Great", rating: 5, path: "/" });
-    const { items, counts } = await listFeedback(admin);
+    const { items, counts } = await listFeedback(platform);
     expect(counts.NEW).toBe(1);
-    await expect(listFeedback(s)).rejects.toThrow(/Admins only/);
-    await expect(setFeedbackStatus(s, items[0].id, "DONE")).rejects.toThrow(/Admins only/);
-    await setFeedbackStatus(admin, items[0].id, "DONE");
-    expect((await listFeedback(admin, { status: "DONE" })).items).toHaveLength(1);
-    expect(await db.auditLog.count({ where: { action: "feedback.status" } })).toBe(1);
+    await expect(listFeedback(s)).rejects.toThrow(/Platform team only/);
+    await expect(listFeedback(admin)).rejects.toThrow(/Platform team only/);
+    await expect(setFeedbackStatus(admin, items[0].id, "DONE")).rejects.toThrow(/Platform team only/);
+    await setFeedbackStatus(platform, items[0].id, "DONE");
+    expect((await listFeedback(platform, { status: "DONE" })).items).toHaveLength(1);
+    expect(await db.auditLog.count({ where: { action: "platform.feedback_status" } })).toBe(1);
   });
 });
 
@@ -168,14 +170,19 @@ describe("one-question surveys", () => {
 });
 
 describe("insights", () => {
-  it("is admins only", async () => {
+  it("is for the platform account only, not admins", async () => {
     const s = await makeUser("Sam");
-    await expect(usageOverview(s, 30)).rejects.toThrow(/Admins only/);
-    await expect(workflowMetrics(s, 30)).rejects.toThrow(/Admins only/);
+    const admin = await makeUser("Ada", { isAdmin: true });
+    for (const who of [s, admin]) {
+      await expect(usageOverview(who, 30)).rejects.toThrow(/Platform team only/);
+      await expect(workflowMetrics(who, 30)).rejects.toThrow(/Platform team only/);
+    }
+    // A record that somehow has both flags is refused too.
+    await expect(usageOverview({ ...admin, isPlatform: true }, 30)).rejects.toThrow(/Platform team only/);
   });
 
   it("tells reschedules from cancellations and reports every tab", async () => {
-    const admin = await makeUser("Ada", { isAdmin: true });
+    const admin = await makeUser("Pat Platform", { isPlatform: true });
     const { s, slots } = await student();
     const b = await bookSlot(s, slots[0].id);
     await rescheduleBooking(s, b.id, slots[1].id);
