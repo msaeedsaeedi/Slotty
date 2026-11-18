@@ -55,6 +55,7 @@ export function StudentsTable({
   detailsHref,
   markBase,
   exportHref,
+  releases,
   initialFilter,
 }: {
   rows: StudentRow[];
@@ -62,6 +63,8 @@ export function StudentsTable({
   detailsHref: string;
   markBase: string;
   exportHref: string;
+  /** Submitting releases marks straight to students (no instructor review). */
+  releases: boolean;
   initialFilter?: string;
 }) {
   const [filter, setFilter] = useState<Filter>(initialFilter && initialFilter in FILTERS ? (initialFilter as Filter) : "all");
@@ -93,12 +96,18 @@ export function StudentsTable({
               <Download /> Export CSV
             </a>
           </Button>
-          <ActionForm action={submitManyAction} compact onSuccess={() => setSelected(new Set())}>
+          <ActionForm
+            action={submitManyAction}
+            compact
+            onSuccess={() => setSelected(new Set())}
+            confirm={releases ? `Release ${selected.size} mark${selected.size === 1 ? "" : "s"}? Students are notified and the marks become final.` : undefined}
+            confirmLabel="Release marks"
+          >
             {[...selected].map((id) => (
               <input key={id} type="hidden" name="evaluationId" value={id} />
             ))}
             <SubmitButton size="sm" disabled={selected.size === 0}>
-              Submit {selected.size || ""} marked
+              {releases ? `Release ${selected.size || ""} marked` : `Submit ${selected.size || ""} for review`}
             </SubmitButton>
           </ActionForm>
         </div>

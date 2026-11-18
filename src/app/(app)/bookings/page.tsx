@@ -51,7 +51,7 @@ export default async function BookingsPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <StatusBadge status={b.status} />
+                    <StatusBadge status={b.status === "CANCELLED" && b.replacedBy ? b.replacedBy : b.status} />
                     {b.status === "BOOKED" && b.slot.endsAt > now && (
                       <div className="mt-1">
                         <AddToCalendar options={bookingCalendarOptions(b)} variant="ghost" />

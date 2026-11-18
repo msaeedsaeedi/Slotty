@@ -15,7 +15,7 @@ import { enroll, inHours, makeUser, resetDb, setupCourse } from "./helpers";
 beforeEach(resetDb);
 
 describe("staff place / move (OP-01) and allowances (OP-04)", () => {
-  it("moves a student inside the freeze window without using their changes and answers their request", async () => {
+  it("moves a student inside the freeze window without using their changes, keeping their request open for a reply", async () => {
     const ta = await makeUser("Tara TA");
     const ann = await makeUser("Ann");
     const { course, assignment, slots } = await setupCourse(ta, { maxReschedules: 0 });
@@ -27,7 +27,13 @@ describe("staff place / move (OP-01) and allowances (OP-04)", () => {
     await staffPlaceStudent(ta, { assignmentId: assignment.id, studentId: ann.id, slotId: slots[1].id }, insideFreeze);
     expect(await db.booking.findUniqueOrThrow({ where: { id: b!.id } })).toMatchObject({ status: "CANCELLED", cancelledById: ta.id });
     expect(await db.booking.count({ where: { studentId: ann.id, slotId: slots[1].id, status: "BOOKED" } })).toBe(1);
-    expect(await listRequests(ta, course.id, "OPEN")).toHaveLength(0);
+    // The request stays open so staff can reply in their own words, and shows where Ann is now.
+    const [open] = await listRequests(ta, course.id, "OPEN");
+    expect(open.currentBooking?.slotId).toBe(slots[1].id);
+    expect(open.booking?.slotId).toBe(slots[1].id);
+    expect((await db.booking.findUniqueOrThrow({ where: { id: b!.id } })).replacedBy).toBe("MOVED_BY_STAFF");
+    const moved = await db.notification.findFirstOrThrow({ where: { userId: ann.id, type: "booking.placed_by_staff" } });
+    expect(moved.body).toMatch(/Previous: /);
 
     // Full slots need an explicit over-capacity override.
     const bob = await makeUser("Bob");

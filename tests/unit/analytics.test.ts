@@ -14,6 +14,7 @@ import {
   scrubErrorMessage,
   startOfHour,
   startOfUtcDay,
+  SURVEY_ANY_INTERVAL_DAYS,
   SURVEY_INTERVAL_DAYS,
 } from "@/domain/analytics";
 
@@ -103,6 +104,10 @@ describe("canPromptSurvey", () => {
     expect(canPromptSurvey({ shownAt: daysAgo(1) }, now).ok).toBe(false);
     expect(canPromptSurvey({ shownAt: daysAgo(SURVEY_INTERVAL_DAYS - 0.01) }, now).ok).toBe(false);
     expect(canPromptSurvey({ shownAt: daysAgo(SURVEY_INTERVAL_DAYS) }, now).ok).toBe(true);
+  });
+  it("never asks a second survey of another kind soon after the first", () => {
+    expect(canPromptSurvey(null, now, { shownAt: daysAgo(0.01) }).ok).toBe(false);
+    expect(canPromptSurvey(null, now, { shownAt: daysAgo(SURVEY_ANY_INTERVAL_DAYS) }).ok).toBe(true);
   });
 });
 

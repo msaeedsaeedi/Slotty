@@ -22,6 +22,8 @@ const LABELS: Record<string, [string, Tone]> = {
   BOOKED: ["Booked", "info"],
   COMPLETED: ["Completed", "success"],
   NO_SHOW: ["No-show", "danger"],
+  RESCHEDULED: ["Rescheduled", "neutral"],
+  MOVED_BY_STAFF: ["Moved by staff", "neutral"],
   // evaluation
   SUBMITTED: ["Awaiting review", "warning"],
   RETURNED: ["Returned", "warning"],

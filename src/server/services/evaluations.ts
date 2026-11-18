@@ -1,11 +1,13 @@
 import { z } from "zod";
+import { Prisma } from "@/generated/prisma/client";
 import { canSubmit, canTransition, computeTotal, nextStatus, validateScores, type EvaluationStatus } from "@/domain/evaluation";
 import { assertRule, DomainError } from "@/domain/result";
 import { dayRange, fmtData } from "@/lib/time";
 import { db, type Tx } from "@/server/db";
 import { assertAssignmentRole, assertCourseRole, assertCourseWritable, courseHasInstructor, STAFF, type Actor } from "./access";
 import { audit } from "./audit";
-import { notify } from "./notify";
+import { notify, unseenEarlier } from "./notify";
+import { marksKey } from "@/domain/notifications";
 import { ACTIVE_BOOKING } from "./slots";
 
 export const evaluationInput = z.object({
@@ -306,7 +308,7 @@ export async function submitEvaluations(actor: Actor, evaluationIds: string[]) {
         data: {
           status,
           submittedAt: new Date(),
-          ...(status === "FINALIZED" ? { reviewedById: actor.id, reviewedAt: new Date() } : {}),
+          ...(status === "FINALIZED" ? { reviewedById: actor.id, reviewedAt: new Date(), released: Prisma.DbNull } : {}),
         },
       });
       if (status === "FINALIZED") await announceMarks(tx, evaluation);
@@ -326,7 +328,9 @@ async function announceMarks(tx: Tx, evaluation: { id: string; studentId: string
     where: { id: evaluation.id },
     include: { scores: { include: { criterion: true } }, assignment: { include: { course: { select: { code: true } } } } },
   });
-  const unlock = await tx.auditLog.findFirst({ where: { action: "evaluation.unlock", entityId: ev.id }, orderBy: { createdAt: "desc" } });
+  const lastUnlock = await tx.auditLog.findFirst({ where: { action: "evaluation.unlock", entityId: ev.id }, orderBy: { createdAt: "desc" } });
+  // A correction made before the student saw the first release is just the release: one item, final marks.
+  const unlock = lastUnlock && !(await unseenEarlier(tx, ev.studentId, marksKey(ev.id))) ? lastUnlock : null;
   const before = (unlock?.before as { totalMarks?: number | null } | null)?.totalMarks;
   const { title, maxMarks, course } = ev.assignment;
   const rubric = ev.scores
@@ -344,6 +348,9 @@ async function announceMarks(tx: Tx, evaluation: { id: string; studentId: string
       ? `Your marks for ${course.code} — ${title} were corrected.\n\n${summary}`
       : `Your ${course.code} demo for ${title} has been marked.\n\n${summary}`,
     link: `/courses/${ev.assignment.courseId}/assignments/${ev.assignmentId}`,
+    groupKey: marksKey(ev.id),
+    // Held briefly so a quick correction replaces it instead of sending two emails.
+    emailDelayMinutes: 5,
   });
 }
 
@@ -377,7 +384,7 @@ export async function reviewEvaluation(actor: Actor, evaluationId: string, decis
     const status = nextStatus(evaluation.status, decision, { courseHasInstructor: true });
     await tx.evaluation.update({
       where: { id: evaluationId },
-      data: { status, reviewedById: actor.id, reviewedAt: new Date(), reviewComment: comment?.trim() || null },
+      data: { status, reviewedById: actor.id, reviewedAt: new Date(), reviewComment: comment?.trim() || null, ...(status === "FINALIZED" ? { released: Prisma.DbNull } : {}) },
     });
     if (decision === "finalize") {
       await announceMarks(tx, evaluation);
@@ -405,7 +412,9 @@ export async function unlockEvaluation(actor: Actor, evaluationId: string, reaso
     }
     if (!reason.trim()) throw new DomainError("Give a reason for unlocking.");
     const status = nextStatus(evaluation.status, "unlock", { courseHasInstructor: true });
-    await tx.evaluation.update({ where: { id: evaluationId }, data: { status, reviewComment: reason.trim() } });
+    // Keep what the student was shown, so their result (and any marks question) stays visible during the correction.
+    const released = studentView(await tx.evaluation.findUniqueOrThrow({ where: { id: evaluationId }, include: { scores: { include: { criterion: true } }, assignment: true } }));
+    await tx.evaluation.update({ where: { id: evaluationId }, data: { status, reviewComment: reason.trim(), released: released as unknown as Prisma.InputJsonValue } });
     await audit(tx, actor, {
       action: "evaluation.unlock",
       entityType: "Evaluation",
@@ -460,21 +469,43 @@ export async function listReviewQueue(actor: Actor, courseId: string) {
   });
 }
 
-/** What a student may see: only finalized marks and feedback — never private notes. */
-export async function getMyResult(actor: Actor, assignmentId: string) {
-  const evaluation = await db.evaluation.findUnique({
-    where: { assignmentId_studentId: { assignmentId, studentId: actor.id } },
-    include: { scores: { include: { criterion: true } }, assignment: true },
-  });
-  if (!evaluation || evaluation.status !== "FINALIZED") return null;
+export interface StudentResult {
+  totalMarks: number | null;
+  maxMarks: number;
+  feedback: string | null;
+  scores: { label: string; points: number; maxPoints: number; comment: string | null }[];
+}
+
+function studentView(evaluation: {
+  totalMarks: number | null;
+  feedback: string | null;
+  assignment: { maxMarks: number };
+  scores: { points: number; comment: string | null; criterion: { label: string; maxPoints: number; order: number } }[];
+}): StudentResult {
   return {
     totalMarks: evaluation.totalMarks,
     maxMarks: evaluation.assignment.maxMarks,
     feedback: evaluation.feedback,
-    scores: evaluation.scores
+    scores: [...evaluation.scores]
       .sort((a, b) => a.criterion.order - b.criterion.order)
       .map((s) => ({ label: s.criterion.label, points: s.points, maxPoints: s.criterion.maxPoints, comment: s.comment })),
   };
+}
+
+/**
+ * What a student may see: only released marks and feedback — never drafts or
+ * private notes. While staff correct unlocked marks, the student keeps seeing
+ * the marks they were given, flagged as being reviewed.
+ */
+export async function getMyResult(actor: Actor, assignmentId: string): Promise<(StudentResult & { underReview: boolean }) | null> {
+  const evaluation = await db.evaluation.findUnique({
+    where: { assignmentId_studentId: { assignmentId, studentId: actor.id } },
+    include: { scores: { include: { criterion: true } }, assignment: true },
+  });
+  if (!evaluation) return null;
+  if (evaluation.status === "FINALIZED") return { ...studentView(evaluation), underReview: false };
+  if (evaluation.released) return { ...(evaluation.released as unknown as StudentResult), underReview: true };
+  return null;
 }
 
 /** Finalize several submitted evaluations at once (instructor review queue). */

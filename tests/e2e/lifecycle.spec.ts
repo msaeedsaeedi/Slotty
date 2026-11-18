@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { createCourse, createPublishedAssignment, importRoster, login, open } from "./helpers";
+import { adminCreateCourseFor, createCourse, createPublishedAssignment, importRoster, login, open } from "./helpers";
 
 test("TA runs the whole loop alone: roster → slots → booking → marking → student sees marks → export", async ({ browser }) => {
   // TA sets up the course and imports a new student by email.
   const ta = await login(browser, "ta@e2e.test");
-  const courseId = await createCourse(ta, "SOLO101", "TA");
+  const courseId = await createCourse(ta, "SOLO101");
   await importRoster(ta, "email,name\nnina@e2e.test,Nina New");
   await expect(ta.getByRole("cell", { name: /Nina New/ })).toBeVisible();
 
@@ -35,7 +35,7 @@ test("TA runs the whole loop alone: roster → slots → booking → marking →
   await expect(student.getByText("9:00–9:15 AM")).toBeVisible();
   await student.getByRole("link", { name: "Reschedule" }).click();
   await student.getByRole("button", { name: "Move here" }).first().click();
-  await expect(student.getByRole("dialog")).toContainText("This uses 1 of your 2 changes");
+  await expect(student.getByRole("dialog")).toContainText("This uses 1 of your 2 remaining changes");
   await student.getByRole("button", { name: "Move my demo" }).click();
   await expect(student.getByText("Rescheduled.")).toBeVisible();
   await expect(student).not.toHaveURL(/reschedule=1/);
@@ -60,7 +60,9 @@ test("TA runs the whole loop alone: roster → slots → booking → marking →
   await ta.reload();
   await expect(ta.getByLabel("Feedback for the student")).toHaveValue("Clear walkthrough");
   await ta.getByRole("button", { name: "Release 1 mark" }).click();
-  await expect(ta.getByText("1 submitted (1 finalized).")).toBeVisible();
+  // Releasing is final for the student, so it asks first.
+  await ta.getByRole("dialog").getByRole("button", { name: "Release marks" }).click();
+  await expect(ta.getByText("1 mark released to the student.")).toBeVisible();
 
   // Student sees marks + feedback, never the private notes.
   await student.reload();
@@ -79,8 +81,12 @@ test("TA runs the whole loop alone: roster → slots → booking → marking →
 });
 
 test("with an instructor, TA submissions wait for review and the instructor finalizes", async ({ browser }) => {
+  const admin = await login(browser, "admin@e2e.test");
+  const courseId = await adminCreateCourseFor(admin, "REV200", "prof@e2e.test");
   const prof = await login(browser, "prof@e2e.test");
-  const courseId = await createCourse(prof, "REV200", "Instructor");
+  await open(prof, `/courses/${courseId}/manage/roster`);
+  // Instructors add students and TAs, but not other instructors.
+  await expect(prof.getByLabel("Role").locator("option", { hasText: "Instructor" })).toHaveCount(0);
   await importRoster(prof, "email,role\nta@e2e.test,ta\nsam@e2e.test,student");
   // The TA hosts by default and already has 09:00 slots in another e2e course.
   const assignmentId = await createPublishedAssignment(prof, courseId, "Viva", { from: "11:00", to: "12:00" });
@@ -99,7 +105,7 @@ test("with an instructor, TA submissions wait for review and the instructor fina
   await ta.getByLabel("Code quality").fill("4");
   await expect(ta.getByText("Draft saved")).toBeVisible();
   await ta.getByRole("button", { name: "Submit 1 for review" }).click();
-  await expect(ta.getByText("1 submitted.")).toBeVisible();
+  await expect(ta.getByText("1 mark sent for review.")).toBeVisible();
 
   // Not released yet.
   await student.reload();

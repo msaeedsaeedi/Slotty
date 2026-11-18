@@ -4,15 +4,57 @@ export type CourseRole = "INSTRUCTOR" | "TA" | "STUDENT";
 
 /**
  * Which course roles one person may hold across courses. A TA can be a student
- * in another course, but an instructor is never a TA (and a TA never an
- * instructor) anywhere. `elsewhere` is the person's roles in their other courses.
+ * in another course, but an instructor is never a TA or a student anywhere (and
+ * a TA or student never an instructor). `elsewhere` is the person's roles in
+ * their other courses; `current` is their role in this course, if any, since a
+ * student here can't be promoted to instructor either.
  */
-export function canTakeRole(role: CourseRole, elsewhere: { role: CourseRole; course: string }[]): RuleResult {
-  const clash = elsewhere.find((e) => (role === "TA" && e.role === "INSTRUCTOR") || (role === "INSTRUCTOR" && e.role === "TA"));
+export function canTakeRole(role: CourseRole, elsewhere: { role: CourseRole; course: string }[], current?: CourseRole | null): RuleResult {
+  if (role === "INSTRUCTOR" && current === "STUDENT") return deny("is a student in this course, and students can't be instructors.");
+  const clash = elsewhere.find(
+    (e) => (role === "INSTRUCTOR" && e.role !== "INSTRUCTOR") || (e.role === "INSTRUCTOR" && role !== "INSTRUCTOR"),
+  );
   if (!clash) return allow;
+  if (role === "INSTRUCTOR") {
+    return clash.role === "TA"
+      ? deny(`is a TA in ${clash.course}, and TAs can't also be instructors.`)
+      : deny(`is a student in ${clash.course}, and students can't be instructors.`);
+  }
   return role === "TA"
     ? deny(`is an instructor in ${clash.course}, and instructors can't also be TAs.`)
-    : deny(`is a TA in ${clash.course}, and TAs can't also be instructors.`);
+    : deny(`is an instructor in ${clash.course}, and instructors can't also be students.`);
+}
+
+/**
+ * Who may add, change or remove an instructor: only admins. Course staff
+ * (instructors included) manage students and TAs.
+ */
+export function canManageInstructors(actor: { isAdmin: boolean }): RuleResult {
+  return actor.isAdmin ? allow : deny("Only a Slotty admin can add, change or remove instructors.");
+}
+
+/**
+ * Self-service course creation. The creator always joins as a TA (instructors
+ * are named by an admin), so it's open to TAs and to new staff not yet in any
+ * course, but not to students (a student in any course who isn't a TA anywhere)
+ * or to instructors, who can't also be TAs.
+ */
+export function canCreateCourse(actor: { isAdmin: boolean; isPlatform?: boolean }, roles: CourseRole[]): RuleResult {
+  if (actor.isAdmin) return deny("Admins don't join courses. Create it from the admin console and name its instructor or TA.");
+  if (actor.isPlatform) return deny("That account can't join courses.");
+  if (roles.includes("INSTRUCTOR")) return deny("Instructors' courses are set up by a Slotty admin. Ask an admin to create it and name you as instructor.");
+  if (roles.length > 0 && !roles.includes("TA")) return deny("Students can't create courses. If you're joining as staff, ask a Slotty admin.");
+  return allow;
+}
+
+/**
+ * Who runs a course (settings, archive): its instructors, or its TAs when it
+ * has no instructor. Admins count as instructors.
+ */
+export function canManageCourse(role: CourseRole | null, hasInstructor: boolean): RuleResult {
+  if (role === "INSTRUCTOR") return allow;
+  if (role === "TA" && !hasInstructor) return allow;
+  return deny(role === "TA" ? "This course has an instructor, who manages its settings." : "You don't have permission to do that.");
 }
 
 /**

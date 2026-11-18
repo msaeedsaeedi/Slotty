@@ -1,4 +1,4 @@
-import { fmt, fmtData, fmtTimeRange } from "@/lib/time";
+import { fmt, fmtData, fmtTimeRange, tzLabel } from "@/lib/time";
 import { db } from "@/server/db";
 import { announceBookingOpen } from "./assignments";
 import { audit } from "./audit";
@@ -131,7 +131,7 @@ export async function sendDailyAgendas(now = new Date()): Promise<number> {
       await notify(tx, [taId], {
         type: "agenda.daily",
         title: `Today: ${todays.length} demo${todays.length === 1 ? "" : "s"}`,
-        body: `Your demos today (${tz}):\n\n${lines.join("\n")}`,
+        body: `Your demos today (${tzLabel(tz)}):\n\n${lines.join("\n")}`,
         link: "/today",
         inApp: false,
       });

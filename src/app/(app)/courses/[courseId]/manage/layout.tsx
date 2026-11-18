@@ -6,6 +6,7 @@ import { requireUser } from "@/server/auth/session";
 import { load } from "@/server/page-utils";
 import { getCourseForActor } from "@/server/services/courses";
 import { openRequestCount } from "@/server/services/requests";
+import { canManageCourseFor } from "@/server/services/access";
 import { CourseChrome } from "./course-nav";
 
 export default async function ManageLayout({ children, params }: LayoutProps<"/courses/[courseId]/manage">) {
@@ -13,9 +14,10 @@ export default async function ManageLayout({ children, params }: LayoutProps<"/c
   const user = await requireUser();
   const { course, role } = await load(getCourseForActor(user, courseId));
   if (role === "STUDENT") redirect(`/courses/${courseId}`);
-  const [pendingReview, openRequests] = await Promise.all([
+  const [pendingReview, openRequests, manages] = await Promise.all([
     role === "INSTRUCTOR" ? db.evaluation.count({ where: { status: "SUBMITTED", assignment: { courseId } } }) : 0,
     openRequestCount(courseId),
+    canManageCourseFor(db, user, courseId),
   ]);
 
   const items = [
@@ -25,7 +27,7 @@ export default async function ManageLayout({ children, params }: LayoutProps<"/c
     ...(role === "INSTRUCTOR" ? [{ href: "/review", label: "Review", badge: pendingReview }] : []),
     { href: "/roster", label: "People" },
     { href: "/venues", label: "Venues" },
-    { href: "/settings", label: "Settings" },
+    ...(manages ? [{ href: "/settings", label: "Settings" }] : []),
   ];
 
   const base = `/courses/${courseId}/manage`;

@@ -331,6 +331,6 @@ export async function listHostBusy(actor: Actor, assignmentId: string) {
       startsAt: { lt: p.windowEnd },
       endsAt: { gt: p.windowStart },
     },
-    select: { taId: true, assignmentId: true, startsAt: true, endsAt: true },
+    select: { taId: true, assignmentId: true, startsAt: true, endsAt: true, assignment: { select: { title: true } } },
   });
 }

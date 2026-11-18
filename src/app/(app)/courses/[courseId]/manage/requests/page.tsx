@@ -64,11 +64,14 @@ export default async function RequestsPage({ params, searchParams }: PageProps<"
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 <p className="whitespace-pre-line">{r.message}</p>
-                {r.booking && (
+                {r.currentBooking ? (
                   <p className="text-muted-foreground">
-                    Current booking: {fmtRange(r.booking.slot.startsAt, r.booking.slot.endsAt, tz)} with {r.booking.slot.ta.name} (
-                    {r.booking.status.toLowerCase().replace("_", "-")})
+                    Current booking: {fmtRange(r.currentBooking.slot.startsAt, r.currentBooking.slot.endsAt, tz)} with {r.currentBooking.slot.ta.name}
+                    {r.currentBooking.status !== "BOOKED" && ` (${r.currentBooking.status.toLowerCase().replace("_", "-")})`}
+                    {r.booking && r.booking.id !== r.currentBooking.id && ` · asked from ${fmtRange(r.booking.slot.startsAt, r.booking.slot.endsAt, tz)}`}
                   </p>
+                ) : (
+                  r.kind === "BOOKING_CHANGE" && <p className="text-muted-foreground">No booking right now.</p>
                 )}
                 {r.response && (
                   <p className="text-muted-foreground">

@@ -7,13 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { requireUser } from "@/server/auth/session";
-import { load } from "@/server/page-utils";
+import { courseTitle, load } from "@/server/page-utils";
 import { courseProgress, type AssignmentProgress } from "@/server/services/reports";
 
 /** The single most useful thing to do next for an assignment, and how urgent it is. */
 function nextStep(a: AssignmentProgress): { text: string; tone: "danger" | "warning" | "info" | "done" } {
   if (a.opensAt && a.opensAt > new Date() && a.status === "PUBLISHED") return { text: "Students are told when booking opens", tone: "info" };
-  if (a.status === "DRAFT") return a.slots ? { text: `${a.slots} slots ready — open booking when you're set`, tone: "info" } : { text: "Add slots, then open booking", tone: "info" };
+  if (a.status === "DRAFT") return a.slots ? { text: `${a.slots} slot${a.slots === 1 ? "" : "s"} ready — open booking when you're set`, tone: "info" } : { text: "Add slots, then open booking", tone: "info" };
   if (a.needsAttendance) return { text: `${a.needsAttendance} past demo${a.needsAttendance === 1 ? " needs" : "s need"} attendance`, tone: "danger" };
   const toMark = a.completed - a.submitted - a.finalized;
   if (toMark > 0) return { text: `${toMark} demo${toMark === 1 ? "" : "s"} to mark`, tone: "warning" };
@@ -29,6 +29,11 @@ const TONE = {
   info: "text-foreground",
   done: "text-muted-foreground",
 };
+
+export async function generateMetadata({ params }: PageProps<"/courses/[courseId]/manage">) {
+  const { courseId } = await params;
+  return courseTitle(courseId);
+}
 
 export default async function ManageCoursePage({ params }: PageProps<"/courses/[courseId]/manage">) {
   const { courseId } = await params;

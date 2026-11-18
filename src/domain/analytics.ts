@@ -15,7 +15,10 @@ export const RAW_RETENTION_DAYS = 90;
 /** Daily totals are kept about 13 months, so one semester can be compared with the next. */
 export const ROLLUP_RETENTION_DAYS = 400;
 /** A survey prompt is shown to the same person at most once in this many days. */
-export const SURVEY_INTERVAL_DAYS = 14;
+/** The same survey is asked at most once per person in this many days (about a term). */
+export const SURVEY_INTERVAL_DAYS = 90;
+/** And at most one survey of any kind per person in this many days, so one demo never brings two. */
+export const SURVEY_ANY_INTERVAL_DAYS = 14;
 /** An answer is accepted only this long after the prompt was shown. */
 export const SURVEY_ANSWER_HOURS = 24;
 /** Feedback messages per person per hour (best effort, kept in memory). */
@@ -150,11 +153,16 @@ export function roleKind(u: { isAdmin: boolean; staff: boolean; student: boolean
   return "none";
 }
 
-/** May this person be asked the survey now? At most once per SURVEY_INTERVAL_DAYS, whether or not they answered. */
-export function canPromptSurvey(last: { shownAt: Date } | null, now: Date): RuleResult {
-  if (!last) return allow;
-  const next = last.shownAt.getTime() + SURVEY_INTERVAL_DAYS * DAY;
-  return now.getTime() >= next ? allow : deny("You were asked this recently.");
+/**
+ * May this person be asked this survey now? Each survey at most once per
+ * SURVEY_INTERVAL_DAYS, and no survey at all within SURVEY_ANY_INTERVAL_DAYS of
+ * any other one, whether or not they answered. `lastAny` is their most recent
+ * prompt of any kind.
+ */
+export function canPromptSurvey(last: { shownAt: Date } | null, now: Date, lastAny: { shownAt: Date } | null = last): RuleResult {
+  if (last && now.getTime() < last.shownAt.getTime() + SURVEY_INTERVAL_DAYS * DAY) return deny("You were asked this recently.");
+  if (lastAny && now.getTime() < lastAny.shownAt.getTime() + SURVEY_ANY_INTERVAL_DAYS * DAY) return deny("You were asked for feedback recently.");
+  return allow;
 }
 
 /** An answer counts only for a prompt that was shown recently and not answered yet. */

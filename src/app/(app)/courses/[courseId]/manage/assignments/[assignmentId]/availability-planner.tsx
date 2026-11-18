@@ -26,7 +26,7 @@ interface Props {
   me: string;
   venues: { id: string; name: string }[];
   /** Existing slots of the course's staff (any assignment), to show what's taken. */
-  busy: { taId: string; startsAt: string; endsAt: string }[];
+  busy: { taId: string; startsAt: string; endsAt: string; /** Another assignment's title, or null for this one. */ other: string | null }[];
   open: boolean;
 }
 
@@ -41,12 +41,22 @@ export function AvailabilityPlanner({ courseId, assignmentId, timezone, timezone
   const [from, setFrom] = useState("09:00");
   const [to, setTo] = useState("12:00");
 
-  const busyFor = useMemo(() => busy.filter((b) => b.taId === host).map((b) => ({ startsAt: new Date(b.startsAt), endsAt: new Date(b.endsAt) })), [busy, host]);
+  const busyFor = useMemo(
+    () => busy.filter((b) => b.taId === host).map((b) => ({ startsAt: new Date(b.startsAt), endsAt: new Date(b.endsAt), other: b.other })),
+    [busy, host],
+  );
+  // Per day: slots already in this assignment, and the host's slots in other assignments (they're busy then).
   const takenPerDay = useMemo(() => {
     // en-CA formats as YYYY-MM-DD, matching the day keys.
     const dayKey = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" });
-    const m = new Map<string, number>();
-    for (const b of busyFor) m.set(dayKey.format(b.startsAt), (m.get(dayKey.format(b.startsAt)) ?? 0) + 1);
+    const m = new Map<string, { here: number; elsewhere: Map<string, number> }>();
+    for (const b of busyFor) {
+      const k = dayKey.format(b.startsAt);
+      const e = m.get(k) ?? { here: 0, elsewhere: new Map() };
+      if (b.other === null) e.here++;
+      else e.elsewhere.set(b.other, (e.elsewhere.get(b.other) ?? 0) + 1);
+      m.set(k, e);
+    }
     return m;
   }, [busyFor, timezone]);
 
@@ -95,11 +105,16 @@ export function AvailabilityPlanner({ courseId, assignmentId, timezone, timezone
         <p className="font-medium">
           {needed > 0
             ? `${Math.ceil(needed / perSlot)} more slot${Math.ceil(needed / perSlot) === 1 ? "" : "s"} needed`
-            : unbooked === 0
-              ? "Everyone has a demo booked"
+            : coverage.students === 0
+              ? "No students yet"
+              : unbooked === 0
+                ? "Everyone has a demo booked"
               : "Enough free places for everyone"}
         </p>
         <p className="text-xs text-muted-foreground">
+          {coverage.students === 0
+            ? "Add students on the People page to see how many slots you need. "
+            : null}
           {unbooked} of {coverage.students} student{coverage.students === 1 ? "" : "s"} still to book · {coverage.freePlaces} free place{coverage.freePlaces === 1 ? "" : "s"} in upcoming slots
         </p>
         {total > 0 && needed > 0 && (
@@ -128,7 +143,14 @@ export function AvailabilityPlanner({ courseId, assignmentId, timezone, timezone
         <div className="grid grid-cols-4 gap-1.5">
           {days.map((d) => {
             const on = picked.has(d.key);
-            const taken = takenPerDay.get(d.key) ?? 0;
+            const t = takenPerDay.get(d.key);
+            const here = t?.here ?? 0;
+            const elsewhere = [...(t?.elsewhere ?? new Map<string, number>()).entries()];
+            const busyElsewhere = elsewhere.reduce((n, [, c]) => n + c, 0);
+            const detail = [
+              here ? `${here} slot${here === 1 ? "" : "s"} already in this assignment` : "",
+              ...elsewhere.map(([title, c]) => `busy: ${c} slot${c === 1 ? "" : "s"} in ${title}`),
+            ].filter(Boolean);
             return (
               <button
                 key={d.key}
@@ -136,7 +158,8 @@ export function AvailabilityPlanner({ courseId, assignmentId, timezone, timezone
                 aria-pressed={on}
                 disabled={d.past}
                 onClick={() => toggle(d.key)}
-                title={d.past ? "This day is over" : taken ? `${taken} slot${taken === 1 ? "" : "s"} already on this day` : undefined}
+                title={d.past ? "This day is over" : detail.length ? detail.join("; ") : undefined}
+                aria-label={`${d.weekday} ${d.date}${d.past ? ", over" : detail.length ? `, ${detail.join("; ")}` : ", free"}`}
                 className={cn(
                   "flex flex-col items-center rounded-lg border px-1 py-1 text-xs transition-colors disabled:opacity-40",
                   on ? "border-primary bg-primary text-primary-foreground" : "enabled:hover:bg-muted",
@@ -144,13 +167,18 @@ export function AvailabilityPlanner({ courseId, assignmentId, timezone, timezone
               >
                 <span className="font-medium">{d.weekday}</span>
                 <span className={on ? "" : "text-muted-foreground"}>{d.date}</span>
-                <span className={cn("text-[10px]", on ? "opacity-80" : taken ? "text-blue-700 dark:text-blue-300" : "text-muted-foreground/60")}>
-                  {taken ? `${taken} set` : "free"}
+                <span className={cn("text-[10px]", on ? "opacity-80" : here ? "text-blue-700 dark:text-blue-300" : busyElsewhere ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground/60")}>
+                  {here ? `${here} here` : busyElsewhere ? `busy ${busyElsewhere}` : "free"}
                 </span>
               </button>
             );
           })}
         </div>
+        {[...takenPerDay.values()].some((t) => t.elsewhere.size > 0) && (
+          <p className="text-xs text-muted-foreground">
+            &ldquo;busy&rdquo; counts the host&apos;s slots in other assignments ({[...new Set([...takenPerDay.values()].flatMap((t) => [...t.elsewhere.keys()]))].join(", ")}); those times are skipped.
+          </p>
+        )}
       </fieldset>
 
       <div className="grid grid-cols-2 gap-2">

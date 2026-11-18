@@ -24,12 +24,16 @@ type AssignmentStatus = "DRAFT" | "PUBLISHED" | "CLOSED";
 /**
  * How many times a student may move away from a booked slot for one assignment.
  * Reschedules and self-cancellations both spend a change (so cancel → rebook can't
- * dodge the limit); staff cancellations and moves never do.
+ * dodge the limit); staff cancellations and moves never do. A cancellation made
+ * with no changes left spends nothing (there's nothing to spend) but locks the
+ * student out of booking again until staff grant more changes.
  */
 export interface ChangeBudget {
   allowed: number;
   used: number;
   left: number;
+  /** Cancelled with no changes left and none granted since: only staff can book them in. */
+  lockedOut: boolean;
 }
 
 /** Per-student exception granted by staff (BookingAllowance). */
@@ -43,9 +47,22 @@ export const NO_ALLOWANCE: Allowance = { extraChanges: 0, lateBooking: false };
 
 const HOUR = 3_600_000;
 
-export function changeBudget(args: { maxReschedules: number; allowance?: Allowance; selfCancellations: number }): ChangeBudget {
+export function changeBudget(args: {
+  maxReschedules: number;
+  allowance?: Allowance;
+  /** Self-cancellations (including the old half of reschedules) that spent a change. */
+  selfCancellations: number;
+  /** The student's latest self-cancellation was made with no changes left. */
+  lastCancelFree?: boolean;
+}): ChangeBudget {
   const allowed = args.maxReschedules + (args.allowance?.extraChanges ?? 0);
-  return { allowed, used: args.selfCancellations, left: Math.max(0, allowed - args.selfCancellations) };
+  const left = Math.max(0, allowed - args.selfCancellations);
+  return { allowed, used: args.selfCancellations, left, lockedOut: Boolean(args.lastCancelFree) && left === 0 };
+}
+
+/** Does cancelling now spend a change? Not when none are left (it locks rebooking instead). */
+export function cancelSpendsChange(budget: ChangeBudget): boolean {
+  return budget.left > 0;
 }
 
 /** Changes are locked within `freezeHours` of a slot's start. */
@@ -86,8 +103,8 @@ export function canBookSlot(args: {
   }
   if (isFrozen(slot.startsAt, now, policy.freezeHours)) return deny(freezeReason(policy.freezeHours));
   if (slot.activeBookings >= slot.capacity) return deny("This slot is full.");
-  // Cancelling spent a change; rebooking is fine until more were spent than allowed.
-  if (args.budget && args.budget.used > args.budget.allowed) {
+  // Cancelling spent a change, so rebooking is free, unless they cancelled with none left.
+  if (args.budget?.lockedOut) {
     return deny("You've used all your changes for this assignment, so you can't book again yourself. Ask your TA for a slot.");
   }
   return allow;
@@ -138,7 +155,7 @@ export function cancelConsequence(budget: ChangeBudget): string {
     return "You have no changes left, so after cancelling you won't be able to book another slot yourself — only your TA can.";
   }
   const after = budget.left - 1;
-  return `This uses 1 of your ${budget.allowed} change${budget.allowed === 1 ? "" : "s"}. You can still book a new slot afterwards${
+  return `${spendWords(budget)} You can still book a new slot afterwards${
     after > 0 ? `, with ${after} change${after === 1 ? "" : "s"} left` : ", but you won't be able to change it again"
   }.`;
 }
@@ -146,9 +163,12 @@ export function cancelConsequence(budget: ChangeBudget): string {
 /** What a reschedule will cost, in words, for the confirmation dialog. */
 export function rescheduleConsequence(budget: ChangeBudget): string {
   const after = budget.left - 1;
-  return `This uses 1 of your ${budget.allowed} change${budget.allowed === 1 ? "" : "s"}${
-    after > 0 ? ` (${after} left afterwards)` : " — you won't be able to change it again yourself"
-  }.`;
+  return after > 0 ? `${spendWords(budget)} You'll have ${after} left afterwards.` : `${spendWords(budget)} You won't be able to change it again yourself.`;
+}
+
+function spendWords(budget: ChangeBudget): string {
+  if (budget.left === 1) return "This uses your last change.";
+  return `This uses 1 of your ${budget.left} remaining changes.`;
 }
 
 /** Attendance can only be recorded once the demo has started; resetting to pending is always allowed. */

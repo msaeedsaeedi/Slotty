@@ -18,6 +18,14 @@ recording sends that one message again. A failed email is retried at most five t
 exponential backoff (1, 2, 4, 8 minutes), then marked \code{FAILED} and shown to admins
 (\route{/admin/email}).
 
+\paragraph{Delayed and superseded messages.} An outbox row can wait: \code{sendAfter} holds a
+student's own booking confirmation (10 minutes) and released marks (5 minutes), and the worker's
+backstop poll (60\,s) picks them up when due. A \code{groupKey} ties messages about the same
+booking or marks together: \code{notify} deletes unsent emails and unread items with that key in
+the same transaction before adding the new one, so people get the current state once
+(\cref{sec:rules-usage} has the rules; ADR-018). Once an email has gone it is never recalled, and
+the next message says what changed.
+
 \begin{decision}{ADR-007}
   No RDS Proxy or transaction-mode pooler in front of PostgreSQL: \code{LISTEN} needs a direct
   session. Behind a pooler the worker would fall back to polling every \envvar{WORKER_INTERVAL_MS}.

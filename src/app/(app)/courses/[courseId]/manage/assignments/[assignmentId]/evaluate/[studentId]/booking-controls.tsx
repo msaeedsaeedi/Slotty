@@ -1,10 +1,13 @@
+"use client";
+
+import { useState } from "react";
 import { allowRebookAction, setAllowanceAction, staffPlaceStudentAction } from "@/app/actions/bookings";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ChangeBudget } from "@/domain/booking-rules";
-import { fmt, fmtTime } from "@/lib/time";
+import { fmt, fmtTime, type Clock } from "@/lib/time";
 
 /**
  * Staff tools for one student's booking: place or move them (ignores the freeze
@@ -18,6 +21,7 @@ export function BookingControls({
   allowance,
   slots,
   timezone,
+  clock,
 }: {
   assignmentId: string;
   student: { id: string; name: string };
@@ -26,15 +30,22 @@ export function BookingControls({
   allowance: { extraChanges: number; lateBooking: boolean; note: string | null } | null;
   slots: { id: string; startsAt: Date; endsAt: Date; capacity: number; booked: number; ta: { name: string } }[];
   timezone: string;
+  /** The viewer's 12h/24h setting (client components don't see the request's). */
+  clock: Clock;
 }) {
   const choices = slots.filter((s) => s.id !== booking?.slotId);
+  const [picked, setPicked] = useState(choices[0]?.id ?? "");
+  const target = choices.find((s) => s.id === picked);
+  const targetText = target ? `${fmt(target.startsAt, timezone, "EEE d MMM, HH:mm", clock)}–${fmtTime(target.endsAt, timezone, clock)} with ${target.ta.name}` : "the selected slot";
   const moving = booking?.status === "BOOKED" || booking?.status === "NO_SHOW";
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Booking</CardTitle>
         <CardDescription>
-          {student.name} has used {budget.used} of {budget.allowed} change{budget.allowed === 1 ? "" : "s"}. Anything you do here doesn&apos;t use their changes.
+          {student.name} has used {budget.used} of {budget.allowed} change{budget.allowed === 1 ? "" : "s"}
+          {budget.lockedOut ? " and cancelled with none left, so they can't book again themselves. Place them, or grant an extra change to let them rebook" : ""}.
+          Anything you do here doesn&apos;t use their changes.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5 text-sm">
@@ -43,15 +54,16 @@ export function BookingControls({
         ) : choices.length === 0 ? (
           <p className="text-muted-foreground">There are no upcoming slots to place {student.name} in. Add availability first.</p>
         ) : (
-          <ActionForm action={staffPlaceStudentAction} className="space-y-2" confirm={`${moving ? "Move" : "Book"} ${student.name}? They'll be notified.`}>
+          <ActionForm action={staffPlaceStudentAction} className="space-y-2" confirm={`${moving ? "Move" : "Book"} ${student.name} ${moving ? "to" : "into"} ${targetText}? They'll be notified.`}
+          >
             <input type="hidden" name="assignmentId" value={assignmentId} />
             <input type="hidden" name="studentId" value={student.id} />
             <Label htmlFor="place-slot">{moving ? "Move to another slot" : "Book them into a slot"}</Label>
             <div className="flex flex-wrap gap-2">
-              <select id="place-slot" name="slotId" required className="h-8 min-w-0 flex-1 rounded-lg border bg-background px-2 text-sm">
+              <select id="place-slot" name="slotId" required value={picked} onChange={(e) => setPicked(e.target.value)} className="h-8 min-w-0 flex-1 rounded-lg border bg-background px-2 text-sm">
                 {choices.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {fmt(s.startsAt, timezone, "EEE d MMM HH:mm")}–{fmtTime(s.endsAt, timezone)} · {s.ta.name} ·{" "}
+                    {fmt(s.startsAt, timezone, "EEE d MMM HH:mm", clock)}–{fmtTime(s.endsAt, timezone, clock)} · {s.ta.name} ·{" "}
                     {s.booked >= s.capacity ? "full" : `${s.capacity - s.booked} free`}
                   </option>
                 ))}

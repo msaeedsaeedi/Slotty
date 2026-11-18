@@ -312,6 +312,8 @@ export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, embedd
   // ─── Derived ──────────────────────────────────────────────────────────────
   const totalOf = (i: number) => {
     const d = drafts[i];
+    // An out-of-range or non-numeric mark makes any total misleading (7/6 and −1 aren't "6"): show – until fixed.
+    if (Object.keys(problems(d, criteria, assignment.maxMarks)).length > 0) return null;
     if (criteria.length === 0) return d.total.trim() ? Number(d.total) : null;
     if (rows[i].evaluation?.totalOverride) return state[i].totalMarks;
     const vals = criteria.map((c) => d.points[c.id]?.trim()).filter(Boolean);
@@ -511,7 +513,14 @@ export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, embedd
         </fieldset>
 
         {embedded && !locked(current) && (
-          <ActionForm action={submitManyAction} track="marking" compact className="flex flex-wrap items-center gap-3 border-t pt-3 text-sm">
+          <ActionForm
+            action={submitManyAction}
+            track="marking"
+            compact
+            className="flex flex-wrap items-center gap-3 border-t pt-3 text-sm"
+            confirm={finalOnSubmit ? `Release these marks (${totalOf(current) ?? "–"} / ${assignment.maxMarks})? The student is notified and they become final.` : undefined}
+            confirmLabel="Release marks"
+          >
             <input type="hidden" name="evaluationId" value={st.evaluationId ?? ""} />
             <span className="flex-1 text-muted-foreground">
               {!canSubmitThis
@@ -596,7 +605,14 @@ export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, embedd
         {stillRunning ? (
           <p className="text-xs text-muted-foreground">Marks save as you type. {finalOnSubmit ? "Release" : "Submit"} them once today&apos;s demos are over.</p>
         ) : ready.length > 0 ? (
-          <ActionForm action={submitManyAction} track="marking" compact className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3 text-sm">
+          <ActionForm
+            action={submitManyAction}
+            track="marking"
+            compact
+            className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3 text-sm"
+            confirm={finalOnSubmit ? `Release ${ready.length} mark${ready.length === 1 ? "" : "s"}? Students are notified and the marks become final.` : undefined}
+            confirmLabel="Release marks"
+          >
             {ready.map((id) => (
               <input key={id} type="hidden" name="evaluationId" value={id} />
             ))}

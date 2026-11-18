@@ -345,7 +345,8 @@ async function assignStaff(tx: Tx, actor: Actor, course: { id: string; code: str
   if (user?.isAdmin) throw new DomainError(`${user.name} is a Slotty admin, so can't be course staff.`);
   if (user) assertCanJoinCourses(user);
   if (user) {
-    const fits = canTakeRole(data.role, await rolesElsewhere(tx, user.id, courseId));
+    const here = await tx.enrollment.findUnique({ where: { courseId_userId: { courseId, userId: user.id } }, select: { role: true } });
+    const fits = canTakeRole(data.role, await rolesElsewhere(tx, user.id, courseId), here?.role);
     if (!fits.ok) throw new DomainError(`${user.name} ${fits.reason}`);
   }
   if (!user) {

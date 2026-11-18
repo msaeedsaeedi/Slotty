@@ -4,7 +4,7 @@ import { createCourse, createPublishedAssignment, importRoster, login, open } fr
 test("a student answers the booking survey and sends feedback; only the platform account sees both, anonymously", async ({ browser }) => {
   test.setTimeout(300_000);
   const ta = await login(browser, "ta@e2e.test");
-  const courseId = await createCourse(ta, "FDBK200", "TA");
+  const courseId = await createCourse(ta, "FDBK200");
   await importRoster(ta, "email,role\nria@e2e.test,student");
   // Late-afternoon slots, so they don't clash with this TA's or Ria's other e2e demos.
   const assignmentId = await createPublishedAssignment(ta, courseId, "Survey demo", { from: "16:00", to: "17:00" });

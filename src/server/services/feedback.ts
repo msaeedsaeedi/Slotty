@@ -79,13 +79,16 @@ export async function setFeedbackStatus(actor: Actor, id: string, status: Feedba
 /**
  * Called after a booking, reschedule or mark submission succeeds: should the
  * person be asked the survey now? Records that they were asked, so the next
- * prompt waits 14 days whether or not they answer. Admins are never asked.
+ * prompt waits (see `canPromptSurvey`) whether or not they answer. Admins are never asked.
  */
 export async function claimSurvey(actor: Actor, prompt: SurveyPromptId, now = new Date()): Promise<boolean> {
   if (actor.isAdmin || actor.isPlatform) return false;
   try {
-    const last = await db.surveyPrompt.findUnique({ where: { userId_prompt: { userId: actor.id, prompt } } });
-    if (!canPromptSurvey(last, now).ok) return false;
+    const [last, lastAny] = await Promise.all([
+      db.surveyPrompt.findUnique({ where: { userId_prompt: { userId: actor.id, prompt } } }),
+      db.surveyPrompt.findFirst({ where: { userId: actor.id }, orderBy: { shownAt: "desc" } }),
+    ]);
+    if (!canPromptSurvey(last, now, lastAny).ok) return false;
     await db.surveyPrompt.upsert({
       where: { userId_prompt: { userId: actor.id, prompt } },
       create: { userId: actor.id, prompt, shownAt: now },

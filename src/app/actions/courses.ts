@@ -26,7 +26,7 @@ export async function createCourseAction(_: ActionState, fd: FormData): Promise<
   let id = "";
   const result = await run(async () => {
     const user = await requireUser();
-    const course = await createCourse(user, { ...courseFields(fd), myRole: str(fd, "myRole") === "INSTRUCTOR" ? "INSTRUCTOR" : "TA" });
+    const course = await createCourse(user, courseFields(fd));
     id = course.id;
   });
   if (result?.ok) redirect(`/courses/${id}/manage/roster`);
@@ -91,7 +91,7 @@ export async function addMemberAction(_: ActionState, fd: FormData): Promise<Act
       role: role === "TA" || role === "INSTRUCTOR" ? role : "STUDENT",
       section: str(fd, "section"),
     });
-    if (r.updated) return `${r.name}'s role was updated.`;
+    if (r.updated) return r.roleChanged ? `${r.name}'s role was updated.` : `${r.name}'s section was updated.`;
     return r.invited ? `${r.name} was added and invited by email.` : `${r.name} was added and notified.`;
   });
 }

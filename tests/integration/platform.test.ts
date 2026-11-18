@@ -38,7 +38,7 @@ describe("platform accounts are kept apart from administration and courses", () 
     const platform = await makeUser("Pat Platform", { isPlatform: true });
     const ta = await makeUser("Tara TA");
     const { course } = await setupCourse(ta);
-    await expect(createCourse(platform, { code: "X1", title: "X", term: "T", timezone: "UTC", myRole: "TA" })).rejects.toThrow(/can't join courses/);
+    await expect(createCourse(platform, { code: "X1", title: "X", term: "T", timezone: "UTC" })).rejects.toThrow(/can't join courses/);
     await expect(adminAssignStaff(admin, course.id, { email: platform.email, role: "TA" })).rejects.toThrow(/can't join courses/);
     const preview = await previewRoster(ta, course.id, `email,name\n${platform.email},Pat`);
     expect(preview.errors.map((e) => e.message)).toEqual([`${platform.email} can't be added to a course.`]);

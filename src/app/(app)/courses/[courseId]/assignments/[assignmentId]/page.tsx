@@ -17,14 +17,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { canBookSlot, canCancelBooking, cancelConsequence, rescheduleConsequence, changeBudget, freezeAt, isFrozen, NO_ALLOWANCE } from "@/domain/booking-rules";
 import { fmt, fmtData, fmtRange, fmtTimeRange, tzLabel } from "@/lib/time";
 import { requireUser } from "@/server/auth/session";
-import { load } from "@/server/page-utils";
+import { assignmentTitle, load } from "@/server/page-utils";
 import { getAssignment } from "@/server/services/assignments";
-import { getMyChangeState, listMyBookings } from "@/server/services/bookings";
+import { getMyChangeState, isMyBookingMarked, listMyBookings } from "@/server/services/bookings";
 import { getMyResult } from "@/server/services/evaluations";
 import { listMyRequests } from "@/server/services/requests";
 import { listOpenSlots } from "@/server/services/slots";
 import { isOnWaitlist } from "@/server/services/waitlist";
 import { RequestPanel } from "./request-panel";
+
+export async function generateMetadata({ params }: PageProps<"/courses/[courseId]/assignments/[assignmentId]">) {
+  const { assignmentId } = await params;
+  return assignmentTitle(assignmentId);
+}
 
 export default async function StudentAssignmentPage({ params, searchParams }: PageProps<"/courses/[courseId]/assignments/[assignmentId]">) {
   const { courseId, assignmentId } = await params;
@@ -36,27 +41,32 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
   const tz = assignment.course.timezone;
   const policy = assignment.policy!;
   const now = new Date();
-  const [slots, history, result, changeState, requests, waiting] = await Promise.all([
+  const [slots, history, result, changeState, requests, waiting, marked] = await Promise.all([
     listOpenSlots(user, assignmentId),
     listMyBookings(user, { assignmentId }),
     getMyResult(user, assignmentId),
     getMyChangeState(user, assignmentId),
     listMyRequests(user, assignmentId),
     isOnWaitlist(user, assignmentId),
+    isMyBookingMarked(user, assignmentId),
   ]);
-  const { budget, allowance } = changeState ?? {
+  const { budget, allowance, note } = changeState ?? {
     allowance: NO_ALLOWANCE,
+    note: null,
     budget: changeBudget({ maxReschedules: policy.maxReschedules, selfCancellations: 0 }),
   };
   const open = assignment.status === "PUBLISHED" || (assignment.status === "CLOSED" && allowance.lateBooking);
   const booking = history.find((b) => b.status !== "CANCELLED");
-  const rescheduling = Boolean(reschedule && booking?.status === "BOOKED");
   const bookingState = booking && { status: booking.status, slotStartsAt: booking.slot.startsAt };
-  const cancelRule = bookingState ? canCancelBooking({ now, assignmentStatus: assignment.status, policy, booking: bookingState, allowance }) : null;
-  const canMove = booking?.status === "BOOKED" && open && budget.left > 0 && !isFrozen(booking.slot.startsAt, now, policy.freezeHours);
+  // Once the demo has marks, the booking is pinned (the server refuses changes too).
+  const markedRule = { ok: false as const, reason: "Your demo has been marked, so this booking can't be changed." };
+  const cancelRule = bookingState ? (marked ? markedRule : canCancelBooking({ now, assignmentStatus: assignment.status, policy, booking: bookingState, allowance })) : null;
+  const canMove = booking?.status === "BOOKED" && !marked && open && budget.left > 0 && !isFrozen(booking.slot.startsAt, now, policy.freezeHours);
+  // Only offer the picker when a move is actually possible (a stale ?reschedule=1 link shows nothing).
+  const rescheduling = Boolean(reschedule && canMove);
   const locksAt = booking && policy.freezeHours > 0 ? freezeAt(booking.slot.startsAt, policy.freezeHours) : null;
-  // After cancelling more times than allowed, only staff can place the student.
-  const outOfChanges = !booking && budget.used > budget.allowed;
+  // After cancelling with no changes left, only staff can place the student.
+  const outOfChanges = !booking && budget.lockedOut;
 
   // Group bookable slots by day in the course timezone, with optional day/host filters.
   const bookable = slots.filter((s) => s.id !== booking?.slotId && s.seatsLeft > 0);
@@ -87,7 +97,9 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
   const noSlotsToBook = open && !outOfChanges && !bookingOpensLater && bookable.length === 0;
   // Stuck = there's no self-service way forward, so offer the staff request up front.
   const frozen = booking?.status === "BOOKED" && isFrozen(booking.slot.startsAt, now, policy.freezeHours);
-  const stuck = (!booking && (!open || outOfChanges || noSlotsToBook)) || (booking?.status === "BOOKED" && (frozen || (!canMove && !cancelRule?.ok)));
+  const stuck = (!booking && (!open || outOfChanges || noSlotsToBook)) || (booking?.status === "BOOKED" && !marked && (frozen || (!canMove && !cancelRule?.ok)));
+  // Locked out of self-service: say why and point to the request box, without an empty "Book a slot" section.
+  const lockedOut = !open || outOfChanges;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -103,12 +115,15 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
       {result && (
         <Card className="border-emerald-300 dark:border-emerald-900">
           <CardHeader>
-            <CardDescription>Your result</CardDescription>
+            <CardDescription>{result.underReview ? "Your result (being corrected by staff)" : "Your result"}</CardDescription>
             <CardTitle className="text-3xl">
               {result.totalMarks} <span className="text-base font-normal text-muted-foreground">/ {result.maxMarks}</span>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
+            {result.underReview && (
+              <p className="text-muted-foreground">Staff reopened these marks to correct them. You&apos;ll be notified when the updated marks are released.</p>
+            )}
             {result.scores.length > 0 && (
               <ul className="divide-y rounded-lg border">
                 {result.scores.map((s) => (
@@ -191,8 +206,8 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
                 )}
                 <p className="w-full text-xs text-muted-foreground">
                   {cancelRule && !cancelRule.ok ? cancelRule.reason + " " : ""}
-                  {budget.allowed > 0 && `${budget.left} of ${budget.allowed} change${budget.allowed === 1 ? "" : "s"} left (reschedules and cancellations both count). `}
-                  {locksAt && locksAt > now && `Changes lock ${fmt(locksAt, tz, "EEE d MMM, HH:mm")}.`}
+                  {!marked && budget.allowed > 0 && `${budget.left} of ${budget.allowed} change${budget.allowed === 1 ? "" : "s"} left (reschedules and cancellations both count). `}
+                  {!marked && locksAt && locksAt > now && `Changes lock ${fmt(locksAt, tz, "EEE d MMM, HH:mm")}.`}
                 </p>
               </div>
             )}
@@ -200,9 +215,27 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
         </Card>
       )}
 
+      {note && (
+        <Alert>
+          <AlertDescription>
+            <span className="font-medium">Note from course staff:</span> {note}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {booking?.status === "BOOKED" && !rescheduling && <PushPrompt publicKey={vapidPublicKey()} />}
 
-      {showPicker && (
+      {showPicker && lockedOut && (
+        <Alert>
+          <AlertDescription>
+            {!open
+              ? "Booking is closed for this assignment. Send a request below if you still need a slot."
+              : "You cancelled with no changes left, so you can't book again yourself. Send a request below and your TA can place you in a slot."}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {showPicker && !lockedOut && (
         <section className="space-y-4">
           <div>
             <h2 className="text-lg font-semibold">{rescheduling ? "Pick a new slot" : "Book a slot"}</h2>
@@ -221,18 +254,7 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
               )}
             </nav>
           )}
-          {!open ? (
-            <Alert>
-              <AlertDescription>Booking is closed for this assignment. Send a request below if you still need a slot.</AlertDescription>
-            </Alert>
-          ) : outOfChanges ? (
-            <Alert>
-              <AlertDescription>
-                You&apos;ve used all {budget.allowed} change{budget.allowed === 1 ? "" : "s"} for this assignment, so you can&apos;t book again yourself. Send a
-                request below and your TA can place you in a slot.
-              </AlertDescription>
-            </Alert>
-          ) : bookingOpensLater ? (
+          {bookingOpensLater ? (
             <Alert>
               <AlertDescription>Booking opens {fmt(policy.bookingOpensAt!, tz, "EEEE d MMMM 'at' HH:mm")}. We&apos;ll notify you when it opens.</AlertDescription>
             </Alert>
@@ -297,7 +319,11 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
                             {s.capacity > 1 && <p className="text-xs text-muted-foreground">{s.seatsLeft} of {s.capacity} places left</p>}
                             {!rule.ok && <p className="text-xs text-muted-foreground">{rule.reason}</p>}
                           </div>
-                          <SubmitButton size="sm" disabled={!rule.ok}>
+                          <SubmitButton
+                            size="sm"
+                            disabled={!rule.ok}
+                            aria-label={`${rescheduling ? "Move here" : "Book"}: ${fmt(s.startsAt, tz, "EEEE d MMMM")}, ${fmtTimeRange(s.startsAt, s.endsAt, tz)}${s.venue ? `, ${s.venue.name}` : ""}, with ${s.ta.name}`}
+                          >
                             {rescheduling ? "Move here" : "Book"}
                           </SubmitButton>
                         </div>
@@ -336,8 +362,7 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
               .filter((b) => b.status === "CANCELLED")
               .map((b) => (
                 <li key={b.id}>
-                  {fmtRange(b.slot.startsAt, b.slot.endsAt, tz)} — cancelled {b.cancelledAt && fmt(b.cancelledAt, tz, "d MMM HH:mm")}
-                  {b.cancelledById === user.id ? " by you (used a change)" : " by staff"}
+                  {fmtRange(b.slot.startsAt, b.slot.endsAt, tz)} — {historyLabel(b, user.id)} {b.cancelledAt && fmt(b.cancelledAt, tz, "d MMM HH:mm")}
                 </li>
               ))}
           </ul>
@@ -345,6 +370,14 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
       )}
     </div>
   );
+}
+
+/** How a past booking ended, in words: a reschedule or staff move isn't a plain cancellation. */
+function historyLabel(b: { cancelledById: string | null; replacedBy: "RESCHEDULED" | "MOVED_BY_STAFF" | null; freeCancel: boolean }, me: string) {
+  if (b.replacedBy === "RESCHEDULED") return "rescheduled by you (used a change)";
+  if (b.replacedBy === "MOVED_BY_STAFF") return "moved by staff";
+  if (b.cancelledById !== me) return "cancelled by staff";
+  return b.freeCancel ? "cancelled by you (no changes were left)" : "cancelled by you (used a change)";
 }
 
 function FilterChips({

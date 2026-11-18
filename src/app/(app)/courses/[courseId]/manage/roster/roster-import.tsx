@@ -26,7 +26,7 @@ export function RosterImport({ courseId, canAddInstructors }: { courseId: string
   return (
     <div className="space-y-4">
       <AddPerson courseId={courseId} canAddInstructors={canAddInstructors} />
-      <ImportList courseId={courseId} />
+      <ImportList courseId={courseId} canAddInstructors={canAddInstructors} />
     </div>
   );
 }
@@ -71,7 +71,7 @@ function AddPerson({ courseId, canAddInstructors }: { courseId: string; canAddIn
   );
 }
 
-function ImportList({ courseId }: { courseId: string }) {
+function ImportList({ courseId, canAddInstructors }: { courseId: string; canAddInstructors: boolean }) {
   const [preview, previewAction] = useActionState(previewRosterAction, null);
   const [dismissed, setDismissed] = useState<object | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -97,7 +97,7 @@ function ImportList({ courseId }: { courseId: string }) {
                   {[
                     ["email", "Required"],
                     ["name", "Optional — used for new accounts"],
-                    ["role", "student (default), ta or instructor"],
+                    ["role", canAddInstructors ? "student (default), ta or instructor" : "student (default) or ta"],
                     ["section", "Optional, e.g. A"],
                   ].map(([col, note]) => (
                     <tr key={col}>

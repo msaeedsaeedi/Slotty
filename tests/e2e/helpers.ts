@@ -9,7 +9,7 @@ export async function login(browser: Browser, email: string, password = "passwor
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page).toHaveURL(/\/(dashboard|admin|platform)/);
   return page;
 }
 
@@ -19,15 +19,31 @@ export async function open(page: Page, url: string) {
   await page.waitForLoadState("networkidle");
 }
 
-export async function createCourse(page: Page, code: string, role: "TA" | "Instructor") {
+/** Self-service: the creator becomes the course's TA. */
+export async function createCourse(page: Page, code: string) {
   await open(page, "/courses/new");
   await page.getByLabel("Course code").fill(code);
   await page.getByLabel("Title").fill(`${code} Title`);
   await page.getByLabel("Term").fill("Fall 2026");
-  await page.getByLabel(role === "TA" ? "Teaching assistant" : "Instructor").check();
   await page.getByRole("button", { name: "Create course" }).click();
   await expect(page).toHaveURL(/\/manage\/roster/);
   return page.url().match(/courses\/([^/]+)/)![1];
+}
+
+/** Only admins name instructors: create the course from the console and hand it to them. */
+export async function adminCreateCourseFor(admin: Page, code: string, instructorEmail: string) {
+  await open(admin, "/admin/courses?new=1");
+  await admin.getByLabel("Course code").fill(code);
+  await admin.getByLabel("Title").fill(`${code} Title`);
+  await admin.getByLabel("Term").fill("Fall 2026");
+  await admin.getByLabel("Instructor or TA email").fill(instructorEmail);
+  await admin.getByLabel("Their role").selectOption("INSTRUCTOR");
+  await admin.getByRole("button", { name: "Create course" }).click();
+  await admin.getByRole("search").getByLabel("Search courses").fill(code);
+  await admin.getByRole("search").getByLabel("Search courses").press("Enter");
+  const link = admin.getByRole("link", { name: new RegExp(`^${code} — `) });
+  await expect(link).toBeVisible();
+  return (await link.getAttribute("href"))!.match(/courses\/([^/]+)/)![1];
 }
 
 export async function importRoster(page: Page, csv: string) {

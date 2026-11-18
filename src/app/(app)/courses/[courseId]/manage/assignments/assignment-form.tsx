@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { checkRubric } from "@/domain/evaluation";
 import { cn } from "@/lib/utils";
 import type { ActionState } from "@/server/action-utils";
 
@@ -49,7 +50,10 @@ function validate(v: Values, criteria: { label: string; maxPoints: string }[]) {
   const rows = criteria.filter((c) => c.label.trim() || c.maxPoints.trim());
   if (rows.some((c) => !c.label.trim())) e.criteria = "Each rubric row needs a name.";
   else if (rows.some((c) => !(num(c.maxPoints) > 0))) e.criteria = "Each rubric row needs points above 0.";
-  else if (max > 0 && rows.reduce((s, c) => s + num(c.maxPoints), 0) > max + 1e-9) e.criteria = `The rows add up to more than ${max}. Lower them or raise the max marks.`;
+  else if (max > 0 && rows.length) {
+    const rubric = checkRubric(rows.map((c) => ({ maxPoints: num(c.maxPoints) })), max);
+    if (!rubric.ok) e.criteria = rubric.reason;
+  }
   if (!v.windowStart) e.windowStart = "When do demos start?";
   if (!v.windowEnd) e.windowEnd = "When do demos end?";
   else if (v.windowStart && v.windowEnd <= v.windowStart) e.windowEnd = "Must be after the start.";
@@ -176,7 +180,7 @@ export function AssignmentForm({
                 <Plus /> Add rubric row
               </Button>
               {criteria.length > 0 && (
-                <span className={cn("text-sm tabular-nums", rubricTotal > Number(v.maxMarks) ? "text-destructive" : "text-muted-foreground")}>
+                <span className={cn("text-sm tabular-nums", rubricTotal !== Number(v.maxMarks) ? "text-destructive" : "text-muted-foreground")}>
                   Rubric {rubricTotal} of {v.maxMarks || 0}
                 </span>
               )}
