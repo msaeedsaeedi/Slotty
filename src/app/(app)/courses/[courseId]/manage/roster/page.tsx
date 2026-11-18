@@ -5,15 +5,16 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireUser } from "@/server/auth/session";
 import { load } from "@/server/page-utils";
-import { getCourseForActor, listMembers } from "@/server/services/courses";
+import { listMembers } from "@/server/services/courses";
 import { RosterImport } from "./roster-import";
+import { plural } from "@/lib/utils";
 
 export const metadata = { title: "People" };
 
 export default async function RosterPage({ params }: PageProps<"/courses/[courseId]/manage/roster">) {
   const { courseId } = await params;
   const user = await requireUser();
-  const [members, { role }] = await Promise.all([load(listMembers(user, courseId)), load(getCourseForActor(user, courseId))]);
+  const members = await load(listMembers(user, courseId));
   const counts = { STUDENT: 0, TA: 0, INSTRUCTOR: 0 };
   for (const m of members) counts[m.role]++;
 
@@ -23,7 +24,7 @@ export default async function RosterPage({ params }: PageProps<"/courses/[course
         <CardHeader className="pt-4">
           <CardTitle>People</CardTitle>
           <CardDescription>
-            {counts.STUDENT} students · {counts.TA} TAs · {counts.INSTRUCTOR} instructors
+            {plural(counts.STUDENT, "student")} · {plural(counts.TA, "TA")} · {plural(counts.INSTRUCTOR, "instructor")}
           </CardDescription>
         </CardHeader>
         <Table>
@@ -62,7 +63,7 @@ export default async function RosterPage({ params }: PageProps<"/courses/[course
                         </SubmitButton>
                       </ActionForm>
                     )}
-                    {m.userId !== user.id && (
+                    {m.userId !== user.id && (m.role !== "INSTRUCTOR" || user.isAdmin) && (
                       <ActionForm action={removeMemberAction} compact confirmLabel="Remove" confirm={`Remove ${m.user.name} from this course? Their upcoming bookings will be cancelled and they'll be told.`}>
                         <input type="hidden" name="courseId" value={courseId} />
                         <input type="hidden" name="userId" value={m.userId} />
@@ -78,7 +79,7 @@ export default async function RosterPage({ params }: PageProps<"/courses/[course
           </TableBody>
         </Table>
       </Card>
-      <RosterImport courseId={courseId} canAddInstructors={role === "INSTRUCTOR"} />
+      <RosterImport courseId={courseId} canAddInstructors={user.isAdmin} />
     </div>
   );
 }

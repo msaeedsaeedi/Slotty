@@ -1,5 +1,6 @@
 import type { CourseRole } from "@/generated/prisma/client";
-import { DomainError } from "@/domain/result";
+import { assertRule, DomainError } from "@/domain/result";
+import { canManageCourse } from "@/domain/roles";
 import type { Tx } from "@/server/db";
 
 /** The authenticated user a service call acts on behalf of. */
@@ -86,4 +87,20 @@ export async function assertAssignmentRole(tx: Tx, actor: Actor, assignmentId: s
   const role = await assertCourseRole(tx, actor, assignment.courseId, roles);
   if (opts.write) assertCourseWritable(assignment.course);
   return { assignment, role };
+}
+
+/**
+ * Course settings and archiving: the instructor manages the course, a TA only
+ * when it has no instructor (`canManageCourse`). Admins count as instructors.
+ */
+export async function assertCourseManager(tx: Tx, actor: Actor, courseId: string, opts: AccessOptions = {}): Promise<CourseRole> {
+  const role = await assertStaff(tx, actor, courseId, opts);
+  assertRule(canManageCourse(role, role === "INSTRUCTOR" || (await courseHasInstructor(tx, courseId))), "FORBIDDEN");
+  return role;
+}
+
+/** Can the actor change course settings? For hiding Settings and Archive in the UI. */
+export async function canManageCourseFor(tx: Tx, actor: Actor, courseId: string): Promise<boolean> {
+  const role = await courseRoleOf(tx, actor, courseId);
+  return canManageCourse(role, role === "INSTRUCTOR" || (await courseHasInstructor(tx, courseId))).ok;
 }

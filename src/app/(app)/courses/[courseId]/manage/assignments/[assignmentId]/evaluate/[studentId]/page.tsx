@@ -1,3 +1,4 @@
+import { currentClock } from "@/lib/time";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { clearMarksAction, reviewAction, unlockAction } from "@/app/actions/evaluations";
@@ -217,6 +218,7 @@ export default async function StudentRecordPage({ params, searchParams }: PagePr
           student={student}
           booking={booking && booking.status !== "CANCELLED" ? booking : null}
           budget={controls.budget}
+          clock={currentClock()}
           allowance={controls.allowance}
           slots={controls.slots}
           timezone={tz}

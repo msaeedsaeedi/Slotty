@@ -7,11 +7,16 @@ import { StatusBadge } from "@/components/status-badge";
 import { Card } from "@/components/ui/card";
 import { fmt, fmtRange } from "@/lib/time";
 import { requireUser } from "@/server/auth/session";
-import { load } from "@/server/page-utils";
+import { courseTitle, load } from "@/server/page-utils";
 import { listAssignments } from "@/server/services/assignments";
 import { listMyBookings } from "@/server/services/bookings";
 import { getCourseForActor } from "@/server/services/courses";
 import { db } from "@/server/db";
+
+export async function generateMetadata({ params }: PageProps<"/courses/[courseId]">) {
+  const { courseId } = await params;
+  return courseTitle(courseId);
+}
 
 export default async function StudentCoursePage({ params }: PageProps<"/courses/[courseId]">) {
   const { courseId } = await params;

@@ -4,6 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { requireUser } from "@/server/auth/session";
 import { load } from "@/server/page-utils";
 import { getCourseForActor } from "@/server/services/courses";
+import { canManageCourseFor } from "@/server/services/access";
+import { db } from "@/server/db";
+import { EmptyState } from "@/components/page-header";
 import { CourseFields } from "../../../course-fields";
 
 export const metadata = { title: "Course settings" };
@@ -12,6 +15,9 @@ export default async function SettingsPage({ params }: PageProps<"/courses/[cour
   const { courseId } = await params;
   const user = await requireUser();
   const { course } = await load(getCourseForActor(user, courseId));
+  if (!(await canManageCourseFor(db, user, courseId))) {
+    return <EmptyState title="Settings are managed by the instructor">This course has an instructor, who changes its details and archives it.</EmptyState>;
+  }
   return (
     <div className="max-w-2xl space-y-6">
       <Card>

@@ -4,7 +4,7 @@ import { createCourse, createPublishedAssignment, importRoster, login, open } fr
 test("a stuck student asks for help, staff move them, and their calendar file follows", async ({ browser }) => {
   test.setTimeout(300_000); // visits several pages the dev server compiles on first use
   const ta = await login(browser, "ta@e2e.test");
-  const courseId = await createCourse(ta, "HELP300", "TA");
+  const courseId = await createCourse(ta, "HELP300");
   await importRoster(ta, "email,role\nria@e2e.test,student");
   // Afternoon slots, so this TA's other e2e courses (09:00) don't overlap.
   const assignmentId = await createPublishedAssignment(ta, courseId, "Oral exam", { from: "14:00", to: "15:00" });
@@ -31,13 +31,16 @@ test("a stuck student asks for help, staff move them, and their calendar file fo
   await ta.getByRole("button", { name: "Move", exact: true }).click();
   await ta.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
   await expect(ta.getByText("Done — the student was notified.")).toBeVisible();
-  await ta.goto(`/courses/${courseId}/manage/requests`);
+  // The request stays open, now showing her new slot, so the TA can reply in their own words.
+  await open(ta, `/courses/${courseId}/manage/requests`);
+  await expect(ta.getByText(/Current booking: .*2:15–2:30 PM/)).toBeVisible();
+  await ta.getByRole("textbox", { name: "Reply to Ria Student" }).fill("Moved you to 2:15, see you then.");
+  await ta.getByRole("button", { name: "Mark handled" }).click();
   await expect(ta.getByText("No open requests")).toBeVisible();
 
   await open(ria, `/courses/${courseId}/assignments/${assignmentId}`);
   await expect(ria.getByText("Handled")).toBeVisible();
-  // The move answers her request automatically, and her demo card shows the new time.
-  await expect(ria.getByText(/Placed in .*2:15–2:30 PM/)).toBeVisible();
+  await expect(ria.getByText("Moved you to 2:15, see you then.")).toBeVisible();
   await expect(ria.getByText("Your demo", { exact: true })).toBeVisible();
   await expect(ria.getByText("2:15–2:30 PM", { exact: false }).first()).toBeVisible();
 

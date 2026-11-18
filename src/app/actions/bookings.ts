@@ -21,7 +21,7 @@ export async function bookSlotAction(_: ActionState, fd: FormData): Promise<Acti
     const user = await requireUser();
     await bookSlot(user, str(fd, "slotId"));
     const survey = (await claimSurvey(user, "booking")) ? "booking" : undefined;
-    return { message: "Booked! A confirmation has been sent to your email.", survey };
+    return { message: "Booked! A confirmation email follows in a few minutes.", survey };
   });
 }
 

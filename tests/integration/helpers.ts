@@ -34,7 +34,7 @@ export async function setupCourse(
   ta: Actor,
   opts: { capacity?: number; freezeHours?: number; maxReschedules?: number; bookingOpensAt?: Date | null; publish?: boolean } = {},
 ) {
-  const course = await createCourse(ta, { code: "CS101", title: "Intro", term: "Fall 2026", timezone: "UTC", myRole: "TA" });
+  const course = await createCourse(ta, { code: "CS101", title: "Intro", term: "Fall 2026", timezone: "UTC" });
   const venue = await createVenue(ta, course.id, { name: "Lab 1", location: "Building A" });
   const start = inHours(48);
   const assignment = await createAssignment(ta, course.id, {

@@ -1,11 +1,11 @@
 import { z } from "zod";
 import type { CourseRole } from "@/generated/prisma/client";
-import { DomainError } from "@/domain/result";
+import { assertRule, DomainError } from "@/domain/result";
 import { parseRoster, type RosterError, type RosterRow } from "@/domain/csv-roster";
-import { canTakeRole } from "@/domain/roles";
+import { canCreateCourse, canManageInstructors, canTakeRole } from "@/domain/roles";
 import { fmtRange, isValidTimezone } from "@/lib/time";
 import { db, type Tx } from "@/server/db";
-import { assertCanJoinCourses, assertCourseRole, assertStaff, courseRoleOf, type Actor } from "./access";
+import { assertCanJoinCourses, assertCourseManager, assertCourseRole, assertStaff, courseRoleOf, type Actor } from "./access";
 import { audit } from "./audit";
 import { issueInvite } from "./accounts";
 import { notify } from "./notify";
@@ -17,16 +17,23 @@ export const courseInput = z.object({
   timezone: z.string().refine(isValidTimezone, "Unknown timezone."),
 });
 
-export async function createCourse(actor: Actor, input: z.input<typeof courseInput> & { myRole: "TA" | "INSTRUCTOR" }) {
-  if (actor.isAdmin) throw new DomainError("Admins don't join courses. Create it from the admin console and name its instructor or TA.", "FORBIDDEN");
-  if (actor.isPlatform) throw new DomainError("That account can't join courses.", "FORBIDDEN");
+/** May the actor create a course for themselves (as its TA)? */
+export async function canCreateCourseFor(actor: Actor) {
+  const roles = await db.enrollment.findMany({ where: { userId: actor.id }, select: { role: true }, distinct: ["role"] });
+  return canCreateCourse(actor, roles.map((r) => r.role));
+}
+
+/**
+ * Self-service course creation. The creator joins as its TA: only admins name
+ * instructors (from the console), and students can't create courses.
+ */
+export async function createCourse(actor: Actor, input: z.input<typeof courseInput>) {
   const data = courseInput.parse(input);
-  const myRole = input.myRole === "INSTRUCTOR" ? "INSTRUCTOR" : "TA";
   return db.$transaction(async (tx) => {
-    const fits = canTakeRole(myRole, await rolesElsewhere(tx, actor.id, ""));
-    if (!fits.ok) throw new DomainError(`You can't be ${myRole === "TA" ? "a TA" : "the instructor"} here: you ${fits.reason.replace(/^is /, "are ")}`);
+    const roles = await tx.enrollment.findMany({ where: { userId: actor.id }, select: { role: true }, distinct: ["role"] });
+    assertRule(canCreateCourse(actor, roles.map((r) => r.role)), "FORBIDDEN");
     const course = await tx.course.create({ data: { ...data, createdById: actor.id } });
-    await tx.enrollment.create({ data: { courseId: course.id, userId: actor.id, role: myRole } });
+    await tx.enrollment.create({ data: { courseId: course.id, userId: actor.id, role: "TA" } });
     await audit(tx, actor, { action: "course.create", entityType: "Course", entityId: course.id, after: data });
     return course;
   });
@@ -35,7 +42,7 @@ export async function createCourse(actor: Actor, input: z.input<typeof courseInp
 export async function updateCourse(actor: Actor, courseId: string, input: z.input<typeof courseInput>) {
   const data = courseInput.parse(input);
   return db.$transaction(async (tx) => {
-    await assertStaff(tx, actor, courseId, { write: true });
+    await assertCourseManager(tx, actor, courseId, { write: true });
     const before = await tx.course.findUniqueOrThrow({ where: { id: courseId } });
     const course = await tx.course.update({ where: { id: courseId }, data });
     await audit(tx, actor, { action: "course.update", entityType: "Course", entityId: courseId, before, after: data });
@@ -45,7 +52,7 @@ export async function updateCourse(actor: Actor, courseId: string, input: z.inpu
 
 export async function setCourseArchived(actor: Actor, courseId: string, archived: boolean) {
   return db.$transaction(async (tx) => {
-    await assertStaff(tx, actor, courseId);
+    await assertCourseManager(tx, actor, courseId);
     await tx.course.update({ where: { id: courseId }, data: { archived } });
     await audit(tx, actor, { action: archived ? "course.archive" : "course.unarchive", entityType: "Course", entityId: courseId });
   });
@@ -117,7 +124,7 @@ export async function rolesElsewhere(tx: Tx, userId: string, courseId: string) {
 async function screenRows(tx: Tx, courseId: string, parsed: { rows: RosterRow[]; errors: RosterError[] }) {
   const users = await tx.user.findMany({
     where: { email: { in: parsed.rows.map((r) => r.email) } },
-    select: { email: true, isAdmin: true, platformAccess: true, enrollments: { where: { courseId: { not: courseId } }, select: { role: true, course: { select: { code: true } } } } },
+    select: { email: true, isAdmin: true, platformAccess: true, enrollments: { select: { courseId: true, role: true, course: { select: { code: true } } } } },
   });
   const byEmail = new Map(users.map((u) => [u.email, u]));
   const rows: RosterRow[] = [];
@@ -132,7 +139,13 @@ async function screenRows(tx: Tx, courseId: string, parsed: { rows: RosterRow[];
       errors.push({ line: r.line, message: `${r.email} can't be added to a course.` });
       continue;
     }
-    const fits = canTakeRole(r.role, (u?.enrollments ?? []).map((e) => ({ role: e.role, course: e.course.code })));
+    const enrollments = u?.enrollments ?? [];
+    const here = enrollments.find((e) => e.courseId === courseId)?.role;
+    const fits = canTakeRole(
+      r.role,
+      enrollments.filter((e) => e.courseId !== courseId).map((e) => ({ role: e.role, course: e.course.code })),
+      here,
+    );
     if (!fits.ok) {
       errors.push({ line: r.line, message: `${r.email} ${fits.reason}` });
       continue;
@@ -155,8 +168,9 @@ export async function previewRoster(actor: Actor, courseId: string, csv: string)
     if (!user) return { ...row, status: "new-user" };
     const enrollment = user.enrollments[0];
     if (!enrollment) return { ...row, status: "new-enrollment" };
-    if (enrollment.role !== row.role) return { ...row, status: "role-change", currentRole: enrollment.role };
-    return { ...row, status: "unchanged", currentRole: enrollment.role };
+    const section = row.section ?? enrollment.section;
+    if (enrollment.role !== row.role) return { ...row, section, status: "role-change", currentRole: enrollment.role };
+    return { ...row, section, status: section === enrollment.section ? "unchanged" : "role-change", currentRole: enrollment.role };
   });
   return { rows: preview, errors };
 }
@@ -179,13 +193,18 @@ const memberInput = z.object({
 /** Add one person by email (the quick alternative to a CSV). */
 export async function addMember(actor: Actor, courseId: string, input: z.input<typeof memberInput>) {
   const data = memberInput.parse(input);
-  const existing = await db.user.findUnique({ where: { email: data.email }, select: { name: true } });
+  const existing = await db.user.findUnique({
+    where: { email: data.email },
+    select: { name: true, enrollments: { where: { courseId }, select: { role: true, section: true } } },
+  });
+  const before = existing?.enrollments[0];
   const name = data.name || existing?.name;
   if (!name) throw new DomainError("This email has no Slotty account yet. Add their name so we can invite them.");
   const r = await importRows(actor, courseId, { rows: [{ line: 1, email: data.email, name, role: data.role, section: data.section }], errors: [] });
   if (r.errors.length) throw new DomainError(r.errors[0].message);
-  if (r.unchanged) throw new DomainError(`${name} is already in this course with that role.`);
-  return { ...r, name };
+  if (r.unchanged) throw new DomainError(`${name} is already in this course as ${data.role === "TA" ? "a TA" : data.role.toLowerCase()}.`);
+  const roleChanged = Boolean(before && before.role !== data.role);
+  return { ...r, name, roleChanged };
 }
 
 async function importRows(actor: Actor, courseId: string, parsed: { rows: RosterRow[]; errors: RosterError[] }) {
@@ -193,9 +212,18 @@ async function importRows(actor: Actor, courseId: string, parsed: { rows: Roster
     async (tx) => {
       const { rows, errors } = await screenRows(tx, courseId, parsed);
       if (rows.length === 0) throw new DomainError(errors[0]?.message ?? "The list has no valid rows.");
-      const myRole = await assertStaff(tx, actor, courseId, { write: true });
-      if (myRole !== "INSTRUCTOR" && rows.some((r) => r.role === "INSTRUCTOR")) {
-        throw new DomainError("Only instructors can add other instructors.", "FORBIDDEN");
+      await assertStaff(tx, actor, courseId, { write: true });
+      // Only admins name instructors, or change or demote one.
+      if (!actor.isAdmin) {
+        const instructorEmails = new Set(
+          (
+            await tx.enrollment.findMany({
+              where: { courseId, role: "INSTRUCTOR", user: { email: { in: rows.map((r) => r.email) } } },
+              select: { user: { select: { email: true } } },
+            })
+          ).map((e) => e.user.email),
+        );
+        if (rows.some((r) => r.role === "INSTRUCTOR" || instructorEmails.has(r.email))) assertRule(canManageInstructors(actor), "FORBIDDEN");
       }
       const course = await tx.course.findUniqueOrThrow({ where: { id: courseId } });
       const summary = { invited: 0, enrolled: 0, updated: 0, unchanged: 0 };
@@ -215,7 +243,9 @@ async function importRows(actor: Actor, courseId: string, parsed: { rows: Roster
           where: { courseId_userId: { courseId, userId: user.id } },
         });
         if (existing) {
-          if (existing.role === row.role && existing.section === row.section) {
+          // A blank section keeps the one they have: re-adding someone never wipes it.
+          const section = row.section ?? existing.section;
+          if (existing.role === row.role && existing.section === section) {
             summary.unchanged++;
             continue;
           }
@@ -224,7 +254,7 @@ async function importRows(actor: Actor, courseId: string, parsed: { rows: Roster
             summary.unchanged++;
             continue;
           }
-          await tx.enrollment.update({ where: { id: existing.id }, data: { role: row.role, section: row.section } });
+          await tx.enrollment.update({ where: { id: existing.id }, data: { role: row.role, section } });
           summary.updated++;
           continue;
         }
@@ -259,15 +289,13 @@ async function importRows(actor: Actor, courseId: string, parsed: { rows: Roster
  */
 export async function removeMember(actor: Actor, courseId: string, userId: string, now = new Date()) {
   return db.$transaction(async (tx) => {
-    const myRole = await assertStaff(tx, actor, courseId, { write: true });
+    await assertStaff(tx, actor, courseId, { write: true });
     const target = await tx.enrollment.findUnique({
       where: { courseId_userId: { courseId, userId } },
       include: { user: { select: { name: true } }, course: true },
     });
     if (!target) throw new DomainError("Member not found.", "NOT_FOUND");
-    if (target.role === "INSTRUCTOR" && myRole !== "INSTRUCTOR") {
-      throw new DomainError("Only instructors can remove instructors.", "FORBIDDEN");
-    }
+    if (target.role === "INSTRUCTOR") assertRule(canManageInstructors(actor), "FORBIDDEN");
     if (userId === actor.id) throw new DomainError("You can't remove yourself.");
 
     let released = 0;

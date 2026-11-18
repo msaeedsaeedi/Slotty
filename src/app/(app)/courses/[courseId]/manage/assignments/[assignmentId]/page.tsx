@@ -1,3 +1,4 @@
+import { plural } from "@/lib/utils";
 import Link from "next/link";
 import { CalendarRange, Clock, PenLine, Repeat, Settings2, Target } from "lucide-react";
 import { closeAssignmentAction, publishAssignmentAction } from "@/app/actions/scheduling";
@@ -11,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { currentClock, dayRange, fmt, fmtData, fmtTimeRange, tzLabel } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { requireUser } from "@/server/auth/session";
-import { load } from "@/server/page-utils";
+import { assignmentTitle, load } from "@/server/page-utils";
 import { getAssignment } from "@/server/services/assignments";
 import { listCourseStaff, listVenues } from "@/server/services/courses";
 import { listAssignmentRoster } from "@/server/services/evaluations";
@@ -20,6 +21,11 @@ import { waitlistCount } from "@/server/services/waitlist";
 import { AvailabilityPlanner } from "./availability-planner";
 import { SlotTable, type SlotRow } from "./slot-table";
 import { StudentsTable, type StudentRow } from "./students-table";
+
+export async function generateMetadata({ params }: PageProps<"/courses/[courseId]/manage/assignments/[assignmentId]">) {
+  const { assignmentId } = await params;
+  return assignmentTitle(assignmentId);
+}
 
 export default async function ManageAssignmentPage({ params, searchParams }: PageProps<"/courses/[courseId]/manage/assignments/[assignmentId]">) {
   const { courseId, assignmentId } = await params;
@@ -214,7 +220,12 @@ export default async function ManageAssignmentPage({ params, searchParams }: Pag
                   }
                   me={user.id}
                   venues={venues.map((v) => ({ id: v.id, name: v.name }))}
-                  busy={busy.map((b) => ({ taId: b.taId, startsAt: b.startsAt.toISOString(), endsAt: b.endsAt.toISOString() }))}
+                  busy={busy.map((b) => ({
+                    taId: b.taId,
+                    startsAt: b.startsAt.toISOString(),
+                    endsAt: b.endsAt.toISOString(),
+                    other: b.assignmentId === assignmentId ? null : b.assignment.title,
+                  }))}
                   open={assignment.status === "PUBLISHED"}
                 />
               )}
@@ -228,6 +239,7 @@ export default async function ManageAssignmentPage({ params, searchParams }: Pag
           detailsHref={`${base}/evaluate`}
           markBase={`${base}/mark`}
           exportHref={`${base}/export`}
+          releases={instructor || !staff.some((s) => s.role === "INSTRUCTOR")}
           initialFilter={typeof filter === "string" ? filter : undefined}
         />
       )}
@@ -259,13 +271,13 @@ function BookingPanel(p: {
           <p>
             {p.slots === 0
               ? "Students can't see this assignment yet. Add slots first: opening booking notifies every student, so there must be times to pick."
-              : `${p.slots} slot${p.slots === 1 ? " is" : "s are"} ready but hidden. Opening booking shows them and notifies all ${p.students} students${p.opensAt ? ` that booking starts ${p.opensAt}` : ""}.`}
+              : `${p.slots} slot${p.slots === 1 ? " is" : "s are"} ready but hidden. Opening booking shows them and notifies ${p.students === 1 ? "the 1 student" : `all ${p.students} students`}${p.opensAt ? ` that booking starts ${p.opensAt}` : ""}.`}
           </p>
           <ActionForm
             action={publishAssignmentAction}
             compact
             confirmLabel="Open booking"
-            confirm={`Open booking? All ${p.students} students are notified${p.opensAt ? ` that they can book from ${p.opensAt}` : " and can book straight away"}.`}
+            confirm={`Open booking? ${p.students === 1 ? "The 1 student is" : `All ${p.students} students are`} notified${p.opensAt ? ` that they can book from ${p.opensAt}` : " and can book straight away"}.`}
           >
             <input type="hidden" name="assignmentId" value={p.assignmentId} />
             <SubmitButton className="w-full" disabled={p.slots === 0}>
@@ -277,7 +289,7 @@ function BookingPanel(p: {
       {p.status === "PUBLISHED" && (
         <>
           <p>
-            <span className="font-semibold tabular-nums">{p.booked}</span> of {p.students} students booked
+            <span className="font-semibold tabular-nums">{p.booked}</span> of {plural(p.students, "student")} booked
             {p.waiting > 0 && ` · ${p.waiting} waiting for a free slot`}.
             {p.opensAt && ` Students can book from ${p.opensAt}.`}
           </p>
@@ -298,7 +310,7 @@ function BookingPanel(p: {
       {p.status === "CLOSED" && (
         <>
           <p>
-            Closed with {p.booked} of {p.students} students booked. Demos and marking carry on; nobody can book or change.
+            Closed with {p.booked} of {plural(p.students, "student")} booked. Demos and marking carry on; nobody can book or change.
           </p>
           <ActionForm action={publishAssignmentAction} compact confirmLabel="Reopen booking" confirm="Reopen booking? Students who haven't booked are notified.">
             <input type="hidden" name="assignmentId" value={p.assignmentId} />

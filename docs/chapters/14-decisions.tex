@@ -186,3 +186,42 @@ Add one for every deliberate trade-off.
    its hooks and record keeping on every change.}
   {Several people change Slotty at once and need a recorded, gated process again.}
 
+\adr{018}{Fewer notifications: no echoes, supersede, coalesce}{2026-11-18}{Accepted}
+  {QA on 18 Nov 2026 counted 13 unread notifications in about 10 minutes for one demo, six of them
+   about things the student had just done, plus a survey after booking and another after moving.
+   A student with three courses would learn to ignore the bell, including the items that matter
+   (moved by staff, marks released).}
+  {Own actions (book, reschedule, cancel) create no in-app item or push; one confirmation email for
+   the final state goes out 10 minutes later. Messages about the same booking or marks share a
+   \code{groupKey}, and a new one replaces unread items and unsent emails from the last 15
+   minutes; booking emails list what they replaced. A correction released before the student saw
+   the first release is one ``Marks released'' item. The bell counts only items that need the
+   person, and the list is grouped by assignment. Surveys: each question at most once per 90 days,
+   and no survey within 14 days of another (\cref{sec:rules-usage}).}
+  {Confirmation emails arrive minutes later, not instantly, and the toast says so. Marks emails wait
+   5 minutes. A student who wants an in-app record of their own booking has the page and
+   \route{/bookings} instead of the bell. Fewer survey answers per term. Rejected: per-type
+   settings and a digest now (more settings to explain before we know they're needed; on the
+   roadmap), coalescing in the worker at send time (the worker would need product rules, and
+   in-app items would still stack).}
+  {Students ask for instant confirmations, or the digest and per-type settings are built
+   (\cref{ch:roadmap}).}
+
+\adr{019}{Only admins name instructors; self-service courses are TA-run}{2026-11-18}{Accepted; supersedes the creator's role choice in journey T1}
+  {QA found that a student could open \route{/courses/new}, pick \ui{Instructor}, and the server
+   created the course with them as instructor, who could then promote anyone else. The intended
+   model: only admins add instructors, students are never instructors, the instructor manages the
+   course, and a TA manages it only when it has no instructor.}
+  {\code{canTakeRole} refuses instructor $\leftrightarrow$ student as well as instructor
+   $\leftrightarrow$ TA, including promotion within a course. \code{canManageInstructors} limits
+   adding, changing and removing instructors to admins (instructors included in the refusal).
+   \code{canCreateCourse} opens self-service creation to TAs and to staff not yet in any course,
+   always as the TA. \code{canManageCourse} gives settings and archiving to the instructor, or to
+   a TA without one. The UI hides what the server refuses.}
+  {An instructor who wants a co-instructor or a new course asks an admin. A new staff member who
+   was first enrolled as a student somewhere can't create a course until they are a TA or an admin
+   sets it up. Rejected: letting instructors add instructors (the QA rule is admins only), closing
+   self-service creation entirely (TAs running a course alone is the main use, \cref{ch:journeys}).}
+  {Departments want instructors to manage their own co-instructors, or self-service creation is
+   abused.}
+

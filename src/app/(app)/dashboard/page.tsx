@@ -10,10 +10,11 @@ import { TaskList } from "@/components/task-list";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { fmt, fmtTimeRange } from "@/lib/time";
+import { cn } from "@/lib/utils";
 import { requireUser } from "@/server/auth/session";
 import { bookingCalendarOptions } from "@/server/services/calendar";
 import { getDemoDay } from "@/server/services/demo-day";
-import { myRoleKinds } from "@/server/services/courses";
+import { canCreateCourseFor, myRoleKinds } from "@/server/services/courses";
 import { getHome, type Home } from "@/server/services/home";
 
 export const metadata = { title: "Home" };
@@ -26,7 +27,7 @@ export default async function DashboardPage() {
   if (user.isPlatform) redirect("/platform");
   const now = new Date();
   const home = await getHome(user, now);
-  const roles = home.teaching ? await myRoleKinds(user) : null;
+  const [roles, canCreate] = await Promise.all([home.teaching ? myRoleKinds(user) : null, canCreateCourseFor(user)]);
   const demoDay = roles?.hosts ? await getDemoDay(user, { now }) : null;
   const both = Boolean(home.teaching && home.studying);
   const firstName = user.name.split(" ")[0];
@@ -37,7 +38,7 @@ export default async function DashboardPage() {
         title={`Hi, ${firstName}`}
         description={both ? "You teach some courses and study in others — each has its own list below." : "Here's what needs you."}
         actions={
-          (home.teaching || !home.hasAnyCourse) && (
+          canCreate.ok && (
             <Button asChild variant="outline">
               <Link href="/courses/new">
                 <Plus /> New course
@@ -141,11 +142,12 @@ function UpcomingDemos({ upcoming }: { upcoming: NonNullable<Home["studying"]>["
         const tz = b.assignment.course.timezone;
         const venue = b.slot.venue;
         return (
-          <Card key={b.id} className={i === 0 ? "border-primary/50 ring-1 ring-primary/20" : undefined}>
+          // The title link stretches over the whole card; the buttons sit above it.
+          <Card key={b.id} className={cn("relative transition-colors hover:border-primary/40", i === 0 && "border-primary/50 ring-1 ring-primary/20")}>
             <CardHeader>
               <CardDescription>{i === 0 ? `Your next demo · ${b.assignment.course.code}` : b.assignment.course.code}</CardDescription>
               <CardTitle>
-                <Link className="hover:underline" href={`/courses/${b.assignment.courseId}/assignments/${b.assignment.id}`}>
+                <Link className="after:absolute after:inset-0 after:rounded-xl hover:underline" href={`/courses/${b.assignment.courseId}/assignments/${b.assignment.id}`}>
                   {b.assignment.title}
                 </Link>
               </CardTitle>
@@ -159,7 +161,7 @@ function UpcomingDemos({ upcoming }: { upcoming: NonNullable<Home["studying"]>["
                 <MapPin className="size-4 shrink-0 text-muted-foreground" />
                 {venue ? [venue.name, venue.location].filter(Boolean).join(", ") : "Venue to be announced"} · with {b.slot.ta.name}
               </p>
-              <div className="flex flex-wrap items-center gap-2 pt-2">
+              <div className="relative z-10 flex flex-wrap items-center gap-2 pt-2">
                 {venue?.meetingUrl && (
                   <Button asChild size="sm">
                     <a href={venue.meetingUrl} target="_blank" rel="noreferrer">

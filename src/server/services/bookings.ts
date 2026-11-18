@@ -5,6 +5,7 @@ import {
   canCancelBooking,
   canMarkAttendance,
   canReschedule,
+  cancelSpendsChange,
   changeBudget,
   NO_ALLOWANCE,
   type Allowance,
@@ -13,11 +14,12 @@ import {
 import { canChangeMarkedBooking } from "@/domain/evaluation";
 import { assertRule, DomainError } from "@/domain/result";
 import { overlaps } from "@/domain/slots";
-import { fmtRange } from "@/lib/time";
+import { fmtRange, tzLabel } from "@/lib/time";
 import { db, type Tx } from "@/server/db";
 import { assertCourseRole, assertCourseWritable, STAFF, type Actor } from "./access";
 import { audit } from "./audit";
 import { notify } from "./notify";
+import { bookingKey, SELF_EMAIL_DELAY_MINUTES } from "@/domain/notifications";
 import { ACTIVE_BOOKING } from "./slots";
 import { notifyWaitlist } from "./waitlist";
 
@@ -52,7 +54,7 @@ function describeSlot(slot: LockedSlot) {
   const tz = slot.assignment.course.timezone;
   const venue = slot.venue ? [slot.venue.name, slot.venue.location].filter(Boolean).join(", ") : "Venue to be announced";
   const meeting = slot.venue?.meetingUrl ? `\nMeeting link: ${slot.venue.meetingUrl}` : "";
-  return `${fmtRange(slot.startsAt, slot.endsAt, tz)} (${tz})\nWhere: ${venue}${meeting}\nWith: ${slot.ta.name}`;
+  return `${fmtRange(slot.startsAt, slot.endsAt, tz)} (${tzLabel(tz)})\nWhere: ${venue}${meeting}\nWith: ${slot.ta.name}`;
 }
 
 const link = (slot: LockedSlot) => `/courses/${slot.assignment.courseId}/assignments/${slot.assignmentId}`;
@@ -78,12 +80,28 @@ async function assertNoTimeClash(
  * reschedule) count; staff cancellations and moves don't.
  */
 export async function loadChangeState(tx: Tx, assignmentId: string, studentId: string, policy: PolicyRules) {
-  const [selfCancellations, row] = await Promise.all([
-    tx.booking.count({ where: { assignmentId, studentId, status: "CANCELLED", cancelledById: studentId } }),
+  const own = { assignmentId, studentId, status: "CANCELLED" as const, cancelledById: studentId };
+  const [selfCancellations, last, row] = await Promise.all([
+    tx.booking.count({ where: { ...own, freeCancel: false } }),
+    tx.booking.findFirst({ where: own, orderBy: { cancelledAt: "desc" }, select: { freeCancel: true } }),
     tx.bookingAllowance.findUnique({ where: { assignmentId_studentId: { assignmentId, studentId } } }),
   ]);
   const allowance: Allowance = row ? { extraChanges: row.extraChanges, lateBooking: row.lateBooking } : NO_ALLOWANCE;
-  return { allowance, budget: changeBudget({ maxReschedules: policy.maxReschedules, allowance, selfCancellations }) };
+  return {
+    allowance,
+    /** Staff's note with the exception, shown to the student beside their booking. */
+    note: row?.note ?? null,
+    budget: changeBudget({ maxReschedules: policy.maxReschedules, allowance, selfCancellations, lastCancelFree: last?.freeCancel ?? false }),
+  };
+}
+
+/** Has the signed-in student's demo been marked, so they can no longer change their booking? */
+export async function isMyBookingMarked(actor: Actor, assignmentId: string) {
+  const evaluation = await db.evaluation.findUnique({
+    where: { assignmentId_studentId: { assignmentId, studentId: actor.id } },
+    select: { status: true, totalMarks: true },
+  });
+  return !canChangeMarkedBooking(evaluation, "student").ok;
 }
 
 /** Change budget for the signed-in student (assignment page). */
@@ -91,6 +109,15 @@ export async function getMyChangeState(actor: Actor, assignmentId: string) {
   const policy = await db.demoPolicy.findUnique({ where: { assignmentId } });
   if (!policy) return null;
   return loadChangeState(db, assignmentId, actor.id, policy);
+}
+
+/**
+ * The student just did this themselves and the page says so: no in-app item,
+ * and one confirmation email for where they end up, held briefly so a quick
+ * book → move → cancel sends only the final state (with a short history).
+ */
+function selfConfirmation(assignmentId: string, studentId: string) {
+  return { inApp: false, groupKey: bookingKey(assignmentId, studentId), history: true, emailDelayMinutes: SELF_EMAIL_DELAY_MINUTES } as const;
 }
 
 function translateUniqueViolation(e: unknown): never {
@@ -129,6 +156,7 @@ export async function bookSlot(actor: Actor, slotId: string, now = new Date()) {
         title: `Demo booked: ${assignment.title}`,
         body: `You're booked for your ${assignment.course.code} demo.\n\nWhen: ${describeSlot(slot)}`,
         link: link(slot),
+        ...selfConfirmation(assignment.id, actor.id),
       });
       return booking;
     });
@@ -154,20 +182,21 @@ export async function cancelBooking(actor: Actor, bookingId: string, now = new D
     assertRule(
       canCancelBooking({ now, assignmentStatus: slot.assignment.status, policy, booking: { ...booking, slotStartsAt: slot.startsAt }, allowance }),
     );
-    const leftAfter = budget.left - 1;
+    const spends = cancelSpendsChange(budget);
     await tx.booking.update({
       where: { id: bookingId },
-      data: { status: "CANCELLED", cancelledAt: now, cancelledById: actor.id },
+      data: { status: "CANCELLED", cancelledAt: now, cancelledById: actor.id, freeCancel: !spends },
     });
     await notify(tx, [actor.id], {
       type: "booking.cancelled",
       title: `Booking cancelled: ${slot.assignment.title}`,
       body: `You cancelled your demo slot:\n${describeSlot(slot)}\n\n${
-        leftAfter >= 0
+        spends
           ? "Remember to book a new slot before the demo window closes."
           : "You have no changes left, so ask your TA if you need a new slot."
       }`,
       link: link(slot),
+      ...selfConfirmation(booking.assignmentId, actor.id),
     });
     await notifyWaitlist(tx, booking.assignmentId, now);
   });
@@ -203,7 +232,7 @@ export async function rescheduleBooking(actor: Actor, bookingId: string, newSlot
 
       await tx.booking.update({
         where: { id: booking.id },
-        data: { status: "CANCELLED", cancelledAt: now, cancelledById: actor.id },
+        data: { status: "CANCELLED", cancelledAt: now, cancelledById: actor.id, replacedBy: "RESCHEDULED" },
       });
       const next = await tx.booking.create({
         data: {
@@ -217,6 +246,7 @@ export async function rescheduleBooking(actor: Actor, bookingId: string, newSlot
         title: `Demo rescheduled: ${assignment.title}`,
         body: `Your demo has moved.\n\nNew time: ${describeSlot(to)}\n\nPrevious: ${fmtRange(from.startsAt, from.endsAt, assignment.course.timezone)}`,
         link: link(to),
+        ...selfConfirmation(booking.assignmentId, actor.id),
       });
       await notifyWaitlist(tx, booking.assignmentId, now);
       return next;
@@ -303,6 +333,7 @@ export async function staffCancelBooking(actor: Actor, bookingId: string, reason
     });
     await notify(tx, [booking.studentId], {
       type: "booking.cancelled_by_staff",
+      groupKey: bookingKey(booking.assignmentId, booking.studentId),
       title: `Booking cancelled: ${booking.assignment.title}`,
       body: `Course staff cancelled your demo on ${fmtRange(booking.slot.startsAt, booking.slot.endsAt, booking.assignment.course.timezone)}.\nReason: ${reason.trim()}\nPlease book a new slot. This doesn't use any of your changes. If none of the remaining times work, send a request from the assignment page.`,
       link: `/courses/${booking.assignment.courseId}/assignments/${booking.assignmentId}`,
@@ -343,6 +374,7 @@ export async function staffPlaceStudent(
 
     const current = await tx.booking.findFirst({
       where: { assignmentId: assignment.id, studentId: args.studentId, status: { in: [...ACTIVE_BOOKING] } },
+      include: { slot: { select: { startsAt: true, endsAt: true } } },
     });
     if (current?.status === "COMPLETED") throw new DomainError(`${enrollment.user.name} has already completed this demo.`);
     if (current?.slotId === slot.id) throw new DomainError(`${enrollment.user.name} is already booked into that slot.`);
@@ -350,20 +382,22 @@ export async function staffPlaceStudent(
     await assertNoTimeClash(tx, args.studentId, slot, current?.id, `${enrollment.user.name} has another demo booked at that time.`);
 
     if (current) {
-      await tx.booking.update({ where: { id: current.id }, data: { status: "CANCELLED", cancelledAt: now, cancelledById: actor.id } });
+      await tx.booking.update({ where: { id: current.id }, data: { status: "CANCELLED", cancelledAt: now, cancelledById: actor.id, replacedBy: "MOVED_BY_STAFF" } });
     }
     const booking = await tx.booking.create({ data: { slotId: slot.id, assignmentId: assignment.id, studentId: args.studentId } });
     await tx.waitlistEntry.deleteMany({ where: { assignmentId: assignment.id, studentId: args.studentId } });
-    // Placing the student answers any open request for a new time.
-    const where = `Placed in ${fmtRange(slot.startsAt, slot.endsAt, assignment.course.timezone)}.`;
+    // An open request for a new time stays open so staff can still reply in their own words; it now points at the new booking.
     await tx.studentRequest.updateMany({
       where: { assignmentId: assignment.id, studentId: args.studentId, kind: "BOOKING_CHANGE", status: "OPEN" },
-      data: { status: "RESOLVED", response: where, resolvedById: actor.id, resolvedAt: now },
+      data: { bookingId: booking.id },
     });
     await notify(tx, [args.studentId], {
       type: "booking.placed_by_staff",
+      groupKey: bookingKey(assignment.id, args.studentId),
       title: `${current ? "Demo moved" : "Demo booked"} by staff: ${assignment.title}`,
-      body: `${actor.name} ${current ? "moved your demo" : "booked a demo for you"}. This doesn't use any of your changes.\n\nWhen: ${describeSlot(slot)}`,
+      body: `${actor.name} ${current ? "moved your demo" : "booked a demo for you"}. This doesn't use any of your changes.\n\n${current ? "New time" : "When"}: ${describeSlot(slot)}${
+        current ? `\n\nPrevious: ${fmtRange(current.slot.startsAt, current.slot.endsAt, assignment.course.timezone)}` : ""
+      }`,
       link: link(slot),
     });
     await audit(tx, actor, {

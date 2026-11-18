@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { DomainError } from "@/domain/result";
+import { checkRubric } from "@/domain/evaluation";
+import { assertRule, DomainError } from "@/domain/result";
 import { fmt, tzLabel } from "@/lib/time";
 import { db, type Tx } from "@/server/db";
 import { assertAssignmentRole, assertCourseRole, assertStaff, STAFF, type Actor } from "./access";
@@ -29,18 +30,18 @@ export const policyInput = z
     path: ["bookingOpensAt"],
   });
 
-export const assignmentInput = z
-  .object({
-    title: z.string().trim().min(1, "Title is required.").max(200),
-    description: z.string().trim().max(5000).default(""),
-    maxMarks: z.coerce.number().positive("Max marks must be positive.").max(10_000),
-    criteria: z.array(criterionInput).max(30),
-    policy: policyInput,
-  })
-  .refine((a) => a.criteria.reduce((s, c) => s + c.maxPoints, 0) <= a.maxMarks + 1e-9, {
-    message: "Rubric points add up to more than the max marks.",
-    path: ["criteria"],
-  });
+const assignmentFields = z.object({
+  title: z.string().trim().min(1, "Title is required.").max(200),
+  description: z.string().trim().max(5000).default(""),
+  maxMarks: z.coerce.number().positive("Max marks must be positive.").max(10_000),
+  criteria: z.array(criterionInput).max(30),
+  policy: policyInput,
+});
+
+export const assignmentInput = assignmentFields.superRefine((a, ctx) => {
+  const rubric = checkRubric(a.criteria, a.maxMarks);
+  if (!rubric.ok) ctx.addIssue({ code: "custom", message: rubric.reason, path: ["criteria"] });
+});
 
 export type AssignmentInput = z.input<typeof assignmentInput>;
 
@@ -87,7 +88,9 @@ function describeRuleChanges(
  * slots. Slot length, break and capacity apply only to slots added later.
  */
 export async function updateAssignment(actor: Actor, assignmentId: string, input: AssignmentInput) {
-  const data = assignmentInput.parse(input);
+  // The rubric check runs below, only when the rubric or max marks change, so an
+  // older assignment whose locked rubric doesn't add up can still be edited.
+  const data = assignmentFields.parse(input);
   return db.$transaction(async (tx) => {
     const { assignment } = await assertAssignmentRole(tx, actor, assignmentId, STAFF, { write: true });
     const tz = assignment.course.timezone;
@@ -110,6 +113,7 @@ export async function updateAssignment(actor: Actor, assignmentId: string, input
     const rubricChanged =
       current.length !== data.criteria.length ||
       current.some((c, i) => c.label !== data.criteria[i].label || c.maxPoints !== data.criteria[i].maxPoints);
+    if (rubricChanged || data.maxMarks !== assignment.maxMarks) assertRule(checkRubric(data.criteria, data.maxMarks));
     if (rubricChanged) {
       const scored = await tx.evaluationScore.count({ where: { criterion: { assignmentId } } });
       if (scored > 0) throw new DomainError("The rubric can't change after marking has started.", "CONFLICT");

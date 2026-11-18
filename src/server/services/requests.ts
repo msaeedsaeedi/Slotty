@@ -77,7 +77,7 @@ export async function resolveRequest(actor: Actor, requestId: string, decision: 
 /** Staff inbox of requests for a course. */
 export async function listRequests(actor: Actor, courseId: string, status: "OPEN" | "CLOSED" = "OPEN") {
   await assertCourseRole(db, actor, courseId, STAFF);
-  return db.studentRequest.findMany({
+  const requests = await db.studentRequest.findMany({
     where: { assignment: { courseId }, status: status === "OPEN" ? "OPEN" : { not: "OPEN" } },
     include: {
       student: { select: { id: true, name: true, email: true } },
@@ -88,6 +88,18 @@ export async function listRequests(actor: Actor, courseId: string, status: "OPEN
     orderBy: { createdAt: status === "OPEN" ? "asc" : "desc" },
     take: 200,
   });
+  // Show where the student stands now: the booking they asked from may since have been moved or cancelled.
+  if (requests.length === 0) return [];
+  const current = await db.booking.findMany({
+    where: {
+      status: { not: "CANCELLED" },
+      OR: requests.map((r) => ({ assignmentId: r.assignmentId, studentId: r.studentId })),
+    },
+    include: { slot: { include: { ta: { select: { name: true } } } } },
+  });
+  const key = (a: string, s: string) => `${a}:${s}`;
+  const byStudent = new Map(current.map((b) => [key(b.assignmentId, b.studentId), b]));
+  return requests.map((r) => ({ ...r, currentBooking: byStudent.get(key(r.assignmentId, r.studentId)) ?? null }));
 }
 
 export function openRequestCount(courseId: string) {

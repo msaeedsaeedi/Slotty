@@ -16,7 +16,7 @@ describe("admins are only admins", () => {
     const ta = await makeUser("Tara TA");
     const { course } = await setupCourse(ta);
 
-    await expect(createCourse(admin, { code: "X1", title: "X", term: "T", timezone: "Asia/Karachi", myRole: "TA" })).rejects.toThrow(/admin console/);
+    await expect(createCourse(admin, { code: "X1", title: "X", term: "T", timezone: "Asia/Karachi" })).rejects.toThrow(/admin console/);
     await expect(adminAssignStaff(admin, course.id, { email: admin.email, role: "TA" })).rejects.toThrow(/Slotty admin/);
 
     const r = await importRoster(ta, course.id, `email,role\n${admin.email},ta\nnew@test.edu,student`);
@@ -120,10 +120,10 @@ describe("home", () => {
   it("splits teaching and studying tasks for someone who does both", async () => {
     const ta = await makeUser("Tara TA");
     const sam = await makeUser("Sam Both");
+    // Sam TAs one course (where a past demo still needs attendance) and studies in another.
+    const other = await setupCourse(sam);
     const { course, slots } = await setupCourse(ta);
     await enroll(course.id, [sam]);
-    // Sam teaches another course, where a past demo still needs attendance.
-    const other = await setupCourse(sam);
     const kid = await makeUser("Kid");
     await enroll(other.course.id, [kid]);
     await bookSlot(kid, other.slots[0].id);
@@ -146,6 +146,18 @@ describe("adding one person", () => {
     await expect(addMember(ta, course.id, { email: "new@test.edu", role: "STUDENT" })).rejects.toThrow(/name/);
     expect(await addMember(ta, course.id, { email: "New@Test.edu", name: "Nia", role: "TA" })).toMatchObject({ invited: 1, name: "Nia" });
     await expect(addMember(ta, course.id, { email: "new@test.edu", role: "TA" })).rejects.toThrow(/already/);
-    await expect(addMember(ta, course.id, { email: "boss@test.edu", name: "Boss", role: "INSTRUCTOR" })).rejects.toThrow(/Only instructors/);
+    await expect(addMember(ta, course.id, { email: "boss@test.edu", name: "Boss", role: "INSTRUCTOR" })).rejects.toThrow(/Only a Slotty admin/);
+  });
+
+  it("keeps someone's section when they're added again without one", async () => {
+    const ta = await makeUser("Tara TA");
+    const { course } = await setupCourse(ta);
+    await addMember(ta, course.id, { email: "ann@test.edu", name: "Ann", role: "STUDENT", section: "A" });
+    await expect(addMember(ta, course.id, { email: "ann@test.edu", role: "STUDENT", section: "" })).rejects.toThrow(/already in this course/);
+    await importRoster(ta, course.id, "email,role\nann@test.edu,student");
+    const row = await db.enrollment.findFirstOrThrow({ where: { courseId: course.id, user: { email: "ann@test.edu" } } });
+    expect(row.section).toBe("A");
+    const r = await addMember(ta, course.id, { email: "ann@test.edu", role: "STUDENT", section: "B" });
+    expect(r).toMatchObject({ updated: 1, roleChanged: false });
   });
 });

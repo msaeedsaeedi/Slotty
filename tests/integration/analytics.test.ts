@@ -151,20 +151,24 @@ describe("feedback", () => {
 });
 
 describe("one-question surveys", () => {
-  it("asks at most once per 14 days, takes one anonymous answer, never asks admins", async () => {
+  it("asks each survey at most once a term and one survey per fortnight, takes one anonymous answer, never asks admins", async () => {
     const { s } = await student();
     const admin = await makeUser("Ada", { isAdmin: true });
     const now = new Date();
     await expect(answerSurvey(s, "booking", 5, now)).rejects.toThrow(/no survey/);
     expect(await claimSurvey(s, "booking", now)).toBe(true);
     expect(await claimSurvey(s, "booking", now)).toBe(false);
+    // Moving the demo right after booking doesn't bring a second survey.
+    expect(await claimSurvey(s, "reschedule", new Date(now.getTime() + 10 * 60_000))).toBe(false);
     expect(await claimSurvey(admin, "booking", now)).toBe(false);
     await answerSurvey(s, "booking", 4, now);
     await expect(answerSurvey(s, "booking", 5, now)).rejects.toThrow(/already/);
     const [r] = await db.surveyResponse.findMany();
     expect(r).toMatchObject({ prompt: "booking", score: 4, role: "student" });
     expect(r.createdAt.getUTCHours()).toBe(0);
-    expect(await claimSurvey(s, "booking", new Date(now.getTime() + 14 * DAY))).toBe(true);
+    expect(await claimSurvey(s, "booking", new Date(now.getTime() + 14 * DAY))).toBe(false);
+    expect(await claimSurvey(s, "reschedule", new Date(now.getTime() + 14 * DAY))).toBe(true);
+    expect(await claimSurvey(s, "booking", new Date(now.getTime() + 104 * DAY))).toBe(true);
     await expect(answerSurvey(s, "booking", 9, now)).rejects.toThrow(/1 to 5/);
   });
 });

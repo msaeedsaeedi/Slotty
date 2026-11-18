@@ -70,6 +70,20 @@ export function validateScores(scores: Score[], criteria: Criterion[]): RuleResu
   return allow;
 }
 
+/**
+ * A rubric must add up to exactly the max marks: fewer points would make full
+ * marks unreachable (6 + 3 out of 10 tops out at 9), more would let totals
+ * exceed the maximum. An assignment without a rubric is marked as one total.
+ */
+export function checkRubric(criteria: { maxPoints: number }[], maxMarks: number): RuleResult {
+  if (criteria.length === 0) return allow;
+  const total = Math.round(criteria.reduce((s, c) => s + c.maxPoints, 0) * 100) / 100;
+  if (Math.abs(total - maxMarks) < 1e-9) return allow;
+  return total > maxMarks
+    ? deny(`The rubric rows add up to ${total}, more than the max marks (${maxMarks}). Lower them or raise the max marks.`)
+    : deny(`The rubric rows add up to ${total}, but the max marks are ${maxMarks}, so full marks would be impossible. Make them add up to ${maxMarks}.`);
+}
+
 export function computeTotal(scores: Score[]): number {
   return Math.round(scores.reduce((sum, s) => sum + s.points, 0) * 100) / 100;
 }

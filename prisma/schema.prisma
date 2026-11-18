@@ -266,6 +266,12 @@ enum BookingStatus {
   NO_SHOW
 }
 
+/// Why a cancelled booking ended when a new one replaced it.
+enum BookingChange {
+  RESCHEDULED
+  MOVED_BY_STAFF
+}
+
 /// At most one active (non-cancelled) booking per student per assignment is
 /// enforced by the partial unique index `booking_one_active_per_student`
 /// (see the init migration).
@@ -277,6 +283,12 @@ model Booking {
   status        BookingStatus @default(BOOKED)
   cancelledAt   DateTime?
   cancelledById String?
+  /// The student cancelled with no changes left, so it didn't spend one; they
+  /// can't book again themselves until staff grant more (`changeBudget`).
+  freeCancel    Boolean       @default(false)
+  /// Set on the old half of a reschedule or staff move, so history shows what
+  /// happened instead of a plain "Cancelled".
+  replacedBy    BookingChange?
   reminder24hAt DateTime?
   reminder1hAt  DateTime?
   createdAt     DateTime      @default(now())
@@ -394,6 +406,10 @@ model Evaluation {
   reviewedById    String?
   reviewedAt      DateTime?
   reviewComment   String?
+  /// The marks the student last saw ({totalMarks, feedback, scores}), kept while
+  /// staff correct them after unlocking so the result doesn't vanish; cleared
+  /// when the marks are released again.
+  released        Json?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
@@ -429,12 +445,16 @@ model Notification {
   title     String
   body      String
   link      String?
+  /// Items about the same thing (one booking, one set of marks) share a key, so
+  /// a quick follow-up replaces an unread earlier one instead of stacking (`notify`).
+  groupKey  String?
   readAt    DateTime?
   createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt])
+  @@index([userId, groupKey])
 }
 
 model AuditLog {
@@ -472,9 +492,12 @@ model EmailOutbox {
   lastError String?
   sendAfter DateTime    @default(now())
   sentAt    DateTime?
+  /// Same as Notification.groupKey: a pending (delayed) email is replaced by a newer one with the same key.
+  groupKey  String?
   createdAt DateTime    @default(now())
 
   @@index([status, sendAfter])
+  @@index([groupKey])
 }
 
 /**

@@ -41,7 +41,7 @@ One \code{DemoPolicy} per assignment (\src{prisma/schema.prisma}). Staff set it 
   One active booking per student per assignment & \code{bookSlot} check + partial unique index \code{booking_one_active_per_student} & ``You already have a booking for this assignment --- reschedule it instead.''\\
   No overlapping demos across courses & \code{bookings.assertNoTimeClash} & ``You already have another demo booked at that time.''\\
   Change budget, reschedule & \code{canReschedule} & ``You have used all N changes.''\\
-  Change budget, rebook after a self-cancel & \code{canBookSlot} (\code{budget}) & ``You've used all your changes for this assignment, so you can't book again yourself. Ask your TA for a slot.''\\
+  Change budget, rebook after cancelling with none left & \code{canBookSlot} (\code{budget.lockedOut}) & ``You've used all your changes for this assignment, so you can't book again yourself. Ask your TA for a slot.''\\
   Student cancel allowed & \code{canCancelBooking} & ``Cancellations are not allowed for this assignment. Ask your TA if you can't attend.''\\
   Staff can cancel any upcoming booking, ignoring the freeze, but must give a reason & \code{staffCancelBooking} & ``Give a reason --- it's sent to the student.''\\
   Attendance only once the demo has started (resetting to pending is always allowed) & \code{canMarkAttendance} & ``You can record attendance once the demo has started.''\\
@@ -58,13 +58,14 @@ One budget per student per assignment (\code{changeBudget} in \code{booking-rule
 
 \begin{itemize}
   \item \code{allowed} = \code{maxReschedules} + the student's \code{BookingAllowance.extraChanges}.
-  \item \code{used} = the number of this student's bookings for the assignment with \code{status = CANCELLED} \textbf{and} \code{cancelledById = student}. That covers self-cancellations and the old half of every reschedule.
-  \item A reschedule needs \code{left > 0}. Cancelling is allowed while \code{allowStudentCancel} is on, but it spends a change. Rebooking after that is allowed while \code{used} $\le$ \code{allowed}.
+  \item \code{used} = the number of this student's bookings for the assignment with \code{status = CANCELLED}, \code{cancelledById = student} and \code{freeCancel = false}. That covers self-cancellations and the old half of every reschedule.
+  \item A reschedule needs \code{left > 0}. Cancelling is allowed while \code{allowStudentCancel} is on. With a change left it spends one, and rebooking afterwards is free. \textbf{With none left} it spends nothing (\code{cancelSpendsChange}; the booking is marked \code{freeCancel}), so \code{used} never exceeds \code{allowed}, but the student is \code{lockedOut}: they can't book again themselves until staff place them or grant an extra change. A granted change then lets them rebook and stays a real spare.
   \item Staff cancellations, slot cancellations and staff moves never count.
-  \item The cancel confirmation says exactly what cancelling costs (\code{cancelConsequence}).
+  \item The cancel and reschedule confirmations say exactly what they cost (\code{cancelConsequence}, \code{rescheduleConsequence}), including ``This uses your last change''.
+  \item The student's page offers \ui{Reschedule} (and the slot picker, even from a \code{?reschedule=1} link) only when a move is possible.
 \end{itemize}
 
-Example with \code{maxReschedules = 1}: book A → cancel (1/1 used) → book B \checkmark → reschedule $\times$ → cancel (2 used) → book again $\times$.
+Example with \code{maxReschedules = 2}: book A → reschedule to B (1/2) → cancel (2/2) → book C \checkmark\ → cancel (none left: still 2/2, locked out) → book $\times$ → staff grant 1 extra (2/3) → book D \checkmark\ → reschedule \checkmark\ (3/3).
 
 \subsection[Allowances (\texttt{BookingAllowance})]{Allowances (\code{BookingAllowance})}
 
@@ -84,7 +85,7 @@ The freeze window, capacity and draft slots still apply.
   \thead{Operation} & \thead{Service} & \thead{Rule}\\
   \midrule
   \endhead
-  Place or move a student & \code{bookings.staffPlaceStudent} & Ignores the freeze window and booking dates. Over capacity only when ``allow over capacity'' is ticked. Refused for completed demos, past or cancelled slots, and time clashes. The old booking is cancelled by staff, so no change is used. Answers the student's open booking request.\\
+  Place or move a student & \code{bookings.staffPlaceStudent} & Ignores the freeze window and booking dates. Over capacity only when ``allow over capacity'' is ticked. Refused for completed demos, past or cancelled slots, and time clashes. The old booking is cancelled by staff, so no change is used. An open booking request stays open (now pointing at the new booking) so staff can reply in their own words; the request card always shows the student's current booking. The old booking is marked \code{replacedBy = MOVED_BY_STAFF}, so the student's history says ``Moved by staff''; a student's own reschedule is marked \code{RESCHEDULED}. The student's notice gives the new and the previous time.\\
   Let a no-show book again & \code{bookings.allowRebookAfterNoShow} & Only \code{NO_SHOW} bookings whose evaluation isn't submitted. No change is used.\\
   Exception (\code{BookingAllowance}) & \code{bookings.setAllowance} & 0--20 extra changes and/or late booking. Setting both to zero removes it. The student is notified.\\
   Waitlist & \code{waitlist.joinWaitlist}, \code{notifyWaitlist} & Only while the assignment is open and the student has no booking. When a seat frees up (cancel, reschedule, staff cancel or move, more capacity, new published slots), every waiting student is notified, at most once per 30 minutes. First to book gets it. The entry is removed when they book.\\
@@ -153,7 +154,7 @@ Limits: push arrives even when the app is closed, but the device needs a connect
 \section[Assignment rules]{Assignment rules (\src{src/server/services/assignments.ts})}
 
 \begin{itemize}
-  \item Rubric points must add up to $\le$ \code{maxMarks}. The rubric can't change once any score has been saved.
+  \item Rubric points must add up to \textbf{exactly} \code{maxMarks} (\code{checkRubric} in \src{src/domain/evaluation.ts}): fewer would make full marks impossible (6 + 3 of 10 tops out at 9), more would let totals pass the maximum. No rubric means marking one total. Edits check this only when the rubric or max marks change, so an older assignment whose locked rubric doesn't add up can still be edited. The rubric can't change once any score has been saved.
   \item \code{maxMarks} can't go below the highest total already given.
   \item The demo window can't be changed so that it no longer covers booked slots. Unbooked slots left outside the window are reported so staff can delete them.
   \item Slot length, break and capacity only apply to slots added later.
@@ -178,21 +179,26 @@ Limits: push arrives even when the app is closed, but the device needs a connect
   \item Only \code{DRAFT} and \code{RETURNED} can be edited. Every rubric row must be scored to submit, and the total must be between 0 and \code{maxMarks}.
   \item What an \textbf{instructor} (or admin) submits is final: they are the reviewer, so it skips \code{SUBMITTED}.
   \item Marking \textbf{before the demo starts} needs a reason (\code{earlyMarkReason}, audited as \code{evaluation.early}).
-  \item \textbf{Recorded marks pin the booking.} A booking with marks (any total, or submitted/final) can't be cancelled or moved by the student or staff, and its slot can't be cancelled. Staff \ui{Clear marks} first (draft only, with a reason, audited as \code{evaluation.clear}; submitted or final marks are unlocked first).
+  \item \textbf{Recorded marks pin the booking.} A booking with marks (any total, or submitted/final) can't be cancelled or moved by the student or staff, and its slot can't be cancelled. The student's page hides \ui{Cancel booking} and \ui{Reschedule} and says why (\code{isMyBookingMarked}). Staff \ui{Clear marks} first (draft only, with a reason, audited as \code{evaluation.clear}; submitted or final marks are unlocked first).
   \item The marking sheet autosaves drafts (\code{saveDraft}); the evaluation is created on the first save, never just by viewing. A score for a booked student whose demo has started records them as present. A no-show can't be marked until the no-show is undone.
   \item Marking a student \textbf{with no booking} needs a reason. It's stored on the evaluation (\code{noBookingReason}), flagged in lists, and audited as \code{evaluation.no_booking}.
   \item A total override needs a note. Attendance locks once the evaluation is \code{SUBMITTED} or \code{FINALIZED}.
   \item Only instructors review. Unlocking needs a reason (in a course without an instructor, the TA can unlock).
-  \item Students see \code{FINALIZED} results only, never \code{privateNotes}.
+  \item Students see released results only, never drafts or \code{privateNotes}. Unlocking keeps a copy of what the student was shown (\code{Evaluation.released}); until the marks are released again the student keeps seeing it, marked as being corrected, together with any marks question. Releasing clears the copy.
+  \item Releasing marks (when submitting is final) asks for confirmation first, and every message uses one word for it: ``released''. Otherwise marks are ``sent for review''.
+  \item The marking sheet shows the total as ``--'' while any mark is invalid (non-numeric or outside 0 to the row's maximum).
 \end{itemize}
 
 \section[Access]{Access (\src{src/server/services/access.ts})}
 
 \begin{itemize}
   \item Every service takes an \code{Actor} and checks the role itself: \code{assertCourseRole}, \code{assertStaff}, \code{assertAdmin}, \code{assertPlatform}.
-  \item \textbf{One kind of staff per person.} A TA can be a student elsewhere, but an instructor is never a TA in another course and a TA never an instructor (\src{src/domain/roles.ts}). Imports skip such rows with a reason; other paths refuse.
+  \item \textbf{One kind of staff per person; students are never instructors.} A TA can be a student elsewhere, but an instructor is never a TA or a student in any course, and a TA or student is never an instructor, not even by promotion in their own course (\code{canTakeRole}, \src{src/domain/roles.ts}). Imports skip such rows with a reason; other paths refuse.
+  \item \textbf{Only admins name instructors} (\code{canManageInstructors}). Adding, changing, demoting or removing an instructor (\ui{Add someone}, CSV import, \ui{Remove}) is refused for everyone else, instructors included; the role list and import help show \code{instructor} only to admins. Admins add instructors from the console (\ui{New course}, \ui{Assign staff}).
+  \item \textbf{Self-service courses are run by a TA} (\code{canCreateCourse}). \route{/courses/new} always makes the creator the course's TA; there is no role choice, and the server ignores one. It is open to TAs and to new staff who aren't in any course yet; students (in a course, TA nowhere) and instructors (who can't also be TAs) are refused, and \ui{New course} is hidden for them.
+  \item \textbf{The instructor manages the course; a TA only when there is none} (\code{canManageCourse}, \code{assertCourseManager}). Course details and archiving need it; \ui{Settings} is hidden otherwise. Admins count as instructors.
   \item \textbf{Admins are only admins.} They count as instructors in any course (to manage it), but are never enrolled: roster imports skip admin emails, \ui{Assign staff} and \ui{Add someone} refuse them, they can't create a course for themselves (they create it from the console and name its instructor or TA), and a course member can't be made admin.
-  \item Only instructors can add or remove instructors. Nobody can remove themselves or demote themselves through a CSV import.
+  \item Nobody can remove themselves or demote themselves through a CSV import. Adding someone already in the course with a blank section keeps their section (a blank never wipes it), and says they're already there.
   \item \textbf{Archived courses are read-only.} Mutations pass \code{{ write: true }} to \code{assertCourseRole} / \code{assertStaff} / \code{assertAssignmentRole}, or call \code{assertCourseWritable}. Only restoring the course is allowed.
   \item Removing a student cancels their upcoming bookings and notifies them. Removing staff is refused while they host upcoming slots.
   \item Admins disabling an account can also release that user's upcoming bookings.
@@ -220,6 +226,15 @@ The account page (\route{/account}) shows only what applies to the user's roles:
 
 Each notification creates an in-app entry and, for people who have activated their account, an email (outbox). Invited people get only their invite email; everything else waits in-app for when they join. Both are written in the \textbf{same transaction} as the change. The worker (\code{bun run worker}) sends emails and queues reminders.
 
+How much people are told (\src{src/domain/notifications.ts}, ADR-018):
+\begin{itemize}
+  \item \textbf{Not about their own actions.} A student's own booking, reschedule or cancel creates no in-app item or push (the page already says so). One confirmation email for where they end up goes out \code{SELF_EMAIL_DELAY_MINUTES} (10) later.
+  \item \textbf{Supersede, don't stack.} Items about the same thing share a \code{groupKey} (one student's booking for an assignment; one evaluation's marks). A new one removes unread items and unsent emails with the same key from the last \code{SUPERSEDE_MINUTES} (15). Booking emails list what they replaced (``Earlier: …'').
+  \item \textbf{Coalesced marks.} Marks emails wait 5 minutes. Corrected marks released before the student saw the first release (\code{unseenEarlier}) become one ``Marks released'' item with the final marks; later corrections are ``Marks updated'' with the old total.
+  \item \textbf{The bell counts what needs the person} (\code{needsAction}): \code{course.enrolled}, \code{slots.added}, \code{assignment.rules_changed}, \code{slot.venue_changed} and \code{agenda.daily} are listed but not counted. The list is grouped by assignment (\code{groupByAssignment}).
+  \item Times in messages name the zone as the UI does (\code{tzLabel}: ``Pakistan time'').
+\end{itemize}
+
 {\tablefont
 \begin{xltabular}{\linewidth}{@{}P{30mm} P{30mm} L@{}}
   \toprule
@@ -233,15 +248,15 @@ Each notification creates an in-app entry and, for people who have activated the
   \code{slots.added} & students without a booking (not waitlisted) & Slots added while booking is open\\
   \code{assignment.published} & students without a booking & Booking is open: on publish or reopen, or by the worker at \code{bookingOpensAt}\\
   \code{assignment.rules_changed} & booked students & Freeze window, changes allowed or cancel permission changed\\
-  \code{booking.confirmed} & student & Booked\\
-  \code{booking.rescheduled} & student & Rescheduled\\
-  \code{booking.cancelled} & student & Student cancelled\\
+  \code{booking.confirmed} & student (email only, delayed) & Booked\\
+  \code{booking.rescheduled} & student (email only, delayed) & Rescheduled\\
+  \code{booking.cancelled} & student (email only, delayed) & Student cancelled\\
   \code{booking.cancelled_by_staff} & student & Staff cancelled their booking\\
   \code{slot.cancelled} & booked students & Staff cancelled the slot\\
   \code{slot.venue_changed} & booked students & Venue changed\\
   \code{booking.reminder} & student & 24h and 1h before (worker)\\
   \code{booking.no_show} & student & Marked as no-show\\
-  \code{booking.placed_by_staff} & student & Staff booked or moved them\\
+  \code{booking.placed_by_staff} & student & Staff booked or moved them, with the previous time\\
   \code{booking.rebook_allowed} & student & Staff cleared a no-show\\
   \code{booking.allowance} & student & Exception granted\\
   \code{waitlist.slot_available} & waiting students & A seat freed up\\
@@ -252,7 +267,7 @@ Each notification creates an in-app entry and, for people who have activated the
   \code{agenda.daily} & host (email only) & Morning list of today's demos\\
   \code{evaluation.returned} & evaluator (TA) & Instructor returned an evaluation\\
   \code{evaluation.finalized} & student & Marks released; the body has the total, each rubric row and the feedback\\
-  \code{evaluation.updated} & student & Corrected marks released after an unlock, with the old total\\
+  \code{evaluation.updated} & student & Corrected marks released after an unlock, with the old total (only once the first release was seen)\\
   \bottomrule
 \end{xltabular}}
 
@@ -271,7 +286,7 @@ Each notification creates an in-app entry and, for people who have activated the
   Times & A client timestamp is used only if it is within the last hour (\code{eventTime}), else the server's time.\\
   Retention & Raw events 90 days, daily totals 400 days (about 13 months), deleted hourly by the worker (\code{retentionCutoffs}, \code{rollupAndPrune}).\\
   Feedback & A message (up to 2000 characters) is required, the rating 1--5 is optional; at most 5 per person per hour (\code{canSendFeedback}, counted in memory so nothing links a message to its sender). Stored without the user, with the time rounded to the hour.\\
-  Surveys & One question each after a booking, a reschedule and a mark submission (\code{SURVEY_PROMPTS}); never for admins or platform accounts. Asked at most once per question every 14 days, answered or not (\code{canPromptSurvey}). An answer (1--5, or dismissed) counts only within 24 hours of being asked and only once (\code{canAnswerSurvey}). Responses are stored without the user, dated to the day; \code{SurveyPrompt} keeps only when each person was asked and whether they answered.\\
+  Surveys & One question each after a booking, a reschedule and a mark submission (\code{SURVEY_PROMPTS}); never for admins or platform accounts. Each question at most once every 90 days and no survey at all within 14 days of another, answered or not (\code{canPromptSurvey}), so one demo never brings two. An answer (1--5, or dismissed) counts only within 24 hours of being asked and only once (\code{canAnswerSurvey}). Responses are stored without the user, dated to the day; \code{SurveyPrompt} keeps only when each person was asked and whether they answered.\\
   \bottomrule
 \end{xltabular}}
 

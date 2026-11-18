@@ -12,9 +12,15 @@ export async function submitManyAction(_: ActionState, fd: FormData): Promise<Ac
     if (ids.length === 0) return "Nothing selected.";
     const user = await requireUser();
     const res = await submitEvaluations(user, ids);
-    const finalized = res.filter((r) => r.status === "FINALIZED").length;
+    const released = res.filter((r) => r.status === "FINALIZED").length;
+    const review = res.length - released;
+    const marks = (n: number) => `${n} mark${n === 1 ? "" : "s"}`;
     const survey = (await claimSurvey(user, "marking")) ? "marking" : undefined;
-    return { message: `${res.length} submitted${finalized ? ` (${finalized} finalized)` : ""}.`, survey };
+    // One word per outcome: "released" when students can see them, "sent for review" otherwise.
+    const message = [released ? `${marks(released)} released to ${released === 1 ? "the student" : "students"}` : "", review ? `${marks(review)} sent for review` : ""]
+      .filter(Boolean)
+      .join(", ");
+    return { message: `${message}.`, survey };
   });
 }
 
@@ -22,7 +28,7 @@ export async function reviewAction(_: ActionState, fd: FormData): Promise<Action
   return run(async () => {
     const decision = str(fd, "decision") === "return" ? "return" : "finalize";
     await reviewEvaluation(await requireUser(), str(fd, "evaluationId"), decision, str(fd, "comment"));
-    return decision === "finalize" ? "Finalized — marks released." : "Returned to the TA.";
+    return decision === "finalize" ? "Marks released to the student." : "Returned to the TA.";
   });
 }
 
@@ -38,7 +44,7 @@ export async function finalizeManyAction(_: ActionState, fd: FormData): Promise<
     const ids = fd.getAll("evaluationId").map(String);
     if (ids.length === 0) return "Nothing to finalize.";
     const n = await finalizeMany(await requireUser(), ids);
-    return `${n} finalized — marks released.`;
+    return `${n} mark${n === 1 ? "" : "s"} released to students.`;
   });
 }
 

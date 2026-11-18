@@ -1,7 +1,7 @@
 import webpush from "web-push";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/server/db";
-import { bookSlot } from "@/server/services/bookings";
+import { bookSlot, staffPlaceStudent } from "@/server/services/bookings";
 import { savePushSubscription } from "@/server/services/push";
 import { enroll, inHours, makeUser, resetDb, setupCourse } from "./helpers";
 
@@ -29,10 +29,13 @@ describe("push notifications (PWA-02, PWA-03, PWA-07)", () => {
     await savePushSubscription(ann, session.tokenHash, sub(1), "Phone");
     await savePushSubscription(ann, session.tokenHash, sub(1), "Phone"); // re-subscribing doesn't duplicate
 
-    await bookSlot(ann, slots[0].id);
+    // Her own booking isn't pushed back to her (no in-app item); a staff move is.
+    const b = await bookSlot(ann, slots[0].id);
+    expect(await db.pushMessage.count()).toBe(0);
+    await staffPlaceStudent(ta, { assignmentId: b!.assignmentId, studentId: ann.id, slotId: slots[1].id });
     const messages = await db.pushMessage.findMany();
     expect(messages).toHaveLength(1);
-    expect(messages[0].title).toMatch(/Demo booked/);
+    expect(messages[0].title).toMatch(/Demo moved by staff/);
   });
 
   it("only accepts the caller's own session, and signing out removes the device", async () => {

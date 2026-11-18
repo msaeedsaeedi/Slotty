@@ -29,6 +29,14 @@ The schema has 27 models and 12 enums in \src{prisma/schema.prisma}; migrations 
   they were asked and whether they answered, never the answer (\cref{sec:rules-usage}).
 \end{note}
 
+\paragraph{History and grouping columns} (expand-only migrations, Nov 2026):
+\begin{itemize}
+  \item \code{Booking.freeCancel}: the student cancelled with no changes left, so it didn't spend one and locks them out of rebooking (\cref{sec:change-budget}).
+  \item \code{Booking.replacedBy} (\code{BookingChange}: \code{RESCHEDULED}, \code{MOVED_BY_STAFF}): set on the old half of a reschedule or staff move; null for plain cancellations and older rows.
+  \item \code{Evaluation.released} (JSON): the marks the student was shown, kept while unlocked marks are corrected; cleared when they're released again.
+  \item \code{Notification.groupKey}, \code{EmailOutbox.groupKey}: items about the same booking or marks, so a quick follow-up replaces unread items and unsent emails (ADR-018).
+\end{itemize}
+
 \begin{todo}
   \begin{itemize}
     \item An entity-relationship diagram per group (TikZ, \code{er} styles to add to

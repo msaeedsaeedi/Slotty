@@ -3,7 +3,7 @@ import { db } from "@/server/db";
 import { acceptInvite, authenticate } from "@/server/services/accounts";
 import { createCourse, importRoster } from "@/server/services/courses";
 import { cancelSlot, changeVenue, listOpenSlots } from "@/server/services/slots";
-import { bookSlot, cancelBooking, markAttendance, rescheduleBooking } from "@/server/services/bookings";
+import { bookSlot, cancelBooking, loadChangeState, markAttendance, rescheduleBooking, setAllowance } from "@/server/services/bookings";
 import {
   getMyResult,
   getOrCreateEvaluation,
@@ -22,7 +22,7 @@ beforeEach(resetDb);
 describe("roster import & invites", () => {
   it("creates invited accounts from CSV and lets them set a password", async () => {
     const ta = await makeUser("Tara TA");
-    const course = await createCourse(ta, { code: "CS1", title: "C", term: "T", timezone: "UTC", myRole: "TA" });
+    const course = await createCourse(ta, { code: "CS1", title: "C", term: "T", timezone: "UTC" });
     const existing = await makeUser("Existing Student");
 
     const res = await importRoster(ta, course.id, `email,name\nnew.student@uni.edu,New Student\n${existing.email},Existing Student\nbad-email`);
@@ -45,7 +45,7 @@ describe("roster import & invites", () => {
   it("stops TAs adding instructors and students importing at all", async () => {
     const ta = await makeUser("Tara TA");
     const student = await makeUser("Sam Student");
-    const course = await createCourse(ta, { code: "CS1", title: "C", term: "T", timezone: "UTC", myRole: "TA" });
+    const course = await createCourse(ta, { code: "CS1", title: "C", term: "T", timezone: "UTC" });
     await enroll(course.id, [student]);
     await expect(importRoster(ta, course.id, "email,role\nboss@uni.edu,instructor")).rejects.toThrow(/instructors/);
     await expect(importRoster(student, course.id, "email\nx@uni.edu")).rejects.toThrow(/permission/);
@@ -77,10 +77,34 @@ describe("booking", () => {
     await cancelBooking(ann, moved!.id);
     expect(await db.booking.count({ where: { studentId: ann.id, status: "BOOKED" } })).toBe(0);
 
-    const kinds = await db.notification.findMany({ where: { userId: ann.id }, select: { type: true } });
-    expect(kinds.map((k) => k.type)).toEqual(
-      expect.arrayContaining(["booking.confirmed", "booking.rescheduled", "booking.cancelled"]),
-    );
+    // Her own actions aren't echoed in-app; one delayed email carries where she ended up, with a short history.
+    expect(await db.notification.count({ where: { userId: ann.id } })).toBe(0);
+    const emails = await db.emailOutbox.findMany({ where: { to: ann.email } });
+    expect(emails).toHaveLength(1);
+    expect(emails[0].subject).toMatch(/^Booking cancelled/);
+    expect(emails[0].text).toMatch(/Earlier: .*Demo rescheduled.*Demo booked|Earlier: .*Demo booked.*Demo rescheduled/);
+    expect(emails[0].sendAfter.getTime()).toBeGreaterThan(Date.now() + 5 * 60_000);
+  });
+
+  it("doesn't spend a change on a cancel made with none left, and an extra change is a real spare (B2)", async () => {
+    const ta = await makeUser("Tara TA");
+    const ann = await makeUser("Ann");
+    const { course, assignment, slots } = await setupCourse(ta, { maxReschedules: 2 });
+    await enroll(course.id, [ann]);
+    const b1 = await bookSlot(ann, slots[0].id);
+    const b2 = await rescheduleBooking(ann, b1!.id, slots[1].id); // 1 used
+    await cancelBooking(ann, b2!.id); // 2 used
+    const b3 = await bookSlot(ann, slots[2].id); // rebooking after a paid cancel is free
+    await cancelBooking(ann, b3!.id); // none left: free, but locks her out
+    const state = async () => (await loadChangeState(db, assignment.id, ann.id, (await db.demoPolicy.findUniqueOrThrow({ where: { assignmentId: assignment.id } })))).budget;
+    expect(await state()).toMatchObject({ used: 2, allowed: 2, left: 0, lockedOut: true });
+    await expect(bookSlot(ann, slots[3].id)).rejects.toThrow(/used all your changes/);
+
+    await setAllowance(ta, assignment.id, ann.id, { extraChanges: 1, lateBooking: false });
+    const b4 = await bookSlot(ann, slots[3].id);
+    expect(await state()).toMatchObject({ used: 2, allowed: 3, left: 1, lockedOut: false });
+    await rescheduleBooking(ann, b4!.id, slots[0].id); // the spare is real
+    expect(await state()).toMatchObject({ used: 3, allowed: 3, left: 0 });
   });
 
   it("gives a capacity-1 slot to exactly one of 20 simultaneous students", async () => {
