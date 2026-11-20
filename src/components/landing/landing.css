@@ -1,0 +1,763 @@
+/*
+ * Slotty landing page only: "the departure board". Every rule is scoped to
+ * [data-theme="slotty-landing"] (the wrapper in landing-page.tsx) and sits in the components
+ * layer, so Tailwind utilities on the same element win and nothing reaches the app.
+ *
+ * Content is always visible as rendered by the server. Motion is an enhancement: anything that
+ * moves runs only under html[data-lp-js] (set by MotionFlag after hydration) when the visitor
+ * allows motion.
+ */
+
+@layer components {
+  [data-theme="slotty-landing"] {
+    --board: #0d0d0c;
+    --panel: #161614;
+    --panel-2: #1f1e1b;
+    --line: #2a2925;
+    --line-strong: #3a3833;
+    --text: #f1eee6; /* 16.8:1 on board, 14.4:1 on panel-2 */
+    --text-2: #b5b0a4; /* 9.0:1 on board, 7.7:1 on panel-2 */
+    --text-3: #8d8876; /* was #86816F: 4.27:1 on panel-2; now 4.70:1 (5.10 panel, 5.48 board) */
+    --amber: #ffb224; /* act now: the one primary action */
+    --amber-ink: #1a1200; /* 10.3:1 on amber */
+    --go: #3dd68c; /* booked, confirmed, released: 8.9:1 on panel-2 */
+    --stop: #ff5c4d; /* full, locked, conflict: 5.5:1 on panel-2 */
+
+    --lp-sans: var(--lp-font-sans), ui-sans-serif, system-ui, sans-serif;
+    --lp-mono: var(--lp-font-mono), ui-monospace, monospace;
+    --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+    position: relative;
+    color-scheme: dark;
+    background: var(--board);
+    color: var(--text-2);
+    font-family: var(--lp-sans);
+    font-size: 17px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Film grain over everything: keeps the dark surfaces from reading as flat plastic. */
+  [data-theme="slotty-landing"]::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    pointer-events: none;
+    opacity: 0.07;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  [data-theme="slotty-landing"] section[id] {
+    scroll-margin-top: 80px;
+  }
+
+  [data-theme="slotty-landing"] .lp-container {
+    width: 100%;
+    max-width: calc(1120px + 80px);
+    margin-inline: auto;
+    padding-inline: 20px;
+  }
+
+  @media (min-width: 1024px) {
+    [data-theme="slotty-landing"] .lp-container {
+      padding-inline: 40px;
+    }
+  }
+
+  /* ── Type ── */
+
+  [data-theme="slotty-landing"] .lp-h1,
+  [data-theme="slotty-landing"] .lp-h2 {
+    font-family: var(--lp-sans);
+    font-stretch: 75%;
+    font-weight: 680;
+    letter-spacing: -0.02em;
+    line-height: 0.92;
+    color: var(--text);
+    text-wrap: balance;
+  }
+
+  [data-theme="slotty-landing"] .lp-h1 {
+    font-size: clamp(54px, 8.2vw, 116px);
+  }
+
+  [data-theme="slotty-landing"] .lp-h2 {
+    font-size: clamp(38px, 4.4vw, 60px);
+  }
+
+  /* The hero's background mark: a giant, faint split-flap 10:15 behind the headline. */
+  [data-theme="slotty-landing"] .lp-ghost {
+    display: flex;
+    gap: 0.06em;
+    font-family: var(--lp-mono);
+    font-stretch: 87.5%;
+    font-weight: 600;
+    font-size: clamp(80px, 15.5vw, 224px);
+    line-height: 1;
+    color: #1d1c1a;
+    user-select: none;
+  }
+
+  [data-theme="slotty-landing"] .lp-ghost > span {
+    position: relative;
+    display: grid;
+    width: 0.8em;
+    height: 1.24em;
+    place-items: center;
+    border-radius: 0.07em;
+    background: linear-gradient(to bottom, #151513 0 50%, #121211 50% 100%);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.035),
+      0 0 0 1px rgb(255 255 255 / 0.02);
+  }
+
+  [data-theme="slotty-landing"] .lp-ghost > span::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: 50%;
+    height: max(1px, 0.008em);
+    background: #0a0a09;
+  }
+
+  [data-theme="slotty-landing"] .lp-ghost > .lp-ghost-colon {
+    width: 0.36em;
+    background: none;
+    box-shadow: none;
+  }
+
+  [data-theme="slotty-landing"] .lp-ghost > .lp-ghost-colon::after {
+    display: none;
+  }
+
+  [data-theme="slotty-landing"] .lp-lede {
+    font-size: 17px;
+    line-height: 1.5;
+    color: var(--text-2);
+    text-wrap: pretty;
+  }
+
+  @media (min-width: 640px) {
+    [data-theme="slotty-landing"] .lp-lede {
+      font-size: 19px;
+    }
+  }
+
+  /* Board content: times, rooms, statuses, codes. */
+  [data-theme="slotty-landing"] .lp-mono {
+    font-family: var(--lp-mono);
+    font-stretch: 87.5%;
+    font-variant-numeric: tabular-nums;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Controls ── */
+
+  [data-theme="slotty-landing"] :focus-visible {
+    outline: 2px solid var(--text);
+    outline-offset: 3px;
+    border-radius: 8px;
+  }
+
+  [data-theme="slotty-landing"] .lp-btn {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    padding-inline: 1rem;
+    font-family: var(--lp-sans);
+    font-stretch: 106%;
+    font-weight: 600;
+    font-size: 15px;
+    line-height: 1;
+    white-space: nowrap;
+    transition:
+      transform 140ms var(--ease-out),
+      box-shadow 140ms var(--ease-out),
+      background-color 140ms ease,
+      border-color 140ms ease,
+      color 140ms ease;
+  }
+
+  /* Grounded: hover changes light, not position; a press sinks into the surface. */
+  [data-theme="slotty-landing"] .lp-btn:active {
+    transform: scale(0.97);
+    transition-duration: 60ms;
+  }
+
+  [data-theme="slotty-landing"] .lp-btn-arrow {
+    transition: transform 160ms var(--ease-out);
+  }
+
+  [data-theme="slotty-landing"] .lp-btn:hover .lp-btn-arrow {
+    transform: translateX(3px);
+  }
+
+  /* The one primary action on the page: Sign in. Lit from above, pressed in on click. */
+  [data-theme="slotty-landing"] .lp-btn-primary {
+    background: var(--amber);
+    color: var(--amber-ink);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.55),
+      inset 0 -1.5px 0 rgb(122 70 0 / 0.35),
+      0 1px 0 rgb(0 0 0 / 0.6),
+      0 4px 14px -6px rgb(255 178 36 / 0.35);
+  }
+
+  [data-theme="slotty-landing"] .lp-btn-primary:hover {
+    background: #ffbe45;
+  }
+
+  [data-theme="slotty-landing"] .lp-btn-primary:active {
+    background: #f5a815;
+    box-shadow:
+      inset 0 2px 4px rgb(122 70 0 / 0.45),
+      inset 0 -1px 0 rgb(255 255 255 / 0.2),
+      0 0 0 rgb(0 0 0 / 0),
+      0 2px 8px -6px rgb(255 178 36 / 0.3);
+  }
+
+  /* A sheen that sweeps across once on hover. */
+  [data-theme="slotty-landing"] .lp-btn-primary::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(105deg, transparent 38%, rgb(255 255 255 / 0.45) 50%, transparent 62%);
+    transform: translateX(-130%);
+  }
+
+  [data-theme="slotty-landing"] .lp-btn-quiet {
+    border: 1px solid var(--line-strong);
+    background: linear-gradient(to bottom, #24231f, #1a1916);
+    color: var(--text);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.07),
+      0 1px 2px rgb(0 0 0 / 0.6);
+  }
+
+  [data-theme="slotty-landing"] .lp-btn-quiet:hover {
+    border-color: #4c4942;
+    background: linear-gradient(to bottom, #2a2925, #1f1e1b);
+  }
+
+  [data-theme="slotty-landing"] .lp-btn-quiet:active {
+    box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.5);
+  }
+
+  [data-theme="slotty-landing"] .lp-btn-lg {
+    min-height: 46px;
+    padding-inline: 1.4rem 1.25rem;
+    font-size: 15px;
+  }
+
+  [data-theme="slotty-landing"] .lp-btn-sm {
+    min-height: 38px;
+    padding-inline: 0.95rem;
+    font-size: 14px;
+  }
+
+  [data-theme="slotty-landing"] .lp-link {
+    color: var(--text);
+    text-decoration: underline;
+    text-decoration-color: var(--line-strong);
+    text-underline-offset: 4px;
+    transition: text-decoration-color 120ms ease;
+  }
+
+  [data-theme="slotty-landing"] .lp-link:hover {
+    text-decoration-color: var(--text);
+  }
+
+  [data-theme="slotty-landing"] .lp-link-arrow {
+    display: inline-block;
+    transition: transform 160ms var(--ease-out);
+  }
+
+  [data-theme="slotty-landing"] a:hover .lp-link-arrow {
+    transform: translateY(3px);
+  }
+
+  /* "Invite only": one short label; the detail opens on tap. */
+  [data-theme="slotty-landing"] .lp-hint summary {
+    list-style: none;
+    cursor: pointer;
+  }
+
+  [data-theme="slotty-landing"] .lp-hint summary::-webkit-details-marker {
+    display: none;
+  }
+
+  [data-theme="slotty-landing"] .lp-hint[open] summary {
+    color: var(--text);
+  }
+
+  /* ── Nav ── */
+
+  [data-theme="slotty-landing"] .lp-nav {
+    background: transparent;
+    box-shadow: 0 1px 0 transparent;
+    transition:
+      background-color 200ms ease,
+      box-shadow 200ms ease;
+  }
+
+  [data-theme="slotty-landing"] .lp-nav[data-scrolled="true"] {
+    background: rgb(13 13 12 / 0.9);
+    box-shadow: 0 1px 0 var(--line);
+  }
+
+  @media (min-width: 640px) {
+    [data-theme="slotty-landing"] .lp-nav-signin[data-amber="true"] {
+      border-color: transparent;
+      background: var(--amber);
+      color: var(--amber-ink);
+      box-shadow:
+        inset 0 1px 0 rgb(255 255 255 / 0.55),
+        inset 0 -2px 0 rgb(122 70 0 / 0.35),
+        0 1px 0 rgb(0 0 0 / 0.6);
+    }
+  }
+
+  /* ── Hero light: the shader draws it; this is the fallback without WebGL or JavaScript ── */
+
+  [data-theme="slotty-landing"] .lp-hero {
+    background:
+      radial-gradient(60% 55% at 50% -8%, rgb(255 244 222 / 0.1), transparent 70%),
+      var(--board);
+  }
+
+  [data-theme="slotty-landing"] .lp-hero-canvas {
+    opacity: 0;
+    transition: opacity 900ms ease;
+  }
+
+  [data-theme="slotty-landing"] .lp-hero-canvas[data-ready="true"] {
+    opacity: 1;
+  }
+
+  /* ── The board: a dark panel under that light ── */
+
+  [data-theme="slotty-landing"] .lp-board {
+    background: linear-gradient(to bottom, #1a1917, #141412 40%);
+    border: 1px solid var(--line);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.06),
+      0 0 0 1px rgb(0 0 0 / 0.55),
+      0 30px 60px -30px rgb(0 0 0 / 0.9),
+      0 60px 120px -60px rgb(0 0 0 / 0.8);
+  }
+
+  [data-theme="slotty-landing"] .lp-board-row {
+    transition: background-color 250ms ease;
+  }
+
+  [data-theme="slotty-landing"] .lp-board-row[data-mine="true"] {
+    background: rgb(61 214 140 / 0.06);
+    box-shadow: inset 2px 0 0 var(--go);
+  }
+
+  /* A small "Book" key on the board (part of the picture, not a control). */
+  [data-theme="slotty-landing"] .lp-key {
+    display: inline-grid;
+    place-items: center;
+    height: 30px;
+    padding-inline: 14px;
+    border-radius: 999px;
+    border: 1px solid var(--line-strong);
+    background: linear-gradient(to bottom, #2a2925, #201f1c);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.08),
+      0 1px 2px rgb(0 0 0 / 0.6);
+    color: var(--text);
+    font-family: var(--lp-sans);
+    font-weight: 600;
+    font-size: 13px;
+    transition:
+      transform 90ms ease,
+      box-shadow 90ms ease;
+  }
+
+  [data-theme="slotty-landing"] .lp-key[data-pressed="true"] {
+    transform: translateY(1px) scale(0.96);
+    box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.55);
+  }
+
+  /* The pointer that books 10:15 */
+  [data-theme="slotty-landing"] .lp-cursor {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 5;
+    pointer-events: none;
+    opacity: 0;
+    filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.6));
+    transition:
+      transform 900ms cubic-bezier(0.45, 0, 0.2, 1),
+      opacity 250ms ease;
+  }
+
+  /* The footer line swaps once the slot is booked. */
+  [data-theme="slotty-landing"] .lp-swap > * {
+    transition:
+      opacity 200ms ease,
+      transform 200ms ease;
+  }
+
+  [data-theme="slotty-landing"] .lp-swap[data-state="before"] > [data-when="after"],
+  [data-theme="slotty-landing"] .lp-swap[data-state="after"] > [data-when="before"] {
+    opacity: 0;
+    transform: translateY(4px);
+    pointer-events: none;
+  }
+
+  /* ── 01 The old way: a spreadsheet in a dark theme, sitting on the board ── */
+
+  [data-theme="slotty-landing"] .lp-sheet {
+    --sheet-bg: #1c1c1a;
+    --sheet-chrome: #20201d;
+    --sheet-header: #232320;
+    --sheet-chip: #2a2925;
+    --sheet-grid: #34332e;
+    --sheet-text: #d6d2c8; /* 11.3:1 on sheet-bg, 9.9:1 on a conflict row */
+    --sheet-strong: #f1eee6;
+    --sheet-soft: #b5b0a4; /* 7.9:1 */
+    --sheet-muted: #9c9784; /* 5.4:1 on the header strip, 5.1:1 on a conflict row */
+    --sheet-green: #4caf7d; /* the spreadsheet's own green: 6.3:1 */
+    --sheet-red: #ff5c4d; /* #REF!: 5.6:1 */
+    --sheet-red-tint: #3a201d;
+    font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+    border: 1px solid var(--line-strong);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 30px 70px -28px rgb(0 0 0 / 0.95);
+  }
+
+  /* ── 02 How it works: a segmented stepper ── */
+
+  [data-theme="slotty-landing"] .lp-tabs {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    margin-inline: -20px;
+    padding-inline: 20px;
+  }
+
+  [data-theme="slotty-landing"] .lp-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  [data-theme="slotty-landing"] .lp-tab {
+    display: inline-flex;
+    flex: none;
+    min-height: 44px;
+    align-items: center;
+    gap: 8px;
+    scroll-snap-align: start;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    padding-inline: 14px;
+    color: var(--text-2);
+    text-align: left;
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease,
+      color 120ms ease;
+  }
+
+  [data-theme="slotty-landing"] .lp-tab:hover {
+    color: var(--text);
+    border-color: #4c4942;
+  }
+
+  [data-theme="slotty-landing"] .lp-tab[aria-selected="true"] {
+    border-color: transparent;
+    background: var(--text);
+    color: var(--board);
+  }
+
+  [data-theme="slotty-landing"] .lp-tab[aria-selected="true"] .lp-mono {
+    color: #4a4740;
+  }
+
+  /* Wider screens: one segmented bar of five equal steps. */
+  @media (min-width: 768px) {
+    [data-theme="slotty-landing"] .lp-tabs {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 4px;
+      overflow: visible;
+      margin-inline: 0;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+      box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
+    }
+
+    [data-theme="slotty-landing"] .lp-tab {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      grid-template-rows: auto auto;
+      column-gap: 10px;
+      row-gap: 2px;
+      min-height: 64px;
+      border: 0;
+      border-radius: 12px;
+      padding: 10px 14px;
+    }
+
+    [data-theme="slotty-landing"] .lp-tab > :nth-child(1) {
+      grid-row: span 2;
+      align-self: center;
+    }
+
+    [data-theme="slotty-landing"] .lp-tab:hover {
+      background: rgb(255 255 255 / 0.03);
+    }
+
+    [data-theme="slotty-landing"] .lp-tab[aria-selected="true"] {
+      background: linear-gradient(to bottom, #2a2925, #201f1c);
+      color: var(--text);
+      box-shadow:
+        inset 0 1px 0 rgb(255 255 255 / 0.08),
+        0 1px 2px rgb(0 0 0 / 0.6);
+    }
+
+    [data-theme="slotty-landing"] .lp-tab[aria-selected="true"] .lp-mono {
+      color: var(--text-2);
+    }
+  }
+
+  /* Scroll mode (set by HowItWorks when the pinned content fits the screen): the section becomes
+     a track about 70% of a screen per step, and the stepper stays under the nav. */
+  [data-theme="slotty-landing"] .lp-steps-progress,
+  [data-theme="slotty-landing"] .lp-steps-skip {
+    display: none;
+  }
+
+  [data-theme="slotty-landing"] .lp-steps[data-scroll="on"] {
+    height: calc(100svh + 4 * 70svh);
+    padding-block: 0;
+  }
+
+  [data-theme="slotty-landing"] .lp-steps[data-scroll="on"] .lp-steps-sticky {
+    position: sticky;
+    top: 64px;
+    display: flex;
+    height: calc(100svh - 64px);
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  [data-theme="slotty-landing"] .lp-steps[data-scroll="on"] .lp-steps-progress {
+    display: block;
+  }
+
+  [data-theme="slotty-landing"] .lp-steps[data-scroll="on"] .lp-steps-skip {
+    display: inline-flex;
+  }
+
+  @media (max-width: 639.98px) {
+    [data-theme="slotty-landing"] .lp-steps[data-scroll="on"] .lp-steps-sticky {
+      padding-bottom: 80px; /* room for the bottom Sign in bar */
+    }
+  }
+
+  /* The seal over the released marks (step 5). Open by default; Unseal closes it first. */
+  [data-theme="slotty-landing"] .lp-seal-cover {
+    transform: translateY(-101%);
+    transition: transform 420ms var(--ease-out);
+  }
+
+  [data-theme="slotty-landing"] .lp-seal[data-sealed="true"] .lp-seal-cover {
+    transform: translateY(0);
+  }
+
+  /* ── 03–05: cards, tiles and chips ── */
+
+  [data-theme="slotty-landing"] .lp-card {
+    border: 1px solid var(--line);
+    background: linear-gradient(to bottom, #1c1b19, #171715);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 20px 40px -28px rgb(0 0 0 / 0.9);
+  }
+
+  [data-theme="slotty-landing"] .lp-chip {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-family: var(--lp-mono);
+    font-stretch: 87.5%;
+    font-size: 11px;
+    line-height: 1.2;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-2);
+  }
+
+  [data-theme="slotty-landing"] a:hover .lp-btn-arrow {
+    transform: translateX(3px);
+  }
+
+  /* ── 06 FAQ: hairline accordion with +/−; answers open smoothly where supported ── */
+
+  [data-theme="slotty-landing"] .lp-faq summary {
+    list-style: none;
+    cursor: pointer;
+  }
+
+  [data-theme="slotty-landing"] .lp-faq summary::-webkit-details-marker {
+    display: none;
+  }
+
+  [data-theme="slotty-landing"] .lp-faq .lp-minus,
+  [data-theme="slotty-landing"] .lp-faq details[open] > summary .lp-plus {
+    display: none;
+  }
+
+  [data-theme="slotty-landing"] .lp-faq details[open] > summary .lp-minus {
+    display: inline;
+  }
+
+  @supports selector(::details-content) {
+    [data-theme="slotty-landing"] .lp-faq details {
+      interpolate-size: allow-keywords;
+    }
+
+    [data-theme="slotty-landing"] .lp-faq details::details-content {
+      block-size: 0;
+      overflow: hidden;
+      transition:
+        block-size 220ms var(--ease-out),
+        content-visibility 220ms allow-discrete;
+    }
+
+    [data-theme="slotty-landing"] .lp-faq details[open]::details-content {
+      block-size: auto;
+    }
+  }
+
+  /* ── Final call to action: lit from above, like the hero ── */
+
+  [data-theme="slotty-landing"] .lp-final {
+    background:
+      radial-gradient(55% 70% at 50% 0%, rgb(255 244 222 / 0.08), transparent 70%),
+      var(--board);
+  }
+
+  /* ── Split-flap cell: two halves, a seam, a little bevel ── */
+
+  [data-theme="slotty-landing"] .lp-flap {
+    display: inline-flex;
+    gap: 2px;
+  }
+
+  [data-theme="slotty-landing"] .lp-flap-cell {
+    position: relative;
+    display: inline-grid;
+    width: 1.14em;
+    height: 1.55em;
+    place-items: center;
+    border-radius: 3px;
+    background: linear-gradient(to bottom, #2a2925 0 50%, #201f1c 50% 100%);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.07),
+      inset 0 -1px 0 rgb(0 0 0 / 0.5),
+      0 1px 1px rgb(0 0 0 / 0.6);
+    font-family: var(--lp-mono);
+    font-stretch: 87.5%;
+    font-weight: 500;
+    line-height: 1;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 0 rgb(0 0 0 / 0.6);
+  }
+
+  /* The character is drawn from data-char, so a flip only changes an attribute. */
+  [data-theme="slotty-landing"] .lp-flap-cell::before {
+    content: attr(data-char);
+  }
+
+  [data-theme="slotty-landing"] .lp-flap-cell::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: calc(50% - 0.5px);
+    height: 1px;
+    background: rgb(0 0 0 / 0.75);
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.04);
+  }
+
+  /* ── Mobile sign-in bar ── */
+
+  [data-theme="slotty-landing"] .lp-mobile-cta {
+    transform: translateY(110%);
+    transition: transform 200ms var(--ease-out);
+  }
+
+  [data-theme="slotty-landing"] .lp-mobile-cta[data-visible="true"] {
+    transform: translateY(0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-theme="slotty-landing"] *,
+    [data-theme="slotty-landing"] *::before,
+    [data-theme="slotty-landing"] *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+
+    [data-theme="slotty-landing"] .lp-btn:hover,
+    [data-theme="slotty-landing"] .lp-btn:active {
+      transform: none;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html[data-lp-js] [data-theme="slotty-landing"] .lp-btn-primary:hover::after {
+    transform: translateX(130%);
+    transition: transform 650ms var(--ease-out);
+  }
+
+  html[data-lp-js]:has([data-theme="slotty-landing"]) {
+    scroll-behavior: smooth;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html[data-lp-js] [data-theme="slotty-landing"] .lp-step-panel[data-active="true"] {
+    animation: lp-step-in 150ms ease-out;
+  }
+}
+
+@keyframes lp-step-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Only the selected step shows; without JavaScript a <noscript> style in landing-page.tsx shows
+   them all. (Not the hidden attribute: Tailwind's preflight forces [hidden] to display:none
+   !important in a layer, which an unlayered rule can't undo.) */
+[data-theme="slotty-landing"] .lp-step-panel[data-active="false"] {
+  display: none;
+}
+
+/* The page behind the wrapper (overscroll) is the board too. */
+body:has([data-theme="slotty-landing"]) {
+  background: #0d0d0c;
+}

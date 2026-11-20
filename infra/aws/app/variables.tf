@@ -129,3 +129,9 @@ variable "vapid_private_key" {
   default   = ""
   sensitive = true
 }
+
+variable "support_forward_to" {
+  description = "Inbox that support@<domain> forwards to (support-mail.tf). Empty: no inbound mail."
+  type        = string
+  default     = ""
+}

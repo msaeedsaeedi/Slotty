@@ -8,7 +8,7 @@
  * - RSC data requests (soft navigations) are never cached; when they fail,
  *   Next.js falls back to a full navigation, which this worker can answer.
  */
-const VERSION = "v1";
+const VERSION = "v2"; // v2: new app icons (Slotty mark); bump to replace cached copies
 const STATIC_CACHE = `slotty-static-${VERSION}`;
 const PAGE_CACHE = `slotty-pages-${VERSION}`;
 const OFFLINE_URL = "/offline";

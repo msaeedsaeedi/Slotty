@@ -70,6 +70,17 @@ complaint arrives as an SNS email and the address is suppressed. Retry from the 
 fixing the cause. Rotate the SMTP credentials with
 \code{terraform apply -replace=aws_iam_access_key.ses_smtp}, then redeploy.
 
+\subsection{Support mail is not arriving}
+Mail to \code{support@} is forwarded by \code{slotty-support-forwarder} (\cref{sec:aws-email}).
+Its log group \code{/aws/lambda/slotty-support-forwarder} has one line per message:
+\code{forwarded} or \code{dropped} (spam or virus verdict). No line at all means SES didn't
+receive it: check the MX record (\code{dig MX slotty.msaeedsaeedi.com}) and that the
+\code{slotty} receipt rule set is the active one. A send error after two retries arrives as an
+SNS email to the alert address; a bounce at the destination arrives the same way. Raw messages
+stay in \code{slotty-support-mail-<account>/support/} for 30 days, so a lost message can be
+read from there. Change the destination with \tfvar{support_forward_to} and a reviewed
+\code{terraform apply}.
+
 \subsection{Usage data looks wrong or empty}
 \route{/platform/insights} says so when \envvar{ANALYTICS_SECRET} isn't set on the web tasks (check
 the task definition's secrets). Raw events appear within about 10 seconds of a visit; the

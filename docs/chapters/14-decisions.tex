@@ -225,3 +225,44 @@ Add one for every deliberate trade-off.
   {Departments want instructors to manage their own co-instructors, or self-service creation is
    abused.}
 
+\adr{020}{A public landing page at /, designed as a departure board}{2026-11-21}{Accepted}
+  {\route{/} only redirected to \route{/login}, which had one line of description. Accounts are
+   invite-only, so people arriving from an invite, a shared link or a search had no way to learn
+   what Slotty does, what their part is, or how to get in, and users reported being confused. Two
+   earlier drafts (the app's grayscale components, then a paper-and-serif ``editorial'' look) read
+   as generic templates and explained too much in paragraphs.}
+  {Signed-out visitors to \route{/} get a static landing page (journey V1); signed-in users are
+   still redirected home, so bookmarks and the installed app don't change. The page is a dark
+   split-flap departure board: demo slots work like departures (a time, a room, a host, a status,
+   a gate that closes). Three signal colours, each with one meaning: amber is the one action
+   (\ui{Sign in}), green is done (booked, released), red is blocked (full, conflict). Mona Sans
+   (condensed for headlines) and Martian Mono for times and statuses; split-flap cells only for
+   times and statuses. Pictures show the product instead of describing it (the hero books a slot),
+   copy stays within a word budget per section, and detail sits behind a tap (\ui{Invite only},
+   \ui{More questions}). Everything is visible as the server renders it; motion is CSS, one
+   IntersectionObserver per animation and one WebGL shader for the hero's light, all off under
+   reduced motion. The design is scoped to a \code{data-theme="slotty-landing"} wrapper.}
+  {The copy describes shipped behaviour and must change with it: a flow change in
+   \cref{ch:journeys} also checks \src{src/components/landing}. The landing page deliberately
+   looks unlike the app; the app's theme is untouched. The how-it-works stepper follows the scroll,
+   so that section is several screens tall (with \ui{Skip}). Rejected: screenshots (stale, and they
+   don't follow the theme), reusing the app's components (no identity for a page meant to explain
+   the product), a separate marketing site (a second deployment for one page), an animation
+   library (none is installed; CSS covers it).}
+  {Slotty serves more than one university, or the page needs content managed by non-developers.}
+
+\adr{021}{Support mail through SES receiving and a Lambda forwarder}{2026-11-20}{Accepted}
+  {The landing and sign-in pages need a support address on Slotty's own domain. The domain is a
+   subdomain delegated to Route 53, so the parent domain's mail forwarding doesn't reach it, and
+   the budget rules out a hosted mailbox.}
+  {\code{support@} is received by SES (spam and virus scan), stored in S3 for 30 days, and
+   re-sent by a small Lambda function from \code{support@} to one personal inbox, with the
+   sender in \code{Reply-To} (\cref{sec:aws-email}). The destination is a Terraform variable
+   kept out of the repository.}
+  {About \$0.05 a month. Replies go out from the personal inbox, not from \code{support@}. Only
+   one receipt rule set can be active per account and region, so any future inbound mail adds
+   rules to \code{slotty}. Rejected: a hosted mailbox such as WorkMail (\$4 per user per month),
+   an external forwarding service (a third party reading support mail, and MX records it
+   controls), SES Mail Manager (an ingress endpoint billed by the hour).}
+  {Several people answer support, or replies need to come from \code{support@}: move to a shared
+   mailbox or a help-desk tool.}

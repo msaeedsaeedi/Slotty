@@ -143,7 +143,7 @@ instead points OpenSSL's trust store at the bundle (\envvar{SSL_CERT_FILE}) and 
   demo day's downtime would cost more than about \$14 a month.
 \end{decision}
 
-\section{Email}
+\section{Email}\label{sec:aws-email}
 \aws{Amazon SES} sends from \code{no-reply@slotty.msaeedsaeedi.com} through the worker's existing
 SMTP transport (port 587, STARTTLS). The domain identity has Easy DKIM (three CNAME records), a
 custom MAIL FROM domain \code{mail.slotty.msaeedsaeedi.com} with SPF, and a DMARC policy of
@@ -158,6 +158,20 @@ domain.
   Production access was requested on 2026-11-16; check \code{aws sesv2 get-account} for
   \code{ProductionAccessEnabled}.
 \end{note}
+
+\subsection{Inbound: the support address}
+\code{support@slotty.msaeedsaeedi.com} is the only address that receives mail
+(\src{infra/aws/app/support-mail.tf}, ADR-021). An MX record on the domain points to SES
+receiving. One active receipt rule set, \code{slotty}, has one rule for that recipient, with spam
+and virus scanning: it stores the raw message in a private, TLS-only S3 bucket
+(\code{slotty-support-mail-<account>}, objects expire after 30 days), then invokes the
+\aws{AWS Lambda} function \code{slotty-support-forwarder} asynchronously. The function drops
+messages that failed the spam or virus scan, rewrites \code{From} to
+\code{"<sender> via Slotty support" <support@…>} with the sender in \code{Reply-To}, and sends
+it through SES to \tfvar{support_forward_to} (set in the git-ignored \code{terraform.tfvars}).
+Re-sending from the domain keeps DKIM and DMARC aligned at the destination. The function may only
+read that bucket prefix and send as \code{support@}. After two failed retries, the event goes to
+the alerts topic. An empty \tfvar{support_forward_to} removes all of it.
 
 \section{Secrets and configuration}
 Runtime secrets are SSM Parameter Store \code{SecureString}s under \code{/slotty/}, encrypted with
@@ -197,7 +211,7 @@ the alerts topic:
   \thead{Path} & \thead{Contents}\\
   \midrule
   \src{infra/aws/org} & Organization, account, SCPs, budget, anomaly alerts, CloudTrail, state bucket. Applied with management-account credentials.\\
-  \src{infra/aws/app} & Everything inside \code{slotty-prod}, one file per concern (\code{network.tf}, \code{nat.tf}, \code{dns.tf}, \code{edge.tf}, \code{api.tf}, \code{discovery.tf}, \code{ecs.tf}, \code{rds.tf}, \code{ses.tf}, \code{secrets.tf}, \code{iam.tf}, \code{observability.tf}, \code{security.tf}). Its provider assumes \code{OrganizationAccountAccessRole}.\\
+  \src{infra/aws/app} & Everything inside \code{slotty-prod}, one file per concern (\code{network.tf}, \code{nat.tf}, \code{dns.tf}, \code{edge.tf}, \code{api.tf}, \code{discovery.tf}, \code{ecs.tf}, \code{rds.tf}, \code{ses.tf}, \code{support-mail.tf}, \code{secrets.tf}, \code{iam.tf}, \code{observability.tf}, \code{security.tf}). Its provider assumes \code{OrganizationAccountAccessRole}.\\
   \src{infra/aws/deploy.sh} & The rollout script CI runs (\cref{ch:delivery}).\\
   \bottomrule
 \end{xltabular}

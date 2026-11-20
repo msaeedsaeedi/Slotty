@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ClearSavedPages } from "@/components/pwa";
 import { getCurrentUser } from "@/server/auth/session";
+import { SUPPORT_EMAIL, supportMailto } from "@/lib/site";
 
 export const metadata = { title: "Sign in" };
 
@@ -38,6 +39,20 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           </div>
           <SubmitButton className="w-full">Sign in</SubmitButton>
         </ActionForm>
+        <div className="mt-6 space-y-1 rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">
+          <p className="font-medium text-foreground">No account yet?</p>
+          <p>
+            Slotty is invite-only: your course staff add you, and you get an email to set a password. Invite expired? Use{" "}
+            <Link href="/forgot-password" className="underline underline-offset-2">
+              Forgot password
+            </Link>{" "}
+            to get a new one. Still stuck? Email{" "}
+            <a href={supportMailto("Help signing in")} className="underline underline-offset-2">
+              {SUPPORT_EMAIL}
+            </a>
+            .
+          </p>
+        </div>
       </CardContent>
     </Card>
   );
