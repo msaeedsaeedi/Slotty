@@ -335,4 +335,4 @@ Times are stored in UTC. They're shown and entered in the \textbf{course timezon
 
 \section{Audit}
 
-Moderation-relevant changes go through \code{audit(tx, actor, …)}: courses, roster, assignments, availability, slot cancellation and venue changes, attendance, staff cancellations, evaluation transitions, and admin actions. Platform actions (access grants, feedback status) are recorded as \code{platform.*}, outside the admin audit log.
+Moderation-relevant changes go through \code{audit(tx, actor, …)}: courses, roster, assignments, availability, slot cancellation and venue changes, attendance, staff cancellations, evaluation transitions, and admin actions. Platform actions (access grants, feedback status) are recorded as \code{platform.*}, outside the admin audit log. Entries are never changed or deleted: the database refuses it (\cref{ch:crosscutting}).

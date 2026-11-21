@@ -11,7 +11,7 @@ This chapter gathers the controls described elsewhere into one view an auditor c
   \endhead
   Account isolation & Dedicated account in an Organization; SCPs deny other regions, large or expensive resources, root-user actions, leaving the Organization and tampering with CloudTrail & \cref{sec:aws-guardrails}\\
   Audit (cloud) & Organization CloudTrail with log-file validation, 90 days, in the management account & \src{infra/aws/org}\\
-  Audit (app) & Moderation-relevant changes written in the same transaction as the change & \cref{ch:crosscutting}\\
+  Audit (app) & Moderation-relevant changes written in the same transaction as the change; append-only, enforced by a database trigger that refuses \code{UPDATE} and \code{DELETE} & \cref{ch:crosscutting}\\
   Network & Tasks and database in private subnets; database subnets have no route out; security groups allow only the next hop; no SSH anywhere & \cref{ch:aws}\\
   Edge & TLS 1.2+ with HSTS; origin reachable only with CloudFront's secret header; API Gateway throttling & \cref{sec:aws-request-path}\\
   Data at rest & RDS, EBS, S3 and SSM encrypted with AWS-managed keys & \src{infra/aws/app}\\

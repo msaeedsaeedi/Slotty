@@ -6,6 +6,7 @@ Newest first. One line per revision of this document; the pull request has the d
   \toprule
   \thead{Date} & \thead{Change}\\
   \midrule
+  2026-11-21 & Append-only audit log (issue \#31): a trigger refuses \code{UPDATE} and \code{DELETE} on \code{AuditLog}, in an expand-only migration. Ch.~4, 6, 7 and 11 updated.\\
   2026-11-21 & Safe CSV exports (issue \#34): one \code{safeCell} helper escapes every header and cell, including rubric-label headers, formulas after leading spaces, and cells starting with a tab or carriage return. Ch.~11 updated.\\
   2026-11-21 & Back-merge pull requests: CI runs once the maintainer approves it (GitHub's rule for pull requests opened by a workflow); the workflow no longer starts CI by hand, which GitHub didn't count for the pull request. Ch.~9 and 14 updated.\\
   2026-11-21 & Release v1.0.0-beta.1 (Sprint 1): role boundaries (ADR-025), sign-in and reset limits (ADR-026), mail fails closed, GitOps releases (ADR-027), planned releases (ADR-024).\\
