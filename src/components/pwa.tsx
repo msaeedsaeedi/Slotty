@@ -46,8 +46,19 @@ const swEnabled = process.env.NODE_ENV === "production" || process.env.NEXT_PUBL
 
 export function ServiceWorkerRegistrar() {
   useEffect(() => {
-    if (!swEnabled || !("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).catch(() => {});
+    if (!("serviceWorker" in navigator)) return;
+    if (swEnabled) {
+      navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).catch(() => {});
+      return;
+    }
+    // Under `next dev`, remove a worker left by an earlier production run on this origin:
+    // it would keep answering with its cached assets instead of the dev server's.
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+      .then(() => ("caches" in window ? caches.keys() : []))
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith("slotty-")).map((k) => caches.delete(k))))
+      .catch(() => {});
   }, []);
   return null;
 }

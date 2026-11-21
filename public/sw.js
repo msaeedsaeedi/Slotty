@@ -2,13 +2,15 @@
  *
  * Caching rules (see the system documentation, Business rules → PWA):
  * - Only GET requests. Server Actions (POST) are never cached or replayed.
- * - Build assets (/_next/static) are immutable: cache-first.
+ * - Build assets (/_next/static) are cache-first, but only responses marked
+ *   `immutable` are stored. `next dev` serves changing files at stable URLs
+ *   with `no-cache`; caching those would serve stale CSS and JS.
  * - Page navigations to OFFLINE_PAGES are network-first; the last good copy is
  *   served when offline. Everything else falls back to /offline.
  * - RSC data requests (soft navigations) are never cached; when they fail,
  *   Next.js falls back to a full navigation, which this worker can answer.
  */
-const VERSION = "v2"; // v2: new app icons (Slotty mark); bump to replace cached copies
+const VERSION = "v3"; // v3: drop dev-server assets cached by v2; bump to replace cached copies
 const STATIC_CACHE = `slotty-static-${VERSION}`;
 const PAGE_CACHE = `slotty-pages-${VERSION}`;
 const OFFLINE_URL = "/offline";
@@ -48,7 +50,7 @@ self.addEventListener("fetch", (event) => {
         const hit = await cache.match(request);
         if (hit) return hit;
         const res = await fetch(request);
-        if (res.ok) cache.put(request, res.clone());
+        if (res.ok && /\bimmutable\b/.test(res.headers.get("Cache-Control") || "")) cache.put(request, res.clone());
         return res;
       }),
     );
