@@ -8,12 +8,12 @@ Slotty: demo scheduling and evaluation for university courses. System documentat
 - Local services run in Docker: `bun run infra:up` (infra/docker-compose.yml) starts Postgres 17 on :5432 with the dev database `slotty` (`.env`), Mailpit (SMTP :1025, inbox http://localhost:8025) and Caddy, which serves `bun run dev` at https://slotty.local. Tests don't use it: each run starts a throwaway Postgres with Testcontainers.
 - If `docker` says permission denied in an agent shell, run it through `sg docker -c "…"`.
 - `prisma migrate reset` is blocked for agents. Ask the user before wiping the dev DB.
-- Checks before a pull request: `bun run typecheck`, `bun run lint`, `bun run test` (unit + integration), and `bun run test:e2e` for user-facing changes. They need Docker running (in an agent shell: `sg docker -c "bun run test"`). CI (`.github/workflows/ci.yml`) runs them all; `master` only takes PRs with a green **CI ok** that are up to date.
+- Checks before a pull request: `bun run typecheck`, `bun run lint`, `bun run test` (unit + integration), and `bun run test:e2e` for user-facing changes. They need Docker running (in an agent shell: `sg docker -c "bun run test"`). CI (`.github/workflows/ci.yml`) runs them all; `dev` and `master` only take PRs with a green **CI ok** that are up to date.
 
 ## Way of working
 - Work is planned in the **Slotty GitHub Project** (backlog, two-week sprints, release milestones; docs ch. 13). Build only issues in the current sprint; new ideas and findings become a Backlog issue, not code.
-- Branch off `master` as `<type>/<issue>-<slug>`; open a pull request from the template with `Closes #<issue>` and a release-notes label.
-- Merging to `master` does **not** deploy. Publishing a GitHub Release (`vX.Y.Z`, matching `package.json`) does (`.github/workflows/deploy.yml`, ADR-024). Never tag or publish a release without the user's go-ahead.
+- Branch off `dev` (the default branch) as `<type>/<issue>-<slug>`; open a pull request into `dev` from the template with `Closes #<issue>` and a release-notes label.
+- GitOps (ADR-027): `master` is production. Merging into `dev` deploys nothing; merging a release PR (`dev` → `master`, with a new `package.json` version) deploys, then tags `vX.Y.Z` and publishes the release (`.github/workflows/deploy.yml`). Hotfixes are `hotfix/*` PRs into `master`; rollback is a revert PR into `master`. Merge the Back-merge PR it opens afterwards. Never open or merge a PR into `master` without the user's go-ahead.
 - Security weaknesses are tracked in private draft advisories with neutrally worded public issues; the repository is public.
 - Iterate on the design in conversation first; implement when the user says go.
 
@@ -31,7 +31,7 @@ Slotty: demo scheduling and evaluation for university courses. System documentat
 - Services are covered by integration tests against a throwaway Postgres (Testcontainers, `tests/support/postgres.ts`; `tests/integration`, `bun run test`); user flows by Playwright (`tests/e2e`, `bun run test:e2e` → `tests/e2e/run.ts`, a production build on :3100).
 
 ## Deployment
-- Application: publish a release (docs ch. 9); `.github/workflows/deploy.yml` builds both ARM64 images (`docker-bake.hcl`), runs migrations as a one-off ECS task when `prisma/migrations` changed, rolls out web and worker and checks `/health` reports the new release (`infra/aws/deploy.sh`, ADR-022).
+- Application: merge a release PR into `master` (docs ch. 9); `.github/workflows/deploy.yml` builds both ARM64 images (`docker-bake.hcl`), runs migrations as a one-off ECS task when `prisma/migrations` changed, rolls out web and worker and checks `/health` reports the new release (`infra/aws/deploy.sh`, ADR-022).
 - Infrastructure: Terraform in `infra/aws/org` (management account) and `infra/aws/app` (slotty-prod). Always show `terraform plan` and get approval before `apply`; never apply unreviewed.
 - Migrations must keep the previous release working (expand, then contract in a later release): rollback does not undo them.
 

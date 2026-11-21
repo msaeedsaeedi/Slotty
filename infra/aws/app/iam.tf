@@ -60,11 +60,11 @@ resource "aws_iam_role_policy" "task_exec" {
 }
 
 # ── GitHub Actions roles (OIDC, no stored keys) ──
-# Two roles, so each job gets only what it needs (ADR-022). Both serve a published release
-# (ADR-024):
-#   build  — pushes images to ECR; any job on a v* tag, which only admins can create (tag ruleset).
+# Two roles, so each job gets only what it needs (ADR-022). master is production (ADR-027):
+#   build  — pushes images to ECR; jobs on master (which only takes CI-green PRs) or on a v* tag
+#            (a release, run by hand to redeploy or roll back; tags can't be moved or deleted).
 #   deploy — migrates and rolls out on ECS; only jobs in the `production` GitHub Environment,
-#            whose deployment rule allows v* tags only.
+#            whose deployment rules allow master and v* tags only.
 
 resource "aws_iam_openid_connect_provider" "github" {
   url            = "https://token.actions.githubusercontent.com"
@@ -73,9 +73,12 @@ resource "aws_iam_openid_connect_provider" "github" {
 
 locals {
   github_trust = {
-    for role, subject in {
-      build  = "${var.github_oidc_subject_prefix}:ref:refs/tags/v*"
-      deploy = "${var.github_oidc_subject_prefix}:environment:production"
+    for role, subjects in {
+      build = [
+        "${var.github_oidc_subject_prefix}:ref:refs/heads/master",
+        "${var.github_oidc_subject_prefix}:ref:refs/tags/v*",
+      ]
+      deploy = ["${var.github_oidc_subject_prefix}:environment:production"]
       } : role => jsonencode({
         Version = "2012-10-17"
         Statement = [{
@@ -84,8 +87,8 @@ locals {
           Action    = "sts:AssumeRoleWithWebIdentity"
           Condition = {
             StringEquals = { "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com" }
-            # StringLike for the tag wildcard; the deploy subject has none, so it matches exactly.
-            StringLike = { "token.actions.githubusercontent.com:sub" = subject }
+            # StringLike for the tag wildcard; the other subjects have none, so they match exactly.
+            StringLike = { "token.actions.githubusercontent.com:sub" = subjects }
           }
         }]
     })

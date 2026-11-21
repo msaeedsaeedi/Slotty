@@ -1,0 +1,46 @@
+# After every push to master (a release, hotfix or revert), bring master back into dev, so dev
+# stays up to date with master and the next release PR can merge (ADR-027). It can't push to dev
+# (protected, no bypass), so it opens a pull request from a back-merge/ branch and starts CI on it
+# by hand: a PR opened with the workflow token starts no workflow itself. Merge it like any other.
+# A conflict (a hotfix touching what dev changed) fails this run: merge master into dev by hand.
+name: Back-merge
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  back-merge:
+    name: Merge master into dev
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Open the back-merge PR
+        run: |
+          if git merge-base --is-ancestor origin/master origin/dev; then
+            echo "dev already contains master"; exit 0
+          fi
+          short=${GITHUB_SHA::7}
+          branch="back-merge/$short"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q -b "$branch" origin/dev
+          if ! git merge --no-ff --no-edit -m "Merge master ($short) back into dev" origin/master; then
+            echo "::error::master doesn't merge cleanly into dev. Merge it by hand: a branch from dev, git merge origin/master, a PR into dev."
+            exit 1
+          fi
+          git push -q origin "$branch"
+          gh pr create --base dev --head "$branch" --label skip-release-notes \
+            --title "Back-merge master ($short) into dev" \
+            --body "Brings master's latest release back into dev, so the next release PR is up to date with master (ADR-027). Opened by the Back-merge workflow; CI was started on this branch by hand. Merge once **CI ok** passes."
+          gh workflow run ci.yml --ref "$branch"
