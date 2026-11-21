@@ -1,3 +1,4 @@
+<!-- Into dev. Into master only for a release (from dev), a hotfix/* or a revert-* branch, with a new version in package.json. -->
 Closes #
 
 ## What changes

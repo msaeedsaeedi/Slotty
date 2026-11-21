@@ -1,15 +1,17 @@
-# Deploys a published GitHub Release (tag vX.Y.Z) to AWS (infra/aws), ADR-024. Merging to master
-# doesn't deploy: what goes live is chosen by publishing a release from master. It doesn't re-run
-# CI: master only takes PRs that are up to date and green ("CI ok"), so the tagged commit is one CI
-# tested (ADR-022). Run it by hand from a tag ("Use workflow from" → Tags) to redeploy a release or,
-# with `rollback`, go back to an older one. Repository variables (Settings → Secrets and variables
-# → Actions → Variables) come from `terraform output github_actions_variables` in infra/aws/app;
-# until they're set, nothing runs.
+# GitOps (ADR-027): master is production. Every push to master (a release PR from dev, a hotfix or
+# a revert, each with a new version in package.json) builds, migrates and rolls out, and only once
+# /health reports the new version does it tag vX.Y.Z and publish the GitHub Release. Work collects
+# on dev, which deploys nothing. It doesn't re-run CI: master only takes PRs that are up to date and
+# green ("CI ok"), so the commit is one CI tested (ADR-022).
+# Run it by hand from a tag ("Use workflow from" → Tags) to redeploy a release or, with `rollback`,
+# go back to an older one in an emergency; a revert PR into master is the normal way back.
+# Repository variables (Settings → Secrets and variables → Actions → Variables) come from
+# `terraform output github_actions_variables` in infra/aws/app; until they're set, nothing runs.
 name: Deploy
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [master]
   workflow_dispatch:
     inputs:
       rollback:
@@ -25,38 +27,56 @@ permissions:
   contents: read
 
 env:
-  # The tagged commit; images are tagged with it. RELEASE is what /health reports.
+  # The commit; images are tagged with it.
   IMAGE_TAG: ${{ github.sha }}
-  RELEASE: ${{ github.ref_name }}
   ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+
+# One deploy at a time, in order; a newer push waits rather than cancelling one mid-rollout.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
 
 jobs:
   build:
     name: Build and push images
-    # Release tags only (the tag ruleset lets only admins create them); the build role trusts
-    # refs/tags/v* and nothing else.
-    if: startsWith(github.ref, 'refs/tags/v') && vars.AWS_BUILD_ROLE_ARN != ''
+    # master, or a release tag run by hand; the build role trusts exactly those two.
+    if: (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) && vars.AWS_BUILD_ROLE_ARN != ''
     # Native ARM64 for Graviton Fargate (free for public repositories).
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
     permissions:
       contents: read
       id-token: write
+    outputs:
+      release: ${{ steps.release.outputs.release }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
-      # A release is a commit on master whose package.json carries the same version.
+      # The release is "v" + package.json's version. From master it must be new (the tag comes
+      # after a healthy rollout); from a tag it must match, on a commit that's on master.
       - name: Check the release
+        id: release
         run: |
           version="v$(jq -r .version package.json)"
-          if [ "$version" != "$RELEASE" ]; then
-            echo "::error::package.json says $version but the tag is $RELEASE"; exit 1
+          if [ "$GITHUB_REF" = "refs/heads/master" ]; then
+            if git ls-remote --exit-code --tags origin "refs/tags/$version" >/dev/null; then
+              if [ "$(git rev-parse "$version^{commit}" 2>/dev/null)" = "$IMAGE_TAG" ]; then
+                echo "$version is this commit: redeploying it"
+              else
+                echo "::error::$version is already released. A change to master needs a new version in package.json (the release PR's check enforces this)."; exit 1
+              fi
+            fi
+          else
+            if [ "$version" != "$GITHUB_REF_NAME" ]; then
+              echo "::error::package.json says $version but the tag is $GITHUB_REF_NAME"; exit 1
+            fi
+            if ! git merge-base --is-ancestor "$IMAGE_TAG" origin/master; then
+              echo "::error::$GITHUB_REF_NAME ($IMAGE_TAG) is not on master"; exit 1
+            fi
           fi
-          if ! git merge-base --is-ancestor "$IMAGE_TAG" origin/master; then
-            echo "::error::$RELEASE ($IMAGE_TAG) is not on master"; exit 1
-          fi
+          echo "release=$version" >> "$GITHUB_OUTPUT"
 
       - uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
@@ -99,13 +119,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     # Its own approval rules, history and the OIDC subject the deploy role trusts. The
-    # environment's deployment rule allows v* tags only.
+    # environment's deployment rules allow master and v* tags only.
     environment:
       name: production
       url: ${{ vars.APP_URL }}
-    concurrency:
-      group: deploy-prod
-      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write
@@ -114,6 +131,7 @@ jobs:
       ECS_SUBNETS: ${{ vars.ECS_SUBNETS }}
       ECS_SECURITY_GROUP: ${{ vars.ECS_SECURITY_GROUP }}
       APP_URL: ${{ vars.APP_URL }}
+      RELEASE: ${{ needs.build.outputs.release }}
       FORCE_MIGRATE: ${{ inputs.force_migrate && '1' || '' }}
       ROLLBACK: ${{ inputs.rollback && '1' || '' }}
     steps:
@@ -129,3 +147,28 @@ jobs:
 
       - name: Migrate and roll out
         run: infra/aws/deploy.sh
+
+  release:
+    # Only after /health reported the new version: a tag means "this went live". A failed rollout
+    # leaves no tag, and master shows the change that didn't make it (fix forward or revert).
+    name: Tag and publish the release
+    needs: [build, rollout]
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE: ${{ needs.build.outputs.release }}
+    steps:
+      - name: Publish ${{ needs.build.outputs.release }}
+        run: |
+          if gh release view "$RELEASE" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "$RELEASE is already published (a redeploy)"; exit 0
+          fi
+          pre=""; case $RELEASE in *-*) pre="--prerelease" ;; esac
+          # Notes are generated from the merged PRs' labels (.github/release.yml). Created with the
+          # workflow's token, so it doesn't start any other workflow.
+          gh release create "$RELEASE" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Slotty ${RELEASE#v}" --generate-notes $pre

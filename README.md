@@ -20,7 +20,7 @@ Next.js 16 (App Router, Server Actions), TypeScript, PostgreSQL with Prisma 7, T
 | Development | `bun run dev` + `bun run worker` | https://slotty.local (Caddy) or http://localhost:3000 | `slotty` in the local Postgres (`.env`) |
 | Tests | `bun run test`, `bun run test:e2e` | http://localhost:3100 (e2e) | a throwaway Postgres per run (Testcontainers) |
 
-Production runs on AWS (`infra/aws`) and runs only published releases; see [Deploying](#deploying).
+Production runs on AWS (`infra/aws`) and runs exactly what is on `master`; see [Deploying](#deploying).
 
 ### Development
 
@@ -64,11 +64,11 @@ bun run test:int      # services against a throwaway database (one copy per work
 bun run test:e2e      # Playwright: the full loop in a real browser (a production build on :3100)
 ```
 
-CI (`.github/workflows/ci.yml`) runs all of these on every pull request, plus a Docker build of both images and the docs PDF when `docs/` changes. `master` only accepts pull requests whose **CI ok** check is green and that are up to date with `master`.
+CI (`.github/workflows/ci.yml`) runs all of these on every pull request, plus a Docker build of both images and the docs PDF when `docs/` changes. Work merges into `dev` (the default branch); `dev` and `master` only accept pull requests whose **CI ok** check is green and that are up to date.
 
 ## Deploying
 
-Publishing a GitHub Release (tag `vX.Y.Z` on `master`, matching `package.json`) deploys it (`.github/workflows/deploy.yml`); merging alone doesn't. Both images are built on an ARM64 runner and pushed to ECR, then `infra/aws/deploy.sh` runs migrations as a one-off ECS task (skipped when `prisma/migrations` hasn't changed) and rolls out the web and worker services. The deploy finishes when `/health` reports the new release. Work is planned in the Slotty GitHub Project, in two-week sprints with one release each. Report security problems privately (see [SECURITY.md](SECURITY.md)). Details, runbooks and decisions are in the system documentation (chapters 8–10 and 14).
+`master` is production: merging a release pull request from `dev` (with a new version in `package.json`) deploys it (`.github/workflows/deploy.yml`) and, once it serves, tags `vX.Y.Z` and publishes the GitHub Release. Merging into `dev` deploys nothing. Both images are built on an ARM64 runner and pushed to ECR, then `infra/aws/deploy.sh` runs migrations as a one-off ECS task (skipped when `prisma/migrations` hasn't changed) and rolls out the web and worker services. The deploy finishes when `/health` reports the new release. Work is planned in the Slotty GitHub Project, in two-week sprints with one release each. Report security problems privately (see [SECURITY.md](SECURITY.md)). Details, runbooks and decisions are in the system documentation (chapters 8–10 and 14).
 
 Building the images locally: `docker buildx bake` (see `docker-bake.hcl`).
 
