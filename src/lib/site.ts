@@ -1,9 +1,9 @@
 /**
  * Public facts about this Slotty deployment, shown on the landing page, the sign-in pages and in
- * invite emails. The support address is forwarded to the product owner's inbox by Cloudflare Email
- * Routing on msaeedsaeedi.com (ADR-021), outside this repository.
+ * invite emails. Mail to the support address is forwarded to the product owner's inbox by
+ * Cloudflare Email Routing; its MX records are in Route 53 (infra/aws/app/dns.tf, ADR-021).
  */
-export const SUPPORT_EMAIL = "support@msaeedsaeedi.com";
+export const SUPPORT_EMAIL = "support@slotty.msaeedsaeedi.com";
 
 /** The university this deployment serves. */
 export const INSTITUTION = "FAST-NUCES";

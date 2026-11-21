@@ -252,19 +252,21 @@ Add one for every deliberate trade-off.
   {Slotty serves more than one university, or the page needs content managed by non-developers.}
 
 \adr{021}{Support mail through Cloudflare Email Routing}{2026-11-21}{Accepted}
-  {The landing and sign-in pages need a support address. Slotty's subdomain is delegated to
-   Route 53, so Cloudflare (which serves the parent domain) can't route mail for it. SES can
-   receive mail for the subdomain but can't forward it: that needs a Lambda function that re-sends
-   each message, about fifteen resources to own for one inbox. The owner only needs to receive
-   mail and reply from their own address.}
-  {Use \code{support@msaeedsaeedi.com} on the parent domain, forwarded by Cloudflare Email
-   Routing (free) to the owner's inbox. Replies come from the owner's own address. Nothing in
-   this repository or the AWS account handles inbound mail; \src{src/lib/site.ts} holds the
-   address.}
-  {The address isn't on the Slotty subdomain, and its routing lives in the Cloudflare dashboard,
-   not in Terraform (\cref{ch:ops} says where to look). Rejected: SES receiving with a Lambda
-   forwarder (built, then dropped as more than one inbox needs), a hosted mailbox (a per-user
-   monthly cost), moving the subdomain's DNS back to Cloudflare (every Slotty record would have to
-   move).}
-  {Several people answer support, or replies must come from \code{support@}: add a mailbox with
-   its MX, SPF and DKIM records on the domain that holds the address.}
+  {The landing and sign-in pages need a support address. The owner only needs to receive mail and
+   reply from their own address. SES can receive mail for the domain but can't forward it: that
+   needs a Lambda function that re-sends each message, about fifteen resources to own for one
+   inbox. Cloudflare Email Routing (free) already forwards mail for the parent domain, but it can't
+   add records for Slotty's subdomain, which is delegated to Route 53.}
+  {Use \code{support@slotty.msaeedsaeedi.com}, with a Cloudflare Email Routing rule that forwards
+   it to the owner's inbox. Route 53 holds what Cloudflare would otherwise add: its three MX hosts
+   and SPF record for the domain (\src{infra/aws/app/dns.tf}). Replies come from the owner's own
+   address. Sending is unchanged: SES uses its own MAIL FROM domain and DKIM.}
+  {The rule lives in the Cloudflare dashboard and the records in Terraform, so a change may need
+   both (\cref{ch:ops} says where to look). Cloudflare documents its records living in its own
+   zone; this split works but its dashboard may report them as missing. No extra cost: records in
+   the existing zone are free. Rejected: SES receiving with a Lambda forwarder (built, then dropped
+   as more than one inbox needs), a hosted mailbox (a per-user monthly cost), moving the
+   subdomain's DNS back to Cloudflare (every Slotty record would have to move), an address on the
+   parent domain (simpler, but not Slotty's own).}
+  {Several people answer support, or replies must come from \code{support@}: add a mailbox and
+   replace the MX and SPF records with the provider's, plus its DKIM key.}

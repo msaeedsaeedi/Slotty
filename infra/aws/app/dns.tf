@@ -58,3 +58,27 @@ resource "aws_route53_record" "apex" {
     evaluate_target_health = false
   }
 }
+
+# Incoming mail (support@) goes to Cloudflare Email Routing, which forwards it to the owner's
+# inbox (ADR-021). The subdomain's DNS lives here, not at Cloudflare, so the records Cloudflare
+# would add for it have to be added here: the same MX hosts and SPF as on msaeedsaeedi.com.
+# Sending is unaffected: SES uses its own MAIL FROM domain (mail.<domain>, ses.tf) and DKIM.
+resource "aws_route53_record" "mail_mx" {
+  zone_id = aws_route53_zone.main.zone_id
+  name    = var.domain
+  type    = "MX"
+  ttl     = 3600
+  records = [
+    "2 route2.mx.cloudflare.net",
+    "89 route3.mx.cloudflare.net",
+    "91 route1.mx.cloudflare.net",
+  ]
+}
+
+resource "aws_route53_record" "mail_spf" {
+  zone_id = aws_route53_zone.main.zone_id
+  name    = var.domain
+  type    = "TXT"
+  ttl     = 3600
+  records = ["v=spf1 include:_spf.mx.cloudflare.net ~all"]
+}

@@ -153,6 +153,11 @@ suppression list stops further sends to bounced or complaining addresses. The SM
 belong to an IAM user that may only call \code{ses:SendRawEmail} with a \code{From} address on the
 domain.
 
+Slotty's AWS account receives no mail. The domain's MX records point to Cloudflare Email
+Routing, which forwards \code{support@} to the product owner's inbox (ADR-021). Cloudflare can't
+add those records itself because the domain is delegated here, so \src{infra/aws/app/dns.tf}
+holds them: Cloudflare's three MX hosts and SPF record, the same as on \code{msaeedsaeedi.com}.
+
 \begin{note}
   The account was created in the SES sandbox, which only delivers to verified addresses.
   Production access was requested on 2026-11-16; check \code{aws sesv2 get-account} for
