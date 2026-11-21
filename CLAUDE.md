@@ -5,10 +5,10 @@
 Slotty: demo scheduling and evaluation for university courses. System documentation is one LaTeX document in `docs/` (`bun run docs:build`); read the chapter for the area you change before designing.
 
 - Package manager/runner is **bun** (`bun run …`, `bunx …`). No pnpm or sudo.
-- Local services run in Docker: `bun run infra:up` (infra/docker-compose.yml) starts Postgres 17 on :5432, Mailpit (SMTP :1025, inbox http://localhost:8025) and Caddy, which serves `bun run dev` at https://slotty.local. One server holds three databases: `slotty` (dev, `.env`), `slotty_test` (tests, `.env.test`), and `slotty_app` (`bun run app:up`, the production image on :3001).
+- Local services run in Docker: `bun run infra:up` (infra/docker-compose.yml) starts Postgres 17 on :5432 with the dev database `slotty` (`.env`), Mailpit (SMTP :1025, inbox http://localhost:8025) and Caddy, which serves `bun run dev` at https://slotty.local. Tests don't use it: each run starts a throwaway Postgres with Testcontainers.
 - If `docker` says permission denied in an agent shell, run it through `sg docker -c "…"`.
 - `prisma migrate reset` is blocked for agents. Ask the user before wiping the dev DB.
-- Checks before a pull request: `bun run typecheck`, `bun run lint`, `bun run test` (unit + integration), and `bun run test:e2e` for user-facing changes.
+- Checks before a pull request: `bun run typecheck`, `bun run lint`, `bun run test` (unit + integration), and `bun run test:e2e` for user-facing changes. They need Docker running (in an agent shell: `sg docker -c "bun run test"`). CI (`.github/workflows/ci.yml`) runs them all; `master` only takes PRs with a green **CI ok** that are up to date.
 
 ## Way of working
 - Work on a branch off `master` and open a pull request. Merging to `master` deploys to production automatically (`.github/workflows/deploy.yml`).
@@ -25,10 +25,10 @@ Slotty: demo scheduling and evaluation for university courses. System documentat
 
 ## Testing
 - Business rules in `src/domain` have unit tests (`tests/unit`).
-- Services are covered by integration tests against the `slotty_test` database (`tests/integration`, `bun run test`); user flows by Playwright (`tests/e2e`, `bun run test:e2e`, a production build on :3100).
+- Services are covered by integration tests against a throwaway Postgres (Testcontainers, `tests/support/postgres.ts`; `tests/integration`, `bun run test`); user flows by Playwright (`tests/e2e`, `bun run test:e2e` → `tests/e2e/run.ts`, a production build on :3100).
 
 ## Deployment
-- Application: merge to `master`; CI builds ARM64 images, runs migrations as a one-off ECS task, rolls out web and worker (`infra/aws/deploy.sh`).
+- Application: merge to `master`; `.github/workflows/deploy.yml` builds both ARM64 images (`docker-bake.hcl`), runs migrations as a one-off ECS task when `prisma/migrations` changed, rolls out web and worker and checks `/health` reports the new release (`infra/aws/deploy.sh`, ADR-022).
 - Infrastructure: Terraform in `infra/aws/org` (management account) and `infra/aws/app` (slotty-prod). Always show `terraform plan` and get approval before `apply`; never apply unreviewed.
 - Migrations must keep the previous release working (expand, then contract in a later release): rollback does not undo them.
 

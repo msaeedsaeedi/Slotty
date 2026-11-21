@@ -12,8 +12,6 @@ tests
 *.tsbuildinfo
 .env*
 !.env.example
-deploy/.env
-deploy/backups
 dist
 infra/aws/**/.terraform
 infra/aws/**/*.tfstate*

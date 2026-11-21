@@ -1,61 +1,46 @@
-# Checks every push and pull request; deploys master to AWS (infra/aws).
-# Repository variables (Settings → Secrets and variables → Actions → Variables) come from
-# `terraform output github_actions_variables` in infra/aws/app. Until AWS_DEPLOY_ROLE_ARN is
-# set, only the checks run.
-name: CI / Deploy
+# Deploys every push to master to AWS (infra/aws). It doesn't re-run CI: master's branch
+# protection only merges PRs that are up to date and green ("CI ok"), so this commit is what CI
+# tested (ADR-022). Repository variables (Settings → Secrets and variables → Actions → Variables)
+# come from `terraform output github_actions_variables` in infra/aws/app; until they're set,
+# nothing runs.
+name: Deploy
 
 on:
   push:
     branches: [master]
-  pull_request:
   workflow_dispatch:
+    inputs:
+      force_migrate:
+        description: Run the migrate task even if prisma/migrations didn't change
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
-jobs:
-  check:
-    runs-on: ubuntu-24.04
-    env:
-      # `prisma generate` loads its config, which needs a URL; nothing connects.
-      DATABASE_URL: postgres://ci@localhost/ci
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.14
-      - run: bun install --frozen-lockfile
-      - run: bun run typecheck
-      - run: bun run lint
-      - run: bun run test:unit
+env:
+  IMAGE_TAG: ${{ github.sha }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
 
-  deploy:
-    needs: check
-    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request' && vars.AWS_DEPLOY_ROLE_ARN != ''
-    # Native ARM64 build for Graviton Fargate (free for public repositories).
+jobs:
+  build:
+    name: Build and push images
+    if: github.ref == 'refs/heads/master' && vars.AWS_BUILD_ROLE_ARN != ''
+    # Native ARM64 for Graviton Fargate (free for public repositories).
     runs-on: ubuntu-24.04-arm
-    concurrency:
-      group: deploy-prod
-      cancel-in-progress: false
+    timeout-minutes: 20
     permissions:
       contents: read
       id-token: write
-    env:
-      IMAGE_TAG: ${{ github.sha }}
-      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
-      ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
-      ECS_SUBNETS: ${{ vars.ECS_SUBNETS }}
-      ECS_SECURITY_GROUP: ${{ vars.ECS_SECURITY_GROUP }}
-      APP_URL: ${{ vars.APP_URL }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_BUILD_ROLE_ARN }}
           aws-region: us-east-1
 
-      - uses: aws-actions/amazon-ecr-login@v2
+      - uses: aws-actions/amazon-ecr-login@v2.2.0
 
       # Tags are immutable: a re-run of the same commit reuses its images.
       - name: Already built?
@@ -66,32 +51,57 @@ jobs:
             echo "built=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4.4.1
         if: steps.exists.outputs.built != 'true'
 
-      - name: Build and push the app image
+      # Both images in one run (docker-bake.hcl): shared stages build once.
+      - uses: docker/bake-action@v7.5.0
         if: steps.exists.outputs.built != 'true'
-        uses: docker/build-push-action@v6
+        env:
+          REPOSITORY: ${{ env.ECR_REPOSITORY }}
+          TAG: ${{ env.IMAGE_TAG }}
         with:
-          context: .
-          platforms: linux/arm64
+          source: .
           push: true
           provenance: false
-          tags: ${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          set: |
+            app.cache-from=type=gha,scope=app
+            app.cache-to=type=gha,mode=max,scope=app
+            migrate.cache-from=type=gha,scope=migrate
+            migrate.cache-to=type=gha,mode=max,scope=migrate
 
-      - name: Build and push the migrate image
-        if: steps.exists.outputs.built != 'true'
-        uses: docker/build-push-action@v6
+  rollout:
+    name: Migrate and roll out
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # Its own approval rules, history and the OIDC subject the deploy role trusts. The
+    # environment's deployment-branch rule allows master only.
+    environment:
+      name: production
+      url: ${{ vars.APP_URL }}
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
+      ECS_SUBNETS: ${{ vars.ECS_SUBNETS }}
+      ECS_SECURITY_GROUP: ${{ vars.ECS_SECURITY_GROUP }}
+      APP_URL: ${{ vars.APP_URL }}
+      FORCE_MIGRATE: ${{ inputs.force_migrate && '1' || '' }}
+    steps:
+      # Full history: deploy.sh compares this commit with the running release.
+      - uses: actions/checkout@v7.0.1
         with:
-          context: .
-          target: migrate
-          platforms: linux/arm64
-          push: true
-          provenance: false
-          tags: ${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}-migrate
-          cache-from: type=gha
+          fetch-depth: 0
+
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
 
       - name: Migrate and roll out
         run: infra/aws/deploy.sh

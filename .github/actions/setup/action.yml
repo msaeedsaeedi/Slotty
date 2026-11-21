@@ -1,0 +1,16 @@
+# Bun (pinned) and the project's dependencies, with Bun's package cache kept between runs.
+name: Set up Bun and dependencies
+description: Install the pinned Bun and run `bun install --frozen-lockfile` with a cached package store.
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@v2.2.0
+      with:
+        bun-version: ${{ env.BUN_VERSION }}
+    - uses: actions/cache@v6.1.0
+      with:
+        path: ~/.bun/install/cache
+        key: bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+        restore-keys: bun-${{ runner.os }}-${{ runner.arch }}-
+    - shell: bash
+      run: bun install --frozen-lockfile

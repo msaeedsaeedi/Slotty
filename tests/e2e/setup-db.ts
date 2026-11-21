@@ -1,7 +1,8 @@
 import { db } from "@/server/db";
 import { hashPassword } from "@/server/auth/password";
+import { isTestDatabaseUrl } from "../support/postgres";
 
-if (!/\/slotty_test(\?|$)/.test(process.env.DATABASE_URL ?? "")) throw new Error("Refusing to reset a non-test database");
+if (!isTestDatabaseUrl(process.env.DATABASE_URL)) throw new Error("Refusing to reset a non-test database");
 
 const tables = await db.$queryRaw<{ tablename: string }[]>`
   SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`;

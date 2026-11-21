@@ -1,11 +1,17 @@
-import { execSync } from "node:child_process";
-import path from "node:path";
-import { parse } from "dotenv";
-import { readFileSync } from "node:fs";
+import type { TestProject } from "vitest/node";
+import { startPostgres } from "../support/postgres";
 
-/** Apply migrations to the test database before the integration suite runs. */
-export default function setup() {
-  const root = path.resolve(import.meta.dirname, "../..");
-  const env = { ...process.env, ...parse(readFileSync(path.join(root, ".env.test"))) };
-  execSync("bunx prisma migrate deploy", { cwd: root, env, stdio: "pipe" });
+declare module "vitest" {
+  export interface ProvidedContext {
+    postgresUrl: string;
+  }
+}
+
+/** One throwaway Postgres for the run, migrated once; each worker copies it (see setup.ts). */
+export default async function setup(project: TestProject) {
+  const { container, baseUrl } = await startPostgres();
+  project.provide("postgresUrl", baseUrl);
+  return async () => {
+    await container.stop();
+  };
 }

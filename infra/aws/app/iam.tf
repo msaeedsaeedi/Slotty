@@ -59,34 +59,47 @@ resource "aws_iam_role_policy" "task_exec" {
   })
 }
 
-# ── GitHub Actions deploy role (OIDC, no stored keys), usable from master only ──
+# ── GitHub Actions roles (OIDC, no stored keys) ──
+# Two roles, so each job gets only what it needs (ADR-022):
+#   build  — pushes images to ECR; any job on the master branch (it runs alongside CI).
+#   deploy — migrates and rolls out on ECS; only jobs in the `production` GitHub Environment,
+#            whose deployment-branch rule allows master only.
 
 resource "aws_iam_openid_connect_provider" "github" {
   url            = "https://token.actions.githubusercontent.com"
   client_id_list = ["sts.amazonaws.com"]
 }
 
-resource "aws_iam_role" "deploy" {
-  name = "${local.name}-github-deploy"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
-      Action    = "sts:AssumeRoleWithWebIdentity"
-      Condition = {
-        StringEquals = {
-          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = "${var.github_oidc_subject_prefix}:ref:refs/heads/master"
-        }
-      }
-    }]
-  })
+locals {
+  github_trust = {
+    for role, subject in {
+      build  = "${var.github_oidc_subject_prefix}:ref:refs/heads/master"
+      deploy = "${var.github_oidc_subject_prefix}:environment:production"
+      } : role => jsonencode({
+        Version = "2012-10-17"
+        Statement = [{
+          Effect    = "Allow"
+          Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
+          Action    = "sts:AssumeRoleWithWebIdentity"
+          Condition = {
+            StringEquals = {
+              "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+              "token.actions.githubusercontent.com:sub" = subject
+            }
+          }
+        }]
+    })
+  }
 }
 
-resource "aws_iam_role_policy" "deploy" {
-  name = "deploy-slotty"
-  role = aws_iam_role.deploy.id
+resource "aws_iam_role" "build" {
+  name               = "${local.name}-github-build"
+  assume_role_policy = local.github_trust.build
+}
+
+resource "aws_iam_role_policy" "build" {
+  name = "push-slotty-images"
+  role = aws_iam_role.build.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -105,6 +118,21 @@ resource "aws_iam_role_policy" "deploy" {
         ]
         Resource = aws_ecr_repository.app.arn
       },
+    ]
+  })
+}
+
+resource "aws_iam_role" "deploy" {
+  name               = "${local.name}-github-deploy"
+  assume_role_policy = local.github_trust.deploy
+}
+
+resource "aws_iam_role_policy" "deploy" {
+  name = "deploy-slotty"
+  role = aws_iam_role.deploy.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
       {
         Sid      = "TaskDefinitions"
         Effect   = "Allow"

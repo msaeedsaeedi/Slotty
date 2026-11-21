@@ -16,10 +16,11 @@ file.
     actor, notifications through the outbox, audited moderation changes.
   \item \textbf{Run the checks}: \code{bun run typecheck}, \code{bun run lint},
     \code{bun run test}, and \code{bun run test:e2e} for anything a user sees (\cref{ch:delivery}).
+    CI runs all of them again; Docker is the only thing they need.
   \item \textbf{Update this document} in the same pull request (table below), add a change-log
     line (\cref{app:changelog}) and check \code{bun run docs:build}.
-  \item \textbf{Open a pull request.} CI runs the checks; merging to \code{master} deploys
-    (\cref{ch:delivery}). Migrations must keep the previous release working.
+  \item \textbf{Open a pull request.} It merges once \textbf{CI ok} is green and the branch is up
+    to date with \code{master}; merging deploys (\cref{ch:delivery}). Migrations must keep the previous release working.
   \item \textbf{Infrastructure} (\src{infra/aws}): show the \code{terraform plan}, get it approved,
     then apply exactly that plan. Task-definition changes go live on the next deploy.
 \end{enumerate}

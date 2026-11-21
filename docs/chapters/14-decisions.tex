@@ -98,7 +98,7 @@ Add one for every deliberate trade-off.
   {CI's role stays narrow. A configuration change in Terraform goes live on the next deploy.}
   {—}
 
-\adr{011}{Immutable OIDC subject for deploys}{2026-11-16}{Accepted}
+\adr{011}{Immutable OIDC subject for deploys}{2026-11-16}{Accepted; subjects changed by ADR-022}
   {The repository issues GitHub's immutable OIDC subjects, which include owner and repository IDs.}
   {Trust exactly \code{<prefix>:ref:refs/heads/master} with the ID-based prefix.}
   {A renamed or re-created repository with the same name cannot deploy.}
@@ -270,3 +270,47 @@ Add one for every deliberate trade-off.
    parent domain (simpler, but not Slotty's own).}
   {Several people answer support, or replies must come from \code{support@}: add a mailbox and
    replace the MX and SPF records with the provider's, plus its DKIM key.}
+
+\adr{022}{CI gates the merge; the deploy verifies its own rollout}{2026-11-21}{Accepted; changes ADR-011's subjects}
+  {A merge took 8.5--9 minutes to go live: checks that had already passed on the pull request ran
+   again, the two images were built one after the other, the migrate task ran on every deploy,
+   and the rollout waited about two minutes after the new tasks served (and the old ones were
+   gone) for ECS to report \emph{completed}. Meanwhile CI ran only unit tests: integration and
+   end-to-end tests ran only if someone ran them locally, and \code{master} had no protection.}
+  {Two workflows. \emph{CI} runs every test on every pull request (\cref{sec:ci}), and branch
+   protection makes \code{master} take only green pull requests that are up to date, so
+   \emph{Deploy} doesn't run CI again. Deploy builds both images in one Buildx run, runs the
+   migrate task only when \src{prisma/migrations} changed since the running release, and confirms
+   the rollout from the services' state and \route{/health}'s reported release instead of waiting
+   for ECS's verdict. It refuses to deploy a commit older than the running release. Two OIDC
+   roles replace one: build (ECR, the master branch) and deploy (ECS, the \code{production}
+   environment).}
+  {About four minutes from merge to live; a pull request waits for its slowest job (end-to-end,
+   about five minutes). The deploy can report success shortly before ECS's own verdict; if the
+   circuit breaker rolled back after that, the service events show it and the alarms fire.
+   Everything merged has passed the full suite, at no cost (GitHub's runners are free for public
+   repositories). Rejected: re-running CI before deploying (puts end-to-end tests between merge and
+   production), AWS's ECS deploy actions (they still need a script for the gated migrate task, and
+   their stability wait is the early signal the deploy script already stopped trusting), ECS blue/green
+   (needs a load balancer, which ADR-002 replaced with API Gateway), a merge queue (one
+   developer).}
+  {Several people merge at once (add a merge queue), or a load balancer returns (use ECS's
+   blue/green deployments and their health-check gates).}
+
+\adr{023}{Tests start their own database; one deployment path}{2026-11-21}{Accepted}
+  {Integration and end-to-end tests used a fixed \code{slotty_test} database inside the
+   developer's Postgres container, configured by \code{.env.test}; one shared database meant
+   integration files ran one at a time, and CI had no database at all. A second production setup
+   (\src{deploy} for a single VPS, and \code{bun run app:up} with its own \code{slotty_app}
+   database) was kept in step with AWS by hand but used by nobody.}
+  {Each test run starts a throwaway PostgreSQL 17 container with Testcontainers, migrates it into
+   a template once, and gives every integration worker its own copy, so files run in parallel.
+   The VPS stack, the \code{app} compose profile and the extra databases are removed; AWS is the
+   only deployment, and CI's Docker job checks the images build.}
+  {Tests need Docker, locally and in CI, and nothing else: same setup in both places, no state
+   left between runs; integration tests take about 40 seconds instead of running serially. A run
+   pays a few seconds to start Postgres. Running the production images locally now means
+   \code{docker buildx bake} and \code{docker run} by hand. Rejected: a CI service container only
+   (CI and laptops would differ), an in-process Postgres such as PGlite (not the production engine),
+   keeping \src{deploy} (an untested second path that drifts).}
+  {Slotty needs to run somewhere other than AWS again.}

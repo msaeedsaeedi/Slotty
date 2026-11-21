@@ -40,7 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 !.env.example
-!.env.test
 
 # prisma generated client
 /src/generated
@@ -49,9 +48,6 @@ next-env.d.ts
 /test-results
 /playwright-report
 /.next-e2e/
-
-# production backups (deploy/backup.sh)
-/deploy/backups
 
 # Caddy's local CA certificate (bun run infra:cert)
 /infra/caddy-root.crt
