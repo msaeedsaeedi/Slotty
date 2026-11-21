@@ -6,6 +6,7 @@ Newest first. One line per revision of this document; the pull request has the d
   \toprule
   \thead{Date} & \thead{Change}\\
   \midrule
+  2026-11-22 & Live notification bell (issue \#9): the header bell checks \route{/api/notifications/unread} every 30 seconds while the tab is visible, on focus, and when a push arrives; notification, dashboard and booking pages reload their data when something new comes in. Ch.~3, 7 and 12 updated.\\
   2026-11-21 & Student demo state (issue \#12): one rule, \code{studentDemoState}, decides what students see about a demo from the slot time and the booking and evaluation status (\ui{In progress}, \ui{Done: waiting for attendance}, \ui{Completed: marks pending}, \ui{Marked}, \ui{Missed}); the course page, assignment page and \route{/bookings} use it, and booking actions show only before the slot. Ch.~3 and 4 updated.\\
   2026-11-21 & Append-only audit log (issue \#31): a trigger refuses \code{UPDATE} and \code{DELETE} on \code{AuditLog}, in an expand-only migration. Ch.~4, 6, 7 and 11 updated.\\
   2026-11-21 & Safe CSV exports (issue \#34): one \code{safeCell} helper escapes every header and cell, including rubric-label headers, formulas after leading spaces, and cells starting with a tab or carriage return. Ch.~11 updated.\\
