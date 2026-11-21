@@ -116,6 +116,12 @@ test("with an instructor, TA submissions wait for review and the instructor fina
   await prof.getByRole("button", { name: "Finalize" }).click();
   await expect(prof.getByText("Nothing to review")).toBeVisible();
 
+  // The student's bell picks up the release without a reload (it checks when the tab regains focus).
+  const bell = student.getByRole("link", { name: /^Notifications \(\d+ unread\)$/ });
+  const before = Number(/\((\d+) unread\)/.exec((await bell.getAttribute("aria-label")) ?? "")?.[1]);
+  await student.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(student.getByRole("link", { name: `Notifications (${before + 1} unread)` })).toBeVisible();
+
   await student.reload();
   await expect(student.getByText("Your result")).toBeVisible();
   await expect(student.getByText("10 / 10", { exact: true })).toBeVisible();

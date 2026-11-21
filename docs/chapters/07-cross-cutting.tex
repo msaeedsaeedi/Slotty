@@ -34,6 +34,21 @@ the next message says what changed.
   session. Behind a pooler the worker would fall back to polling every \envvar{WORKER_INTERVAL_MS}.
 \end{decision}
 
+\section{Live updates by polling}\label{sec:live-polling}
+Pages stay current without websockets or server-sent events: API Gateway's HTTP API ends a
+request after 30 seconds, and at this scale polling costs cents (\cref{ch:cost}).
+\begin{itemize}
+  \item \code{<LiveBell>} (\src{src/components/live-bell.tsx}) checks
+    \route{/api/notifications/unread} every 30 seconds while the tab is visible, straight away
+    when the tab regains focus, and when a push arrives (the service worker posts
+    \code{slotty:push} to open tabs). Only the badge changes, except on \route{/notifications},
+    \route{/dashboard} and \route{/bookings}, which reload their data when the count goes up.
+    A 401 stops the polling.
+  \item \code{<LiveRefresh>} reloads a whole page's data every 30 seconds on demo day
+    (\route{/today}), and \code{<Countdown>} ticks locally and reloads once its target passes.
+\end{itemize}
+Both use \code{router.refresh()}, which keeps scroll position and form input.
+
 \section{Access control}
 Every service operation receives an \code{Actor} and checks it before reading or writing
 (\src{src/server/services/access.ts}): \code{assertCourseRole}, \code{assertStaff},

@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { BarChart3, Bell, CalendarClock, LogOut, Shield, UserRound } from "lucide-react";
+import { BarChart3, CalendarClock, LogOut, Shield, UserRound } from "lucide-react";
 import { SlottyMark } from "@/components/slotty-mark";
 import { FeedbackButton } from "@/components/feedback-button";
+import { LiveBell } from "@/components/live-bell";
 import { Button } from "@/components/ui/button";
 import type { Actor } from "@/server/services/access";
 import { myRoleKinds } from "@/server/services/courses";
@@ -56,16 +57,7 @@ export async function AppHeader({ user }: { user: Actor }) {
         </nav>
         <div className="ml-auto flex items-center gap-1">
           {!outsideCourses && <FeedbackButton />}
-          <Button asChild variant="ghost" size="icon" aria-label={`Notifications (${unread} unread)`} className="relative">
-            <Link href="/notifications">
-              <Bell />
-              {unread > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-red-600 px-1 text-[10px] font-semibold leading-4 text-white">
-                  {unread > 99 ? "99+" : unread}
-                </span>
-              )}
-            </Link>
-          </Button>
+          <LiveBell initial={unread} />
           <Link href="/account" className="hidden max-w-40 truncate text-sm text-muted-foreground hover:text-foreground sm:inline">
             {user.name}
           </Link>
