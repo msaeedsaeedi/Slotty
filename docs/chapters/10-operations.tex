@@ -19,16 +19,18 @@ The values the commands need (subnets, security group, cluster) are in
 
 \section{Runbooks}
 \subsection{Deploy}
-Publish a release (\cref{sec:releases}); merging alone deploys nothing. To redeploy without a code
-change (for example after changing configuration in Terraform), run the \emph{Deploy} workflow by
-hand from the running release's tag; it reuses the images and skips the migrate task unless
-\emph{force\_migrate} is ticked. \code{curl https://<domain>/health} shows the release that is
-serving (\code{version}, the tag).
+Merge a release pull request from \code{dev} into \code{master} (\cref{sec:releases}); merging
+into \code{dev} deploys nothing. To redeploy without a code change (for example after changing
+configuration in Terraform), run the \emph{Deploy} workflow by hand from the running release's
+tag; it reuses the images and skips the migrate task unless \emph{force\_migrate} is ticked.
+\code{curl https://<domain>/health} shows the release that is serving (\code{version}, the tag).
 
 \subsection{Hotfix}
-Branch off \code{master}, fix, merge, then publish the next patch release (\code{v1.2.1}). A
-release is always a commit on \code{master}, so if \code{master} already holds unreleased work
-that mustn't ship yet, revert it first and merge it again after the release.
+Branch \code{hotfix/<issue>-<slug>} off \code{master}, fix, bump the patch version
+(\code{v1.2.1}) in the same branch, and open a pull request into \code{master}: merging it deploys
+and tags. Unreleased work on \code{dev} doesn't ship with it. The \emph{Back-merge} pull request
+then brings the fix into \code{dev}; if it reports a conflict, merge \code{master} into \code{dev}
+by hand in a pull request.
 
 \subsection{A deploy failed}
 The rollout job's log says which step stopped it and, for a service, prints its recent ECS events.
@@ -44,13 +46,22 @@ The rollout job's log says which step stopped it and, for a service, prints its 
     log group.
   \item[A newer release is already live] Not a failure: an older release's run was queued behind
     a newer one. To go back on purpose, see below.
-  \item[package.json says … but the tag is …] The release was tagged before the
-    \emph{Release vX.Y.Z} pull request merged, or on the wrong commit. Delete the release and its
-    tag (admins only) and publish again.
+  \item[vX.Y.Z is already released] A push reached \code{master} without a new version, which the
+    \emph{Release PR} check normally prevents. Nothing changed in production; release a new
+    version through \code{dev}.
+  \item[package.json says … but the tag is …] A run by hand from a tag whose commit carries
+    another version. Run it from the right tag.
 \end{description}
+Until it is fixed, \code{master} holds a change that isn't live and has no tag: fix forward
+through \code{dev} (or a hotfix), or revert it on \code{master} (below). Re-running the failed
+workflow after a transient error deploys the same commit and then tags it.
 
 \subsection{Roll back}
-Run \emph{Deploy} by hand from the older release's tag with \emph{rollback} ticked. Its images are
+The normal way back keeps \code{master} equal to production: \emph{Revert} the release's pull
+request on GitHub (a \code{revert-} branch), bump the patch version in it, and merge it into
+\code{master}; it deploys and tags like any release, and the back-merge carries the revert into
+\code{dev}. In an emergency, faster: run \emph{Deploy} by hand from the older release's tag with
+\emph{rollback} ticked, then revert on \code{master} so it matches again. Its images are
 still in ECR, so nothing is rebuilt; the migrate task doesn't run and \route{/health} confirms the
 older release. If GitHub is unavailable, point the services at the previous task-definition
 revisions instead:

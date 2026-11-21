@@ -29,7 +29,7 @@ This chapter gathers the controls described elsewhere into one view an auditor c
   Platform separation & Insights and feedback readable only by a dedicated platform account (never an admin, never in a course), granted from the command line only; hidden from the admin console and its audit log; never tracked itself & \cref{ch:rules}, ADR-016\\
   Browser policy & \code{Content-Security-Policy-Report-Only} (\code{'self'} only) in production; \code{X-Frame-Options}, \code{nosniff}, referrer policy & \src{next.config.ts}\\
   Supply chain & Lockfile installs; base images pinned by version and the TeX image by digest (base-image digests: issue \#40); RDS CA bundle checked by SHA-256; ECR scan on push & \src{Dockerfile}\\
-  Releases & Production runs only published releases: \code{v*} tags that only admins can create, on commits on \code{master} that passed CI; the build and deploy roles trust only those tags and the \code{production} environment & \cref{sec:releases}, ADR-024\\
+  Releases & Production runs only \code{master}, which takes only release pull requests (from \code{dev}, a hotfix or a revert) with \textbf{CI ok} green and a new version; the build role trusts only \code{master} and \code{v*} tags, the deploy role only the \code{production} environment (\code{master} and \code{v*} tags); tags are created by the deploy after a healthy rollout and can't be moved or deleted except by admins & \cref{sec:releases}, ADR-027\\
   Vulnerability reports & Private vulnerability reporting and \src{SECURITY.md}; a confirmed problem is tracked in a draft security advisory, with only a neutrally worded public issue, until its fix is released & ADR-024\\
   \bottomrule
 \end{xltabular}

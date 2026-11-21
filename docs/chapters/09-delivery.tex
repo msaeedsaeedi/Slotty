@@ -55,27 +55,44 @@ outside contributors wait for an approval before any workflow runs. Fork pull re
 secrets or AWS: they run with a read-only token and can't obtain an OIDC token for the roles.
 
 \section{Deploy}\label{sec:deploy}
-\src{.github/workflows/deploy.yml} runs when a GitHub Release is published, and by hand from a
-release tag (\emph{Use workflow from} → \emph{Tags}) to redeploy it or, with \emph{rollback}, go
-back to it; \emph{force\_migrate} runs the migrate task regardless. It has two jobs. Before
-building, the first checks that the tag points at a commit on \code{master} and equals
-\code{v} plus \src{package.json}'s \code{version}; a run from a branch does nothing.
+\code{master} is production (ADR-027). \src{.github/workflows/deploy.yml} runs on every push to
+\code{master}, which only ever takes a release pull request, and by hand from a release tag
+(\emph{Use workflow from} → \emph{Tags}) to redeploy it or, with \emph{rollback}, go back to it in
+an emergency; \emph{force\_migrate} runs the migrate task regardless. It has three jobs. Before
+building, the first works out the release, \code{v} plus \src{package.json}'s \code{version}: from
+\code{master} it must not be tagged yet (a redeploy of the same commit is fine); from a tag it
+must equal the tag, on a commit on \code{master}. The second migrates and rolls out. The third,
+only once \route{/health} reports the new version, creates the tag and publishes the GitHub
+Release with generated notes (a pre-release for a version with a suffix such as
+\code{-beta.1}). A tag therefore always means ``this went live''; a failed rollout leaves none.
 
-\subsection{Releases and versions}\label{sec:releases}
+\subsection{Branches, releases and versions}\label{sec:releases}
+Two long-lived branches (ADR-027). \code{dev}, the default branch, is where work integrates:
+feature branches start from it and merge into it through pull requests with \textbf{CI ok} green
+and up to date; merging there deploys nothing. \code{master} is what production runs: it takes
+only release pull requests, and merging one is the release.
+
 Versions follow semantic versioning. Until the pilot is signed off they are pre-releases,
 \code{v1.0.0-beta.N}; then \code{v1.0.0}, minor versions for features and patch versions for
 fixes. Each sprint ends with one release (\cref{ch:changes}); an urgent fix gets a patch release
 in between.
 \begin{enumerate}
-  \item A pull request titled \emph{Release vX.Y.Z} sets \code{version} in \src{package.json} and
-    adds a change-log line. It merges like any other.
-  \item On GitHub, \emph{Releases} → \emph{Draft a new release}: a new tag \code{vX.Y.Z} on
-    \code{master}, \emph{Generate release notes} (grouped by label, \src{.github/release.yml}),
-    tick \emph{pre-release} for a beta, publish. Publishing starts Deploy.
+  \item On \code{dev}, a pull request titled \emph{Release vX.Y.Z} sets \code{version} in
+    \src{package.json} and adds a change-log line.
+  \item A pull request from \code{dev} into \code{master}, titled \emph{Release vX.Y.Z}, labelled
+    \code{skip-release-notes}. Besides the usual jobs, CI's \emph{Release PR} job checks that it
+    comes from \code{dev} (or a \code{hotfix/} or \code{revert-} branch), that the version differs
+    from \code{master}'s, and that no tag has it yet.
+  \item Merging it deploys, then tags \code{vX.Y.Z} and publishes the release with notes grouped by
+    the merged pull requests' labels (\src{.github/release.yml}).
+  \item The \emph{Back-merge} workflow opens a pull request bringing \code{master} back into
+    \code{dev} and starts CI on it; merge it, so the next release is up to date with
+    \code{master}. (It can't push to \code{dev} itself: the branch has no bypass, and GitHub
+    doesn't let a personal repository exempt GitHub Actions.)
   \item The release's milestone closes; unfinished issues move to the next one.
 \end{enumerate}
-A tag ruleset lets only repository admins create, move or delete \code{v*} tags, so a tag (and the
-build role it unlocks) is always a deliberate release.
+A tag ruleset lets nobody but repository admins move or delete \code{v*} tags; the Deploy
+workflow creates them, after a healthy rollout. Hotfixes and reverts are in \cref{ch:ops}.
 
 \subsection{Build}
 One Buildx run (\src{docker-bake.hcl}) builds both images natively on GitHub's ARM64 runner,
@@ -106,7 +123,7 @@ the same by hand:
     \src{prisma/migrations} is identical in both releases. A non-zero exit stops the deploy; the
     services stay on the previous release.
   \item Registers new revisions of the \code{slotty-web} and \code{slotty-worker} task definitions
-    (the latest revision with only the image and \envvar{APP_VERSION}, set to the tag, changed) and updates both
+    (the latest revision with only the image and \envvar{APP_VERSION}, set to the release, changed) and updates both
     services. Configuration changes made in Terraform therefore ride along with the next deploy.
   \item Checks every 5 seconds, up to 10 minutes, until each service's primary deployment is the
     new revision, runs the desired count, and no older deployment has tasks left. Web tasks only

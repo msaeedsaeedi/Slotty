@@ -1,13 +1,16 @@
-# Checks every pull request (required by master's branch protection: the "CI ok" job) and every
-# push to master. Jobs run in parallel; each database is a throwaway Postgres (Testcontainers).
-# Deploying is .github/workflows/deploy.yml, which doesn't wait for this: branch protection makes
-# a PR be up to date with master and green before it merges, so master is what CI already tested.
+# Checks every pull request (required by dev's and master's protection: the "CI ok" job) and every
+# push to dev and master. Jobs run in parallel; each database is a throwaway Postgres
+# (Testcontainers). PRs into master are releases and must also pass "Release PR" (ADR-027).
+# Deploying is .github/workflows/deploy.yml, which doesn't wait for this: protection makes a PR be
+# up to date and green before it merges, so master is what CI already tested. The back-merge
+# workflow starts this by hand (workflow_dispatch) on the branch it opens, since a PR opened by
+# the workflow token starts no workflow itself.
 name: CI
 
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [master, dev]
   workflow_dispatch:
 
 permissions:
@@ -131,12 +134,42 @@ jobs:
           path: docs/build/slotty.pdf
           if-no-files-found: error
 
+  release-pr:
+    # A PR into master is a release: from dev (or a hotfix/ or revert- branch), with a version in
+    # package.json that master doesn't have and no tag has taken yet.
+    name: Release PR
+    if: github.event_name == 'pull_request' && github.base_ref == 'master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Source branch, version and tag
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          case $HEAD_REF in
+            dev|hotfix/*|revert-*) ;;
+            *) echo "::error::master takes release PRs from dev (or hotfix/*, revert-*), not from $HEAD_REF. Target dev instead."; exit 1 ;;
+          esac
+          version="v$(jq -r .version package.json)"
+          base="v$(git show "$BASE_SHA:package.json" | jq -r .version)"
+          if [ "$version" = "$base" ]; then
+            echo "::error::package.json still says $version, like master. Bump the version: merging this PR releases it."; exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$version" >/dev/null; then
+            echo "::error::$version is already tagged. Pick the next version."; exit 1
+          fi
+          echo "Merging releases $version (master has $base)."
+
   # The one check branch protection requires: green only if every job above passed (or was
   # skipped by design), so adding a job never needs a settings change.
   ok:
     name: CI ok
     if: always()
-    needs: [static, integration, e2e, image, docs]
+    needs: [static, integration, e2e, image, docs, release-pr]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
