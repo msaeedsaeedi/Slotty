@@ -100,6 +100,25 @@ model AuthToken {
   @@index([userId, type])
 }
 
+enum AuthAttemptKind {
+  SIGN_IN_FAILURE
+  RESET_REQUEST
+  RESET_EMAIL
+}
+
+/// Recent sign-in failures and reset requests, for the abuse limits in
+/// `src/domain/auth-limits.ts`. `keyHash` is a SHA-256 of "account:<email>" or
+/// "network:<ip>", never the value itself. The worker deletes rows after a day.
+model AuthAttempt {
+  id        String          @id @default(cuid())
+  kind      AuthAttemptKind
+  keyHash   String
+  createdAt DateTime        @default(now())
+
+  @@index([kind, keyHash, createdAt])
+  @@index([createdAt])
+}
+
 // ─── Courses ─────────────────────────────────────────────────────────────────
 
 enum CourseRole {

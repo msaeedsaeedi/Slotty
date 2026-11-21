@@ -368,3 +368,25 @@ Add one for every deliberate trade-off.
    the course to anyone), allowing promotion only without history (more rules for a rare case).}
   {There are several admins with a support rota that needs to act inside courses (add an audited
    ``act as instructor'' step), or departments want TAs to manage co-TAs.}
+
+\adr{026}{Sign-in and reset limits in PostgreSQL, keyed by hashes}{2026-11-21}{Accepted}
+  {Nothing limited sign-in or password reset beyond API Gateway's stage throttle, shared by
+   everyone: passwords could be guessed online without limit, and the reset form could send
+   unlimited emails to any address, which also endangers the SES sending account. Web tasks
+   don't share memory, and there is no Redis.}
+  {An \code{AuthAttempt} table holds recent failed sign-ins, reset requests and reset emails,
+   keyed by a SHA-256 of the typed email or the client address. Rules in
+   \src{src/domain/auth-limits.ts}: exponential backoff per email after five failures (up to 15
+   minutes), a generous per-network cap (a campus shares one address), three reset emails an
+   hour per recipient (silent), ten reset requests an hour per network. The address is
+   \code{CloudFront-Viewer-Address}, trusted only because of the origin lock (ADR-009); without
+   it, per-network limits are skipped. A new reset link voids older ones. The worker deletes
+   rows after a day.}
+  {A few small queries per sign-in, no new service, no cost. Anyone can make a known email wait
+   up to 15 minutes by failing on purpose, so the message offers a password reset, which lifts
+   the wait. The per-network cap can't tell a campus from an attacker sharing it. Rejected: AWS
+   WAF rate-based rules (about \$10 a month, over budget, and they can't key on the account),
+   ElastiCache or Redis (a new service for one feature), in-memory counters (each task would
+   count on its own), CAPTCHA (a third party, and friction for every student).}
+  {A WAF fits the budget (move the per-network caps to the edge), or sign-ins grow enough that
+   the table needs a different store.}

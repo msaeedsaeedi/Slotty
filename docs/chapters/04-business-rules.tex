@@ -245,11 +245,21 @@ The account page (\route{/account}) shows only what applies to the user's roles:
   \midrule
   \endhead
   Invite link & 14 days. Re-inviting invalidates older links.\\
-  Password reset link & 2 hours. Resetting ends every session.\\
+  Password reset link & 2 hours. A new request voids any earlier unused link. Resetting ends every session and lifts any sign-in wait.\\
   Session & 30 days, stored in the DB. Disabled users are signed out.\\
   Unknown email on reset & Silent success, so nobody can probe which emails exist.\\
-  \bottomrule
+  Failed sign-ins & Counted per typed email (known or not, so the limit reveals nothing) for an hour: 5 are free, then each one doubles the wait from 30 seconds, up to 15 minutes. While waiting, even the right password is refused. A successful sign-in clears the count. Wrong current passwords on \route{/account} count too.\\
+  Sign-ins per network & 50 failures in 15 minutes from one address, across all accounts, refuses that network for 15 minutes. Generous because a campus shares one address.\\
+  Reset requests & 10 an hour per network (refused with a message); 3 reset or invite emails an hour per recipient (silently, the form still says it sent one). The admin console's \ui{Send password reset} isn't limited.\\
+\bottomrule
 \end{xltabular}}
+
+The limits are \src{src/domain/auth-limits.ts} (\code{canTrySignIn}, \code{canRequestReset},
+\code{canEmailReset}). Counts come from \code{AuthAttempt}, so every web task sees the same
+numbers; it stores SHA-256 hashes of the email or address, never the values, and the worker
+deletes rows after a day. The address is CloudFront's \code{CloudFront-Viewer-Address}, trusted
+because of the origin lock (\src{src/server/client-ip.ts}); without it, per-network limits are
+skipped rather than putting every user under one key (ADR-026).
 
 \section[Notifications]{Notifications (\src{src/server/services/notify.ts})}
 

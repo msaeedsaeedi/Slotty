@@ -22,7 +22,8 @@ This chapter gathers the controls described elsewhere into one view an auditor c
   Support mail & Slotty's AWS account receives no mail: the domain's MX records point to Cloudflare Email Routing, which forwards \code{support@} to the owner's inbox & \src{infra/aws/app/dns.tf}, ADR-021\\
   Public surface & Only \route{/} (landing, no data beyond the session check) and \route{/privacy} are public content; \code{robots.txt} keeps everything else out of search engines; unauthenticated visits aren't tracked & \src{src/app/page.tsx}, \src{src/app/robots.ts}\\
   Application access & Every service checks the actor's role per course, before reading anything the caller may not see; archived courses read-only; admins never course members and read-only inside courses; only instructors manage TAs; nobody switches between student and staff in a course (ADR-025) & \cref{ch:rules}\\
-  Accounts & Argon2 password hashes, database sessions (30 days), reset links valid 2 hours, invites 14 days, silent success on unknown emails & \cref{ch:rules}\\
+  Accounts & Argon2 password hashes, database sessions (30 days), reset links valid 2 hours (a new one voids the last), invites 14 days, silent success on unknown emails & \cref{ch:rules}\\
+  Abuse limits & Failed sign-ins back off exponentially per email and are capped per network; reset requests capped per network, reset emails per recipient; shared through PostgreSQL across web tasks, with hashed keys (ADR-026) & \cref{ch:rules}\\
   Usage data & First-party only, stored in RDS; pseudonymous visitor key (HMAC with an SSM secret), route templates instead of paths, no IP or user agent, scrubbed error text; opt-out in Account; feedback and survey answers stored without the user and with coarsened times; raw events 90 days, totals 13 months & \cref{sec:rules-usage}, ADR-015\\
   Platform separation & Insights and feedback readable only by a dedicated platform account (never an admin, never in a course), granted from the command line only; hidden from the admin console and its audit log; never tracked itself & \cref{ch:rules}, ADR-016\\
   Browser policy & \code{Content-Security-Policy-Report-Only} (\code{'self'} only) in production; \code{X-Frame-Options}, \code{nosniff}, referrer policy & \src{next.config.ts}\\
@@ -35,7 +36,8 @@ This chapter gathers the controls described elsewhere into one view an auditor c
 \section{Known gaps}
 \begin{risk}
   \textbf{No web application firewall.} AWS WAF costs about \$10 a month, which the bootstrap
-  budget does not cover; API Gateway throttling is the only rate limit (ADR-009).
+  budget does not cover; API Gateway throttling is the only edge rate limit (ADR-009). Sign-in and
+  password reset have their own limits in the application (ADR-026).
 \end{risk}
 \begin{risk}
   \textbf{Usage data is pseudonymous, not anonymous.} Someone with both database access and
@@ -62,7 +64,7 @@ This chapter gathers the controls described elsewhere into one view an auditor c
     \item Threat model: assets (marks, personal data, sessions), actors, entry points, and the
       control for each threat (STRIDE per entry point).
     \item Application security review: session cookie flags, CSRF (Server Actions' origin check),
-      enforcing the content security policy, rate limiting on sign-in and password reset.
+      enforcing the content security policy.
     \item Personal-data inventory and retention (with \cref{ch:data}).
   \end{itemize}
 \end{todo}

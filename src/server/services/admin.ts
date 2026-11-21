@@ -193,7 +193,7 @@ export async function adminSendAccessEmail(actor: Actor, userId: string) {
     });
     return "invite" as const;
   }
-  await requestPasswordReset(user.email);
+  await requestPasswordReset(user.email, { byAdmin: true });
   await db.$transaction((tx) => audit(tx, actor, { action: "user.reset_sent", entityType: "User", entityId: userId }));
   return "reset" as const;
 }

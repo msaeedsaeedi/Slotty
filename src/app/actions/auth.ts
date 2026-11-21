@@ -1,6 +1,8 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { clientIp } from "@/server/client-ip";
 import { DomainError } from "@/domain/result";
 import { createSession } from "@/server/auth/session";
 import { run, str, type ActionState } from "@/server/action-utils";
@@ -12,7 +14,7 @@ function safeNext(next: string) {
 
 export async function loginAction(_: ActionState, fd: FormData): Promise<ActionState> {
   const result = await run(async () => {
-    const user = await authenticate(str(fd, "email"), String(fd.get("password") ?? ""));
+    const user = await authenticate(str(fd, "email"), String(fd.get("password") ?? ""), clientIp(await headers()));
     await createSession(user.id);
   });
   if (result?.ok) redirect(safeNext(str(fd, "next")));
@@ -31,7 +33,7 @@ export async function acceptInviteAction(_: ActionState, fd: FormData): Promise<
 
 export async function forgotPasswordAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return run(async () => {
-    await requestPasswordReset(str(fd, "email"));
+    await requestPasswordReset(str(fd, "email"), { ip: clientIp(await headers()) });
     return "If that email has an account, we've sent a reset link.";
   });
 }
