@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { peekInvite } from "@/server/services/accounts";
+import { PERSON_NAME_MAX_LENGTH } from "@/lib/form-schemas";
 import { SUPPORT_EMAIL, supportMailto } from "@/lib/site";
 import { PasswordFields } from "../../password-fields";
 
@@ -49,7 +50,7 @@ export default async function InvitePage({ params }: PageProps<"/invite/[token]"
             <input type="hidden" name="token" value={token} />
             <div className="space-y-2">
               <Label htmlFor="name">Your name</Label>
-              <Input id="name" name="name" defaultValue={invite.name} required />
+              <Input id="name" name="name" defaultValue={invite.name} maxLength={PERSON_NAME_MAX_LENGTH} required />
             </div>
             <PasswordFields />
             <PublicSubmit>Activate account</PublicSubmit>

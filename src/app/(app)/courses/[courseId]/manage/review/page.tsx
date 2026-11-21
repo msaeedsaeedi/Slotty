@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { requireUser } from "@/server/auth/session";
+import { REASON_MAX_LENGTH } from "@/domain/text";
 import { load } from "@/server/page-utils";
 import { listReviewQueue } from "@/server/services/evaluations";
 
@@ -92,7 +93,7 @@ export default async function ReviewPage({ params }: PageProps<"/courses/[course
                     <ActionForm action={reviewAction} compact className="flex flex-1 gap-2">
                       <input type="hidden" name="evaluationId" value={e.id} />
                       <input type="hidden" name="decision" value="return" />
-                      <Input name="comment" placeholder="Comment for the TA" className="h-7 min-w-0 flex-1" />
+                      <Input name="comment" placeholder="Comment for the TA" required maxLength={REASON_MAX_LENGTH} aria-label="Comment for the TA" className="h-7 min-w-0 flex-1" />
                       <SubmitButton size="sm" variant="outline">
                         Return
                       </SubmitButton>

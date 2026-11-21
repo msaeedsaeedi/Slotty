@@ -3,7 +3,10 @@
 import { useState } from "react";
 import { allowRebookAction, setAllowanceAction, staffPlaceStudentAction } from "@/app/actions/bookings";
 import { ActionForm, SubmitButton } from "@/components/action-form";
+import { FormField } from "@/components/form-field";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { fieldProps } from "@/lib/field-props";
+import { allowanceInput } from "@/lib/form-schemas";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ChangeBudget } from "@/domain/booking-rules";
@@ -90,15 +93,14 @@ export function BookingControls({
           <input type="hidden" name="studentId" value={student.id} />
           <p className="font-medium">Exception for this student</p>
           <div className="flex flex-wrap items-end gap-4">
-            <div className="space-y-1">
-              <Label htmlFor="extraChanges">Extra changes</Label>
-              <Input id="extraChanges" name="extraChanges" type="number" min={0} max={20} defaultValue={allowance?.extraChanges ?? 0} className="h-8 w-24" />
-            </div>
+            <FormField name="extraChanges" label="Extra changes" className="space-y-1">
+              <Input id="extraChanges" name="extraChanges" type="number" {...fieldProps(allowanceInput, "extraChanges")} defaultValue={allowance?.extraChanges ?? 0} className="h-8 w-24" />
+            </FormField>
             <label className="flex h-8 items-center gap-2">
               <input type="checkbox" name="lateBooking" defaultChecked={allowance?.lateBooking ?? false} /> May book even when booking is closed
             </label>
           </div>
-          <Input name="note" placeholder="Note to the student (optional)" defaultValue={allowance?.note ?? ""} maxLength={500} aria-label="Note to the student" />
+          <Input name="note" placeholder="Note to the student (optional)" defaultValue={allowance?.note ?? ""} {...fieldProps(allowanceInput, "note")} aria-label="Note to the student" />
           <SubmitButton size="sm" variant="outline">
             Save exception
           </SubmitButton>

@@ -1,6 +1,19 @@
+import { allow, deny, type RuleResult } from "./result";
+
+/** Most students in one slot (group demos). */
+export const SLOT_CAPACITY_MAX = 100;
+
 export interface SlotTiming {
   startsAt: Date;
   endsAt: Date;
+}
+
+/**
+ * New availability must start in the future: slots that have already started can't be booked.
+ * Applies to today's earlier hours as much as to past days.
+ */
+export function canScheduleBlock(args: { startsAt: Date; now: Date }): RuleResult {
+  return args.startsAt <= args.now ? deny("That time has already started. Pick hours later than now.") : allow;
 }
 
 export interface GenerateSlotsInput {

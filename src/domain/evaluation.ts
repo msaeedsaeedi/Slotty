@@ -55,6 +55,22 @@ export function canTransition(from: EvaluationStatus, action: EvaluationAction):
   return deny(messages[action]);
 }
 
+/** Marks are kept to at most this many decimals (8.25, not 8.253). */
+export const MARK_DECIMALS = 2;
+
+/** At most MARK_DECIMALS decimals (floating-point noise such as 0.1 + 0.2 is tolerated). */
+export function hasMarkPrecision(value: number): boolean {
+  const scaled = value * 10 ** MARK_DECIMALS;
+  return Math.abs(scaled - Math.round(scaled)) < 1e-6;
+}
+
+/** A total mark (no rubric, or an override): between 0 and the max, with at most two decimals. */
+export function checkTotalMarks(total: number, maxMarks: number): RuleResult {
+  if (!Number.isFinite(total) || total < 0 || total > maxMarks) return deny(`Total must be between 0 and ${maxMarks}.`);
+  if (!hasMarkPrecision(total)) return deny(`Use at most ${MARK_DECIMALS} decimals for the total.`);
+  return allow;
+}
+
 export function validateScores(scores: Score[], criteria: Criterion[]): RuleResult {
   const byId = new Map(criteria.map((c) => [c.id, c]));
   const seen = new Set<string>();
@@ -66,6 +82,7 @@ export function validateScores(scores: Score[], criteria: Criterion[]): RuleResu
     if (!Number.isFinite(s.points) || s.points < 0 || s.points > c.maxPoints) {
       return deny(`"${c.label}" must be between 0 and ${c.maxPoints}.`);
     }
+    if (!hasMarkPrecision(s.points)) return deny(`"${c.label}": use at most ${MARK_DECIMALS} decimals.`);
   }
   return allow;
 }

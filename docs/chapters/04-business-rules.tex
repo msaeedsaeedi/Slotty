@@ -96,6 +96,25 @@ The freeze window, capacity and draft slots still apply.
 
 Calendar, reschedule, cancel and the push prompt show only in the \ui{Booked} state; the server's own checks (\code{canCancelBooking}, \code{canReschedule}, \code{canChangeMarkedBooking}) are unchanged.
 
+\subsection{Form input rules}\label{sec:form-rules}
+
+Each rule is checked in the browser as you type and again by the service, so a value the form lets
+through is never refused for a reason the form didn't show (issue \#13).
+
+{\tablefont
+\begin{xltabular}{\linewidth}{@{}P{34mm} P{34mm} L@{}}
+  \toprule
+  \thead{Rule} & \thead{Where} & \thead{What}\\
+  \midrule
+  \endhead
+  \code{checkDemoWindow} & \src{src/domain/assignments.ts}, \code{createAssignment} & A new assignment's demo window must end after it starts and must not be over already. Not checked on edit: a running or finished assignment keeps its window.\\
+  \code{canScheduleBlock} & \src{src/domain/slots.ts}, \code{addAvailability} & New availability must start in the future: today's earlier hours and past days are refused (the planner also disables past days).\\
+  \code{hasMarkPrecision}, \code{checkTotalMarks} & \src{src/domain/evaluation.ts}, \code{validateScores}, \code{saveEvaluation} & Marks (rubric points, totals, max marks, rubric row points) have at most two decimals; inputs step by 0.01.\\
+  \code{checkReason} & \src{src/domain/text.ts} & Every reason or comment sent to a student or to staff (cancelling a slot or booking, declining a request, returning or unlocking marks, clearing marks, marking without a booking or early, overriding a total, a student's request) is at most 1000 characters (\code{REASON_MAX_LENGTH}); where it's required, it can't be blank.\\
+  Venue meeting link & \code{venueInput} & A web address starting with \code{http://} or \code{https://} with a host.\\
+  \bottomrule
+\end{xltabular}}
+
 \section{Staff tools \& student requests}
 
 {\tablefont

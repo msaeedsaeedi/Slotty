@@ -62,6 +62,27 @@ result into a \code{DomainError} with \code{assertRule}. Server Actions call ser
 \code{run()} (\src{src/server/action-utils.ts}), which shows a \code{DomainError}'s message to the
 user and hides anything else behind a generic error.
 
+\section{Form validation}\label{sec:form-validation}
+Forms allow only what the server accepts, and say why next to the field:
+\begin{itemize}
+  \item \textbf{One schema.} Form schemas live in \src{src/lib/form-schemas.ts}, which has no
+    server imports; services parse with them. \code{fieldProps(schema, field)}
+    (\src{src/lib/field-props.ts}) reads a field's limits and returns \code{required},
+    \code{min}, \code{max}, \code{step}, \code{minLength} and \code{maxLength} for the input, so
+    the browser enforces the server's numbers instead of a copy.
+  \item \textbf{Rules on both sides.} Business rules a form can check (\cref{sec:form-rules}) are
+    pure functions in \src{src/domain}, called as you type and again by the service.
+  \item \textbf{Messages next to the field.} \code{run()} returns \code{fieldErrors} keyed by the
+    input's name: a zod issue's last path segment, or the \code{field} of a \code{DomainError}
+    (\code{assertRule(result, code, field)}). \code{<FormField>} (\src{src/components/form-field.tsx})
+    shows the message checked as you type, or else the server's, under the input, with
+    \code{aria-invalid} and \code{aria-describedby}. The alert under the form still shows the
+    message too.
+\end{itemize}
+Date, time and number forms (assignment, slots, slot capacity, exceptions, marking) and the
+password confirmation use \code{<FormField>}; other text forms take their limits from
+\code{fieldProps} and keep the form-level message until the app revamp (issue \#58).
+
 \section{Concurrency}
 Booking is the contended path. Capacity is protected by locking the slot rows
 (\code{SELECT … FOR UPDATE} in \code{bookings.lockSlots}) inside the booking transaction, and

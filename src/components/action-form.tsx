@@ -18,6 +18,13 @@ type Action = (state: ActionState, formData: FormData) => Promise<ActionState>;
 
 /** Pending state of the enclosing ActionForm (submits are dispatched by hand, so useFormStatus can't see them). */
 const PendingContext = createContext(false);
+/** The last failed submit's messages by field name (from `run()`), for <FormField>. */
+const FieldErrorsContext = createContext<Record<string, string>>({});
+
+/** The server's message for this field from the last submit of the enclosing ActionForm, if any. */
+export function useFieldError(name: string): string | undefined {
+  return useContext(FieldErrorsContext)[name];
+}
 
 /**
  * A <form> bound to a Server Action. Success messages show as toasts; errors
@@ -101,7 +108,9 @@ export function ActionForm({
         startTransition(() => formAction(fd));
       }}
     >
-      <PendingContext.Provider value={pending}>{children}</PendingContext.Provider>
+      <PendingContext.Provider value={pending}>
+        <FieldErrorsContext.Provider value={(state && !state.ok && state.fieldErrors) || NO_FIELD_ERRORS}>{children}</FieldErrorsContext.Provider>
+      </PendingContext.Provider>
       {confirm && (
         <Dialog open={asking} onOpenChange={setAsking}>
           <DialogContent>
@@ -137,7 +146,8 @@ export function ActionForm({
   );
 }
 
-/** Submit button with a pending spinner. Disabled while offline: changes are never queued for later. */
+const NO_FIELD_ERRORS: Record<string, string> = {};
+
 /** Whether the surrounding form is submitting, and whether the browser is online (for custom submit buttons). */
 export function useSubmitState() {
   const { pending: nativePending } = useFormStatus();
@@ -146,6 +156,7 @@ export function useSubmitState() {
   return { pending, online };
 }
 
+/** Submit button with a pending spinner. Disabled while offline: changes are never queued for later. */
 export function SubmitButton({ children, ...props }: ComponentProps<typeof Button>) {
   const { pending, online } = useSubmitState();
   return (

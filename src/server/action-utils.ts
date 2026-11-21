@@ -5,7 +5,21 @@ import { ZodError } from "zod";
 import type { SurveyPromptId } from "@/domain/analytics";
 import { DomainError } from "@/domain/result";
 
-export type ActionState = { ok: true; message?: string; navigate?: string; survey?: SurveyPromptId } | { ok: false; error: string } | null;
+/** A failed action's message, plus messages keyed by form field name so the form can show them next to the inputs. */
+export type ActionState =
+  | { ok: true; message?: string; navigate?: string; survey?: SurveyPromptId }
+  | { ok: false; error: string; fieldErrors?: Record<string, string> }
+  | null;
+
+/** The first message per field: a zod issue's last path segment (e.g. ["policy", "windowEnd"] → "windowEnd"). */
+function zodFieldErrors(e: ZodError): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  for (const issue of e.issues) {
+    const key = [...issue.path].reverse().find((p): p is string => typeof p === "string");
+    if (key && !(key in out)) out[key] = issue.message;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
 
 /**
  * What a mutation may return: a success message, optionally a URL the client
@@ -24,8 +38,11 @@ export async function run(fn: () => Promise<ActionOutcome>): Promise<ActionState
     return typeof outcome === "object" ? { ok: true, ...outcome } : { ok: true, message: outcome ?? undefined };
   } catch (e) {
     unstable_rethrow(e);
-    if (e instanceof DomainError) return { ok: false, error: e.message };
-    if (e instanceof ZodError) return { ok: false, error: e.issues[0]?.message ?? "Please check the form." };
+    if (e instanceof DomainError) return { ok: false, error: e.message, ...(e.field ? { fieldErrors: { [e.field]: e.message } } : {}) };
+    if (e instanceof ZodError) {
+      const fieldErrors = zodFieldErrors(e);
+      return { ok: false, error: e.issues[0]?.message ?? "Please check the form.", ...(fieldErrors ? { fieldErrors } : {}) };
+    }
     console.error(e);
     return { ok: false, error: "Something went wrong. Please try again." };
   }

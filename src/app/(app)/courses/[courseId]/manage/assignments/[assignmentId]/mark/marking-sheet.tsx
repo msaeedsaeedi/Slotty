@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { formatLeft, formatUntil } from "@/domain/demo-day";
+import { hasMarkPrecision, MARK_DECIMALS } from "@/domain/evaluation";
+import { REASON_MAX_LENGTH } from "@/domain/text";
 import { cn } from "@/lib/utils";
 
 export interface SheetRow {
@@ -110,6 +112,8 @@ function draftOf(r: SheetRow): Draft {
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
+/** The score inputs' step: marks keep at most MARK_DECIMALS decimals. */
+const MARK_STEP = 10 ** -MARK_DECIMALS;
 
 /** Problems that stop a draft being saved, by field. */
 function problems(d: Draft, criteria: Criterion[], maxMarks: number): Record<string, string> {
@@ -119,10 +123,12 @@ function problems(d: Draft, criteria: Criterion[], maxMarks: number): Record<str
     if (!raw) continue;
     const n = Number(raw);
     if (!Number.isFinite(n) || n < 0 || n > c.maxPoints) out[c.id] = `0–${c.maxPoints}`;
+    else if (!hasMarkPrecision(n)) out[c.id] = `at most ${MARK_DECIMALS} decimals`;
   }
   if (criteria.length === 0 && d.total.trim()) {
     const n = Number(d.total);
     if (!Number.isFinite(n) || n < 0 || n > maxMarks) out.total = `0–${maxMarks}`;
+    else if (!hasMarkPrecision(n)) out.total = `at most ${MARK_DECIMALS} decimals`;
   }
   return out;
 }
@@ -631,7 +637,7 @@ export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, embedd
 function ReasonInput({ value, onChange, onStart, placeholder, label }: { value: string; onChange: (v: string) => void; onStart: () => void; placeholder: string; label: string }) {
   return (
     <div className="flex flex-wrap gap-2">
-      <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label={label} className="min-w-0 flex-1 bg-background" maxLength={300} />
+      <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label={label} className="min-w-0 flex-1 bg-background" maxLength={REASON_MAX_LENGTH} />
       <Button type="button" size="sm" disabled={value.trim().length < 3} onClick={onStart}>
         Start marking
       </Button>
@@ -746,7 +752,11 @@ function ScoreGrid({
           <span className="font-medium">Mark</span>
           <span className="flex items-center gap-1">
             <Input
+              type="number"
               inputMode="decimal"
+              min={0}
+              max={maxMarks}
+              step={MARK_STEP}
               value={draft.total}
               onChange={(e) => onTotal(e.target.value)}
               onKeyDown={onKeyDown}
@@ -771,7 +781,11 @@ function ScoreGrid({
           </span>
           <span className="mt-1 flex items-baseline gap-1">
             <Input
+              type="number"
               inputMode="decimal"
+              min={0}
+              max={c.maxPoints}
+              step={MARK_STEP}
               value={draft.points[c.id] ?? ""}
               onChange={(e) => onPoints(c.id, e.target.value)}
               onKeyDown={onKeyDown}
