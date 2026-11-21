@@ -91,6 +91,13 @@ aws ssm start-session --profile slotty-prod --target <nat_instance_id> \
   --parameters host=<db_address>,portNumber=5432,localPortNumber=15432
 \end{lstlisting}
 
+\subsection{Someone can't sign in: ``Too many failed sign-ins''}
+The account (or their network) hit the sign-in limit (\cref{ch:rules}, ADR-026). The wait ends by
+itself within 15 minutes. To lift it at once, send them a reset from \route{/admin/users/[id]}
+(\ui{Send password reset}): resetting through the link clears the account's failures. A whole
+campus locked out at once means one address made 50 failed sign-ins in 15 minutes; it also
+clears by itself. Nobody needs database access for either.
+
 \subsection{Email is not arriving}
 Check \route{/admin/email}: failed and waiting messages show the SMTP error. A permission or
 credential error affects every message (\code{slotty-worker-failures} fires); a bounce or

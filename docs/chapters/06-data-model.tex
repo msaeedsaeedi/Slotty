@@ -10,7 +10,7 @@ The schema has 27 models and 12 enums in \src{prisma/schema.prisma}; migrations 
   \toprule
   \thead{Group} & \thead{Models}\\
   \midrule
-  Identity & \code{User}, \code{Session}, \code{AuthToken}, \code{PushSubscription}\\
+  Identity & \code{User}, \code{Session}, \code{AuthToken}, \code{AuthAttempt} (hashed keys for sign-in and reset limits, kept a day), \code{PushSubscription}\\
   Courses & \code{Course}, \code{Enrollment} (role per course), \code{Venue}\\
   Assignments & \code{Assignment}, \code{DemoPolicy}, \code{RubricCriterion}\\
   Scheduling & \code{AvailabilityBlock}, \code{Slot}\\

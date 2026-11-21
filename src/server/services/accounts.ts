@@ -1,9 +1,11 @@
 import { z } from "zod";
-import { DomainError } from "@/domain/result";
 import { db, type Tx } from "@/server/db";
 import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "@/server/auth/password";
 import { absoluteUrl } from "@/server/app-url";
 import { generateToken, hashToken } from "@/server/auth/tokens";
+import { AUTH_LIMITS, canEmailReset, canRequestReset, canTrySignIn } from "@/domain/auth-limits";
+import { assertRule, DomainError } from "@/domain/result";
+import { accountKey, networkKey, recentAttempts, recordAttempt } from "@/server/auth/limits";
 import { SUPPORT_EMAIL } from "@/lib/site";
 import type { Actor } from "./access";
 import { queueEmail, renderEmail } from "./notify";
@@ -19,12 +21,29 @@ export const passwordSchema = z
 
 let dummyHash: Promise<string> | undefined;
 
-/** Returns the user when the credentials match an active account. */
-export async function authenticate(email: string, password: string) {
+/**
+ * Returns the user when the credentials match an active account. Failures are
+ * counted per typed email and per network (`canTrySignIn`); while either is
+ * over its limit the password isn't even checked. `ip` is from `clientIp`.
+ */
+export async function authenticate(email: string, password: string, ip: string | null = null, now = new Date()) {
+  const account = accountKey(email);
+  const network = networkKey(ip);
+  const { signIn } = AUTH_LIMITS;
+  const [mine, net] = await Promise.all([
+    recentAttempts(db, "SIGN_IN_FAILURE", account, signIn.windowMs, now),
+    network ? recentAttempts(db, "SIGN_IN_FAILURE", network, signIn.networkWindowMs, now) : null,
+  ]);
+  assertRule(canTrySignIn({ failures: mine.count, lastFailureAt: mine.last }, net?.count ?? null, now));
+
   const user = await db.user.findUnique({ where: { email: email.trim().toLowerCase() } });
   // Always run a verify to keep timing similar for unknown emails.
   const ok = await verifyPassword(user?.passwordHash ?? (await (dummyHash ??= hashPassword("not-a-real-password"))), password);
-  if (!user || !ok) throw new DomainError("Incorrect email or password.");
+  if (!user || !ok) {
+    await recordAttempt(db, "SIGN_IN_FAILURE", [account, network], now);
+    throw new DomainError("Incorrect email or password.");
+  }
+  await db.authAttempt.deleteMany({ where: { kind: "SIGN_IN_FAILURE", keyHash: account } });
   if (user.status === "DISABLED") throw new DomainError("This account has been disabled.");
   if (user.status !== "ACTIVE") throw new DomainError("Please accept your invitation email first.");
   return user;
@@ -80,22 +99,39 @@ export async function acceptInvite(token: string, input: { name: string; passwor
   });
 }
 
-/** Always succeeds from the caller's view, so it can't be used to probe which emails exist. */
-export async function requestPasswordReset(email: string): Promise<void> {
+/**
+ * Always succeeds from the caller's view, so it can't be used to probe which
+ * emails exist. A network over its limit is refused (`canRequestReset`); a
+ * recipient over theirs silently gets nothing more this hour (`canEmailReset`).
+ * A new reset link voids any earlier unused one.
+ *
+ * `byAdmin`: sent from the admin console, which isn't limited (the admin sees
+ * the result, and only admins can do it).
+ */
+export async function requestPasswordReset(email: string, opts: { ip?: string | null; byAdmin?: boolean; now?: Date } = {}): Promise<void> {
+  const now = opts.now ?? new Date();
+  const network = opts.byAdmin ? null : networkKey(opts.ip ?? null);
+  const account = accountKey(email);
+  const { reset } = AUTH_LIMITS;
   await db.$transaction(async (tx) => {
+    if (network) assertRule(canRequestReset((await recentAttempts(tx, "RESET_REQUEST", network, reset.windowMs, now)).count));
+    await recordAttempt(tx, "RESET_REQUEST", [network], now);
     const user = await tx.user.findUnique({ where: { email: email.trim().toLowerCase() } });
     if (!user || user.status === "DISABLED") return;
+    if (!opts.byAdmin && !canEmailReset((await recentAttempts(tx, "RESET_EMAIL", account, reset.windowMs, now)).count)) return;
+    await recordAttempt(tx, "RESET_EMAIL", [account], now);
     if (user.status === "INVITED") {
       await issueInvite(tx, user, "You asked to reset your password, but haven't activated your account yet.");
       return;
     }
+    await tx.authToken.updateMany({ where: { userId: user.id, type: "PASSWORD_RESET", usedAt: null }, data: { usedAt: now } });
     const token = generateToken();
     await tx.authToken.create({
       data: {
         userId: user.id,
         type: "PASSWORD_RESET",
         tokenHash: hashToken(token),
-        expiresAt: new Date(Date.now() + RESET_HOURS * 3_600_000),
+        expiresAt: new Date(now.getTime() + RESET_HOURS * 3_600_000),
       },
     });
     const link = absoluteUrl(`/reset-password/${token}`);
@@ -117,6 +153,8 @@ export async function resetPassword(token: string, newPassword: string) {
   return db.$transaction(async (tx) => {
     const user = await consumeToken(tx, token, "PASSWORD_RESET");
     await tx.session.deleteMany({ where: { userId: user.id } });
+    // Proving control of the inbox lifts any sign-in wait on the account.
+    await tx.authAttempt.deleteMany({ where: { kind: "SIGN_IN_FAILURE", keyHash: accountKey(user.email) } });
     return tx.user.update({ where: { id: user.id }, data: { passwordHash } });
   });
 }
@@ -139,10 +177,15 @@ export async function updateProfile(actor: Actor, input: { name: string }) {
  * Change password after checking the current one. Other devices are signed out;
  * the session identified by `keepSessionHash` (this browser) stays.
  */
-export async function changePassword(actor: Actor, input: { current: string; next: string }, keepSessionHash: string | null) {
+export async function changePassword(actor: Actor, input: { current: string; next: string }, keepSessionHash: string | null, now = new Date()) {
   const next = passwordSchema.parse(input.next);
   const user = await db.user.findUniqueOrThrow({ where: { id: actor.id } });
+  // Same per-account limit as sign-in: a stolen session can't guess the password here either.
+  const account = accountKey(user.email);
+  const mine = await recentAttempts(db, "SIGN_IN_FAILURE", account, AUTH_LIMITS.signIn.windowMs, now);
+  assertRule(canTrySignIn({ failures: mine.count, lastFailureAt: mine.last }, null, now));
   if (!user.passwordHash || !(await verifyPassword(user.passwordHash, input.current))) {
+    await recordAttempt(db, "SIGN_IN_FAILURE", [account], now);
     throw new DomainError("Your current password is incorrect.");
   }
   const passwordHash = await hashPassword(next);

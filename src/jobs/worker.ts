@@ -9,7 +9,7 @@
  *   every WORKER_INTERVAL_MS instead.
  * - schedule: time-based jobs (booking opens, nudges, auto-close, agendas,
  *   reminders) every WORKER_SCHEDULE_MS, and once an hour the usage-analytics
- *   daily totals and retention clean-up.
+ *   daily totals and retention clean-up, and old sign-in attempts are deleted.
  *
  * Every job claims its rows with a conditional update, so a second worker would
  * share the work rather than duplicate it. Delivery is at-least-once: a crash
@@ -24,6 +24,7 @@ import { OUTBOX_CHANNEL } from "@/server/outbox-signal";
 import { deliverPendingPush } from "@/server/push";
 import { isPushConfigured } from "@/server/push-config";
 import { rollupAndPrune } from "@/server/services/analytics";
+import { pruneAuthAttempts } from "@/server/auth/limits";
 import { announceOpenedBookings, closeEndedAssignments, nudgeUnbookedStudents, sendDailyAgendas } from "@/server/services/automations";
 import { queueDueReminders } from "@/server/services/reminders";
 
@@ -117,6 +118,7 @@ async function scheduleLoop() {
       analyticsRanAt = Date.now();
       const a = await job("analytics", () => rollupAndPrune());
       if (a) report({ analyticsRolled: a.rolled, analyticsPruned: a.prunedRaw + a.prunedDaily });
+      report({ authAttemptsPruned: await job("auth-attempts", () => pruneAuthAttempts(db)) });
     }
     // Deliver what was just queued without waiting for the next poll (NOTIFY also does this when available).
     if (Object.values(counts).some(Boolean)) delivery.wake();
