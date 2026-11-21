@@ -1,0 +1,98 @@
+/*
+ * Public pages (sign-in, password reset, invite, privacy) in the landing page's theme (ADR-028).
+ * Scoped to [data-public] inside the landing wrapper. The app's own components (Card, Input,
+ * Button, Alert) read shadcn's colour tokens, so remapping those tokens to the landing palette
+ * restyles them without touching the components; the signed-in app is unaffected.
+ */
+
+@layer components {
+  [data-theme="slotty-landing"][data-public] {
+    --background: var(--board);
+    --foreground: var(--text);
+    --card: var(--panel);
+    --card-foreground: var(--text);
+    --popover: var(--panel-2);
+    --popover-foreground: var(--text);
+    /* Amber is the page's one action: the submit button. */
+    --primary: var(--amber);
+    --primary-foreground: var(--amber-ink);
+    --secondary: var(--panel-2);
+    --secondary-foreground: var(--text);
+    --muted: var(--panel-2);
+    --muted-foreground: var(--text-2);
+    --accent: var(--panel-2);
+    --accent-foreground: var(--text);
+    --destructive: var(--stop);
+    --border: var(--line);
+    --input: var(--line-strong);
+    --ring: var(--amber);
+  }
+
+  [data-public] [data-slot="card"] {
+    border-radius: 14px;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 0 0 1px var(--line);
+  }
+
+  [data-public] [data-slot="card-title"] {
+    color: var(--text);
+  }
+
+  [data-public] [data-slot="label"] {
+    color: var(--text);
+  }
+
+  [data-public] .pub-kicker {
+    font-family: var(--lp-mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  [data-public] .pub-prose {
+    color: var(--text-2);
+    font-size: 16px;
+    line-height: 1.65;
+  }
+
+  [data-public] .pub-prose h2 {
+    color: var(--text);
+    font-size: 19px;
+    font-weight: 620;
+    letter-spacing: -0.01em;
+  }
+
+  [data-public] .pub-prose a {
+    color: var(--text);
+    text-decoration: underline;
+    text-decoration-color: var(--line-strong);
+    text-underline-offset: 4px;
+  }
+
+  [data-public] .pub-prose a:hover {
+    text-decoration-color: var(--text);
+  }
+}
+
+/*
+ * Outside the layers on purpose: these replace sizes and fills that the components set with
+ * Tailwind utilities (h-8, bg-transparent, md:text-sm), which outrank anything in a layer.
+ */
+[data-public] [data-slot="input"] {
+  height: 44px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 16px; /* no zoom on focus on iOS */
+}
+
+[data-public] button[type="submit"] {
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+[data-public] button[type="submit"]:hover {
+  background: #ffbe45;
+}
