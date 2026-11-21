@@ -8,7 +8,7 @@ export function PasswordFields() {
       <div className="space-y-2">
         <Label htmlFor="password">New password</Label>
         <Input id="password" name="password" type="password" autoComplete="new-password" minLength={MIN_PASSWORD_LENGTH} required />
-        <p className="text-xs text-muted-foreground">At least {MIN_PASSWORD_LENGTH} characters.</p>
+        <p className="text-xs text-[var(--text-3)]">At least {MIN_PASSWORD_LENGTH} characters.</p>
       </div>
       <div className="space-y-2">
         <Label htmlFor="confirm">Confirm password</Label>

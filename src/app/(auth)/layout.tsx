@@ -1,25 +1,33 @@
-import Link from "next/link";
-import { SlottyMark } from "@/components/slotty-mark";
+import { PublicShell } from "@/components/public/public-shell";
 import { SUPPORT_EMAIL, supportMailto } from "@/lib/site";
 
+const help = "text-[var(--text-2)] underline decoration-[var(--line-strong)] underline-offset-4 hover:text-[var(--text)] hover:decoration-[var(--text)]";
+
+/** Sign-in, password reset and invite pages, in the landing page's theme (ADR-028). "How it works" is in the header. */
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-6 px-4 py-12">
-      <Link href="/" className="flex items-center gap-2 text-xl font-semibold">
-        <SlottyMark className="size-7 text-primary" />
-        Slotty
-      </Link>
-      <div className="w-full max-w-sm">{children}</div>
-      <p className="max-w-sm text-center text-xs text-muted-foreground">
-        New to Slotty?{" "}
-        <Link href="/" className="underline underline-offset-2 hover:text-foreground">
-          See how it works
-        </Link>
-        . Need help?{" "}
-        <a href={supportMailto("Help signing in")} className="underline underline-offset-2 hover:text-foreground">
-          {SUPPORT_EMAIL}
-        </a>
-      </p>
-    </main>
+    <PublicShell>
+      <main id="main" className="flex flex-1 flex-col items-center px-5 pt-10 pb-16 sm:pt-16 sm:pb-24">
+        <div className="relative isolate w-full max-w-[400px]">
+          {/* The landing hero's background mark: a giant faint split-flap behind the panel. */}
+          <div aria-hidden className="pointer-events-none absolute inset-x-[-40vw] top-0 -z-10 flex justify-center overflow-hidden">
+            <div className="lp-ghost">
+              <span>1</span>
+              <span>0</span>
+              <span className="lp-ghost-colon">:</span>
+              <span>1</span>
+              <span>5</span>
+            </div>
+          </div>
+          {children}
+        </div>
+        <p className="mt-6 w-full max-w-[400px] text-center text-[13px] leading-relaxed text-[var(--text-3)]">
+          Need help?{" "}
+          <a href={supportMailto("Help signing in")} className={help}>
+            {SUPPORT_EMAIL}
+          </a>
+        </p>
+      </main>
+    </PublicShell>
   );
 }
