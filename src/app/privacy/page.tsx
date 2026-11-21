@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarCheck } from "lucide-react";
+import { SlottyMark } from "@/components/slotty-mark";
 import { RAW_RETENTION_DAYS } from "@/domain/analytics";
 
 export const metadata = { title: "Privacy and usage data" };
@@ -9,7 +9,7 @@ export default function PrivacyPage() {
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 space-y-6 px-4 py-10 text-sm leading-relaxed">
       <Link href="/" className="flex items-center gap-2 text-lg font-semibold">
-        <CalendarCheck className="size-5 text-primary" /> Slotty
+        <SlottyMark className="size-6 text-primary" /> Slotty
       </Link>
       <h1 className="text-2xl font-semibold tracking-tight">Privacy and usage data</h1>
       <p>

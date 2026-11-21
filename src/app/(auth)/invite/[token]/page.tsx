@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { peekInvite } from "@/server/services/accounts";
+import { SUPPORT_EMAIL, supportMailto } from "@/lib/site";
 import { PasswordFields } from "../../password-fields";
 
 export const metadata = { title: "Accept invitation" };
@@ -19,7 +20,11 @@ export default async function InvitePage({ params }: PageProps<"/invite/[token]"
           <CardTitle>Link expired</CardTitle>
           <CardDescription>
             This invitation is invalid or has already been used. If you&apos;ve set a password, just sign in. Otherwise, use
-            &ldquo;Forgot password&rdquo; to get a fresh link.
+            &ldquo;Forgot password&rdquo; with the same email to get a fresh link. Still stuck? Email{" "}
+            <a href={supportMailto("Invite problem")} className="underline underline-offset-2">
+              {SUPPORT_EMAIL}
+            </a>
+            .
           </CardDescription>
         </CardHeader>
         <CardContent>

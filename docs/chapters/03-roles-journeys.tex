@@ -7,6 +7,23 @@ Roles are \textbf{per course} (\code{Enrollment.role}). A TA can be a student in
 
 Times show in the course timezone (Pakistan time for now) on each user's 12- or 24-hour clock (account page).
 
+\section{Visitor (not signed in)}\label{sec:journey-visitor}
+
+Accounts are invite-only, so most people first meet Slotty through an invite email or a link from
+course staff. Signed-in people opening \route{/} go straight to their home (\route{/dashboard},
+which sends admins to \route{/admin} and platform accounts to \route{/platform}).
+
+{\tablefont
+\begin{xltabular}{\linewidth}{@{}l P{34mm} P{30mm} L@{}}
+  \toprule
+  \thead{\#} & \thead{Step and screen} & \thead{Service} & \thead{What happens / feedback}\\
+  \midrule
+  \endhead
+  V1 & Finds out what Slotty is\newline{\color{muted}\footnotesize \route{/}} & --- (static, \src{src/components/landing}) & The landing page, styled as a departure board for demo slots. The hero shows one student booking one demo (Lab~4 of CS~2001): a pointer books 10:15 and the row flips to \ui{BOOKED}. Then: the shared-spreadsheet way demo week used to run; the five steps of one demo (a stepper that follows the scroll, with \ui{Skip}); what students, TAs and instructors each see of the same slot; the details; privacy in four facts with a link to \route{/privacy}; who makes Slotty and that it is open source; the eight questions confused users ask (four up front, four behind \ui{More questions}); and a final \ui{Sign in}. Every call to action is \ui{Sign in} or the support address: there is no sign-up. Search engines may index only \route{/} and \route{/privacy} (\src{src/app/robots.ts}).\\
+  V2 & Gets help\newline{\color{muted}\footnotesize \code{support@slotty.msaeedsaeedi.com}} & --- (Cloudflare Email Routing, ADR-021) & The support address is on the landing page, the sign-in pages and in invite emails. Mail to it is forwarded to the product owner's inbox; replies come from the owner's own address. A new course starts here: a TA can then create it, or an admin sets it up with its instructor.\\
+  \bottomrule
+\end{xltabular}}
+
 \section{Student}
 
 {\tablefont
@@ -15,8 +32,8 @@ Times show in the course timezone (Pakistan time for now) on each user's 12- or 
   \thead{\#} & \thead{Step and screen} & \thead{Service} & \thead{What happens / feedback}\\
   \midrule
   \endhead
-  S1 & Gets invited\newline{\color{muted}\footnotesize Email → \route{/invite/[token]}} & \code{accounts.acceptInvite} & Staff import the class list, which sends an invite email valid for 14 days. The student sets a name and password, and the account becomes \code{ACTIVE}. If they were already active, they get a ``Added to <course>'' notification instead.\\
-  S2 & Signs in\newline{\color{muted}\footnotesize \route{/login}, \route{/forgot-password}} & \code{accounts.authenticate} & A clear message for a wrong password, a disabled account, or an invite not yet accepted. Password reset links last 2 hours.\\
+  S1 & Gets invited\newline{\color{muted}\footnotesize Email → \route{/invite/[token]}} & \code{accounts.acceptInvite} & Staff import the class list, which sends an invite email valid for 14 days. The student sets a name and password, and the account becomes \code{ACTIVE}. If they were already active, they get a ``Added to <course>'' notification instead. The invite email links to the landing page (V1) and the support address.\\
+  S2 & Signs in\newline{\color{muted}\footnotesize \route{/login}, \route{/forgot-password}} & \code{accounts.authenticate} & A clear message for a wrong password, a disabled account, or an invite not yet accepted. Password reset links last 2 hours. Under the form, \ui{No account yet?} explains that accounts come by invite, that \ui{Forgot password} sends a fresh invite to an account not yet activated, and gives the support address; every sign-in page links to the landing page.\\
   S3 & Sees what to do\newline{\color{muted}\footnotesize \route{/dashboard} (\ui{Studying})} & \code{home.getHome} & Next demo first (time, room, TA, \ui{Join online}, \ui{Add to calendar}), then a to-do list: book a demo (urgent when the window closes within 3 days), booking opens soon, a missed demo, marks released. Then their courses.\\
   S4 & Opens a course\newline{\color{muted}\footnotesize \route{/courses/[id]}} & \code{listAssignments} & Published and closed assignments with a status: \ui{Not booked}, \ui{Booked}, \ui{Closed}, \ui{Marked x/y}.\\
   S5 & Books a slot\newline{\color{muted}\footnotesize \route{/courses/[id]/assignments/[aid]}} & \code{bookings.bookSlot} & Slots grouped by day in the course timezone. Full slots are hidden and counted. A disabled \textbf{Book} button shows why it's disabled; each button's accessible name includes the day, time, venue and host. Success: a toast, and a confirmation email a few minutes later for the final state (no in-app item for the student's own action).\\

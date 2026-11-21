@@ -70,6 +70,15 @@ complaint arrives as an SNS email and the address is suppressed. Retry from the 
 fixing the cause. Rotate the SMTP credentials with
 \code{terraform apply -replace=aws_iam_access_key.ses_smtp}, then redeploy.
 
+\subsection{Support mail is not arriving}
+\code{support@slotty.msaeedsaeedi.com} is forwarded by Cloudflare Email Routing (ADR-021). Two
+places to check. DNS: the domain's MX records must point to \code{route1/2/3.mx.cloudflare.net}
+(\src{infra/aws/app/dns.tf}; look them up with any DNS tool). Cloudflare: \ui{Email}
+\textrightarrow{} \ui{Email Routing} on \code{msaeedsaeedi.com} must have the rule for the
+address and a verified destination; its activity log shows each message as forwarded, dropped or
+rejected. Cloudflare's dashboard may report the subdomain's records as missing, because they live
+in Route 53 rather than in its own zone; that is expected.
+
 \subsection{Usage data looks wrong or empty}
 \route{/platform/insights} says so when \envvar{ANALYTICS_SECRET} isn't set on the web tasks (check
 the task definition's secrets). Raw events appear within about 10 seconds of a visit; the

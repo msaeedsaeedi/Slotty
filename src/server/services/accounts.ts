@@ -4,6 +4,7 @@ import { db, type Tx } from "@/server/db";
 import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "@/server/auth/password";
 import { absoluteUrl } from "@/server/app-url";
 import { generateToken, hashToken } from "@/server/auth/tokens";
+import { SUPPORT_EMAIL } from "@/lib/site";
 import type { Actor } from "./access";
 import { queueEmail, renderEmail } from "./notify";
 
@@ -47,7 +48,7 @@ export async function issueInvite(tx: Tx, user: { id: string; email: string; nam
   const link = absoluteUrl(`/invite/${token}`);
   const content = renderEmail({
     title: "You're invited to Slotty",
-    body: `Hi ${user.name},\n\n${context}\n\nSet your password to get started (link valid for ${INVITE_DAYS} days):\n${link}`,
+    body: `Hi ${user.name},\n\n${context}\n\nSet your password to get started (link valid for ${INVITE_DAYS} days):\n${link}\n\nNew to Slotty? See how it works: ${absoluteUrl("/")}\nQuestions? Email ${SUPPORT_EMAIL}.`,
   });
   await queueEmail(tx, user.email, "You're invited to Slotty", content);
   return token;

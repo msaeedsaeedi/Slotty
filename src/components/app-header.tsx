@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { BarChart3, Bell, CalendarCheck, CalendarClock, LogOut, Shield, UserRound } from "lucide-react";
+import { BarChart3, Bell, CalendarClock, LogOut, Shield, UserRound } from "lucide-react";
+import { SlottyMark } from "@/components/slotty-mark";
 import { FeedbackButton } from "@/components/feedback-button";
 import { Button } from "@/components/ui/button";
 import type { Actor } from "@/server/services/access";
@@ -17,7 +18,7 @@ export async function AppHeader({ user }: { user: Actor }) {
     <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4">
         <Link href={admin ? "/admin" : platform ? "/platform" : "/dashboard"} className="mr-2 flex items-center gap-2 font-semibold">
-          <CalendarCheck className="size-5 text-primary" />
+          <SlottyMark className="size-6 text-primary" />
           Slotty
         </Link>
         <nav className="flex items-center gap-1 text-sm">
