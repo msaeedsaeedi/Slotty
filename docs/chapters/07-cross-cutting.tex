@@ -63,6 +63,14 @@ data formats (CSV, form values) stay 24-hour.
 Moderation-relevant changes are recorded with \code{audit(tx, actor, …)} in the same transaction
 as the change (\src{src/server/services/audit.ts}). Admins read them at \route{/admin/audit}.
 
+The log is append-only. A database trigger, \code{AuditLog_append_only}, refuses every
+\code{UPDATE} and \code{DELETE} on \code{AuditLog}, from the application, a migration or a
+console session alike. A user with audit entries can't be deleted either, because the
+foreign key's \code{SET NULL} would change the entries: anonymise the account instead (\#42).
+The trigger doesn't cover \code{TRUNCATE} (the tests use it to reset their database) or the
+table's owner disabling it; a least-privilege application role, separate from the migration
+role, will close those in a later release.
+
 \section{Usage analytics}\label{sec:usage-analytics}
 First-party only (ADR-015). In the signed-in layout, \code{<Analytics>} configures the tracker
 (\src{src/lib/analytics.ts}) and records page views on navigation, Core Web Vitals through

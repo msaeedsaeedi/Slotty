@@ -6,6 +6,7 @@ Newest first. One line per revision of this document; the pull request has the d
   \toprule
   \thead{Date} & \thead{Change}\\
   \midrule
+  2026-11-21 & Append-only audit log (issue \#31): a trigger refuses \code{UPDATE} and \code{DELETE} on \code{AuditLog}, in an expand-only migration. Ch.~4, 6, 7 and 11 updated.\\
   2026-11-21 & Back-merge pull requests: CI runs once the maintainer approves it (GitHub's rule for pull requests opened by a workflow); the workflow no longer starts CI by hand, which GitHub didn't count for the pull request. Ch.~9 and 14 updated.\\
   2026-11-21 & Release v1.0.0-beta.1 (Sprint 1): role boundaries (ADR-025), sign-in and reset limits (ADR-026), mail fails closed, GitOps releases (ADR-027), planned releases (ADR-024).\\
   2026-11-21 & GitOps releases (ADR-027, issue \#48): \code{dev} is the default, integration branch; \code{master} is production and takes only release pull requests (CI's \emph{Release PR} job checks the source branch, a new version and a free tag); a push to \code{master} deploys, then tags and publishes the release; a \emph{Back-merge} workflow opens a pull request from \code{master} into \code{dev}; the build role trusts \code{master} and \code{v*} tags; rollback is a revert pull request. Ch.~9, 10, 11, 13 and 14 updated.\\
