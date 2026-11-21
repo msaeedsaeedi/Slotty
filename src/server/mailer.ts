@@ -1,6 +1,7 @@
 import nodemailer, { type Transporter } from "nodemailer";
 import { db } from "@/server/db";
 import { mapLimit } from "@/lib/concurrency";
+import { smtpOptions } from "@/server/smtp-options";
 
 const MAX_ATTEMPTS = 5;
 /** Parallel sends over the pooled SMTP connections. */
@@ -15,17 +16,9 @@ let transport: Transporter | null | undefined;
  */
 function getTransport() {
   if (transport !== undefined) return transport;
-  const host = process.env.SMTP_HOST;
-  transport = host
-    ? nodemailer.createTransport({
-        host,
-        port: Number(process.env.SMTP_PORT ?? 587),
-        secure: Number(process.env.SMTP_PORT) === 465,
-        auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
-        pool: true,
-        maxConnections: CONCURRENCY,
-      })
-    : null;
+  const options = smtpOptions();
+  // TLS is required for every non-local server (smtpOptions), so a downgrade fails the send.
+  transport = options ? nodemailer.createTransport({ ...options, pool: true, maxConnections: CONCURRENCY }) : null;
   return transport;
 }
 
