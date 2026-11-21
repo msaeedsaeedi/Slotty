@@ -129,7 +129,7 @@ Each job records what it did, so running it twice sends nothing twice.
   \code{nudgeUnbookedStudents} & 48h before \code{windowEnd} (once) & ``Last chance to book'' to unbooked students\\
   \code{closeEndedAssignments} & \code{windowEnd} has passed & Assignment → \code{CLOSED}, waitlist cleared, audited with no actor\\
   \code{sendDailyAgendas} & 06:00--11:00 course time, once per local day & Email-only list of today's demos for each host (unless they opted out)\\
-  \code{queueDueReminders} & 24h / 1h before & Reminder to the student (unless they opted out of reminder emails)\\
+  \code{queueDueReminders} & 24h / 1h before; 08:00 on the demo day; 10 min before & Reminders to the student, each claimed once on the booking (\code{reminder24hAt}, \code{reminder1hAt}, \code{reminderMorningAt}, \code{reminder10mAt}). 24h and 1h: email (unless \code{emailReminders} is off) and bell, skipped when booked inside the window. Morning-of (\code{morningReminderDue}, \src{src/domain/reminders.ts}): email, bell and push unless \code{remindMorning} is off; skipped when the demo is under an hour away or was booked after 08:00 course time that day. 10 minutes (\code{lastReminderDue}): push only, with the meeting link, unless \code{remind10m} is off or it was booked within those 10 minutes\\
   \bottomrule
 \end{xltabular}}
 
@@ -255,7 +255,7 @@ platform accounts see no course at all.
 
 \section{Accounts}
 
-The account page (\route{/account}) shows only what applies to the user's roles: name, clock (\code{timeFormat}: 12 or 24 hour), password (checks the current one and signs out other devices), ``sign out other devices''; reminder emails (\code{emailReminders}) for students, the morning agenda (\code{emailAgenda}) for staff, and device notifications for both. Admins see none of the demo settings. Confirmation, change and marks emails can't be turned off.
+The account page (\route{/account}) shows only what applies to the user's roles: name, clock (\code{timeFormat}: 12 or 24 hour), password (checks the current one and signs out other devices), ``sign out other devices''; reminders for students (reminder emails, \code{emailReminders}; the morning-of reminder, \code{remindMorning}; the 10-minute push, \code{remind10m}), the morning agenda (\code{emailAgenda}) for staff, and device notifications for both. Admins see none of the demo settings. Confirmation, change and marks emails can't be turned off.
 
 {\tablefont
 \begin{xltabular}{\linewidth}{@{}P{30mm} L@{}}
@@ -312,7 +312,7 @@ How much people are told (\src{src/domain/notifications.ts}, ADR-018):
   \code{booking.cancelled_by_staff} & student & Staff cancelled their booking\\
   \code{slot.cancelled} & booked students & Staff cancelled the slot\\
   \code{slot.venue_changed} & booked students & Venue changed\\
-  \code{booking.reminder} & student & 24h and 1h before (worker)\\
+  \code{booking.reminder} & student & 24h and 1h before, the morning of the demo day, and 10 minutes before (push only) (worker)\\
   \code{booking.no_show} & student & Marked as no-show\\
   \code{booking.placed_by_staff} & student & Staff booked or moved them, with the previous time\\
   \code{booking.rebook_allowed} & student & Staff cleared a no-show\\

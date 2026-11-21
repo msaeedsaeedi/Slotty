@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { CalendarClock, ExternalLink, GraduationCap, MapPin, Plus, Presentation, Users } from "lucide-react";
 import { AddToCalendar } from "@/components/add-to-calendar";
 import { DemoDaySummary } from "@/components/demo-day";
+import { Countdown } from "@/components/live";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { InstallHint } from "@/components/pwa";
 import { StatusBadge } from "@/components/status-badge";
@@ -16,6 +17,8 @@ import { bookingCalendarOptions } from "@/server/services/calendar";
 import { getDemoDay } from "@/server/services/demo-day";
 import { canCreateCourseFor, myRoleKinds } from "@/server/services/courses";
 import { getHome, type Home } from "@/server/services/home";
+
+type Studying = NonNullable<Home["studying"]>;
 
 export const metadata = { title: "Home" };
 
@@ -68,7 +71,7 @@ export default async function DashboardPage() {
 
       {home.studying && (
         <Section icon={GraduationCap} title="Studying" subtitle={both ? "Courses you take as a student" : undefined}>
-          <UpcomingDemos upcoming={home.studying.upcoming} />
+          <UpcomingDemos upcoming={home.studying.upcoming} toBook={home.studying.toBook} now={now} />
           <TaskList tasks={home.studying.tasks} empty="Nothing to book right now. We'll tell you when a new demo opens." />
           <CourseList courses={home.studying.courses} />
         </Section>
@@ -134,8 +137,27 @@ function CourseList({ courses, staff }: { courses: HomeCourse[]; staff?: boolean
   );
 }
 
-function UpcomingDemos({ upcoming }: { upcoming: NonNullable<Home["studying"]>["upcoming"] }) {
-  if (upcoming.length === 0) return null;
+function UpcomingDemos({ upcoming, toBook, now }: { upcoming: Studying["upcoming"]; toBook: Studying["toBook"]; now: Date }) {
+  if (upcoming.length === 0) {
+    if (toBook.count === 0) return null;
+    return (
+      <Card>
+        <CardHeader>
+          <CardDescription>Your next demo</CardDescription>
+          <CardTitle>
+            Nothing booked: {toBook.count} demo{toBook.count === 1 ? "" : "s"} to book
+          </CardTitle>
+        </CardHeader>
+        {toBook.href && (
+          <CardContent>
+            <Button asChild size="sm">
+              <Link href={toBook.href}>Book a slot</Link>
+            </Button>
+          </CardContent>
+        )}
+      </Card>
+    );
+  }
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       {upcoming.map((b, i) => {
@@ -145,7 +167,22 @@ function UpcomingDemos({ upcoming }: { upcoming: NonNullable<Home["studying"]>["
           // The title link stretches over the whole card; the buttons sit above it.
           <Card key={b.id} className={cn("relative transition-colors hover:border-primary/40", i === 0 && "border-primary/50 ring-1 ring-primary/20")}>
             <CardHeader>
-              <CardDescription>{i === 0 ? `Your next demo · ${b.assignment.course.code}` : b.assignment.course.code}</CardDescription>
+              <CardDescription>
+                {i === 0 ? (
+                  <>
+                    Your next demo · {b.assignment.course.code} ·{" "}
+                    {b.slot.startsAt <= now ? (
+                      <span className="font-medium text-foreground">
+                        in progress, <Countdown to={b.slot.endsAt.toISOString()} now={now.toISOString()} mode="left" />
+                      </span>
+                    ) : (
+                      <Countdown to={b.slot.startsAt.toISOString()} now={now.toISOString()} mode="demo" className="font-medium text-foreground" />
+                    )}
+                  </>
+                ) : (
+                  b.assignment.course.code
+                )}
+              </CardDescription>
               <CardTitle>
                 <Link className="after:absolute after:inset-0 after:rounded-xl hover:underline" href={`/courses/${b.assignment.courseId}/assignments/${b.assignment.id}`}>
                   {b.assignment.title}

@@ -25,8 +25,13 @@ export async function setEmailPreferencesAction(_: ActionState, fd: FormData): P
   return run(async () => {
     // Each checkbox is only on the form for the roles it applies to.
     const pref = (key: string) => (fd.has(`${key}Shown`) ? bool(fd, key) : undefined);
-    await setEmailPreferences(await requireUser(), { emailReminders: pref("emailReminders"), emailAgenda: pref("emailAgenda") });
-    return "Email preferences saved.";
+    await setEmailPreferences(await requireUser(), {
+      emailReminders: pref("emailReminders"),
+      emailAgenda: pref("emailAgenda"),
+      remindMorning: pref("remindMorning"),
+      remind10m: pref("remind10m"),
+    });
+    return "Preferences saved.";
   });
 }
 

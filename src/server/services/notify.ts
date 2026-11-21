@@ -14,6 +14,8 @@ export interface NotificationInput {
   email?: boolean;
   /** Also show it in the in-app inbox (default true). */
   inApp?: boolean;
+  /** Also send it to devices with push on (default: whenever it's shown in-app). */
+  push?: boolean;
   /** Emails in an opt-out category are skipped for users who turned them off. */
   category?: "reminder";
   /**
@@ -64,15 +66,15 @@ export async function notify(tx: Tx, userIds: string[], input: NotificationInput
     await tx.notification.createMany({
       data: ids.map((userId) => ({ userId, type: n.type, title: n.title, body: n.body, link: n.link, groupKey: n.groupKey })),
     });
-    // Mirror in-app notifications to devices that opted into push.
-    if (isPushConfigured()) {
-      const devices = await tx.pushSubscription.findMany({ where: { userId: { in: ids }, user: { status: "ACTIVE" } }, select: { id: true } });
-      if (devices.length) {
-        await tx.pushMessage.createMany({
-          data: devices.map((d) => ({ subscriptionId: d.id, title: n.title, body: n.body.slice(0, 500), link: n.link })),
-        });
-        await signalOutbox(tx);
-      }
+  }
+  // Mirror in-app notifications to devices that opted into push (or send push alone).
+  if ((n.push ?? n.inApp !== false) && isPushConfigured()) {
+    const devices = await tx.pushSubscription.findMany({ where: { userId: { in: ids }, user: { status: "ACTIVE" } }, select: { id: true } });
+    if (devices.length) {
+      await tx.pushMessage.createMany({
+        data: devices.map((d) => ({ subscriptionId: d.id, title: n.title, body: n.body.slice(0, 500), link: n.link })),
+      });
+      await signalOutbox(tx);
     }
   }
   if (n.email === false) return { superseded };

@@ -220,7 +220,9 @@ async function studyingTasks(actor: Actor, courseIds: string[], now: Date) {
   const upcoming = bookings
     .filter((b) => b.status === "BOOKED" && b.slot.endsAt > now)
     .sort((a, b) => a.slot.startsAt.getTime() - b.slot.startsAt.getTime());
-  return { tasks: tasks.sort(byUrgency), upcoming };
+  // For the next-demo card's empty state: the demos still to book, and where to start.
+  const toBook = tasks.filter((t) => t.key.startsWith("book-"));
+  return { tasks: tasks.sort(byUrgency), upcoming, toBook: { count: toBook.length, href: toBook.sort(byUrgency)[0]?.href ?? null } };
 }
 
 function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
