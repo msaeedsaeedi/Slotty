@@ -37,6 +37,10 @@ model User {
   /// Email preferences (in-app notifications are always kept).
   emailReminders Boolean    @default(true)
   emailAgenda    Boolean    @default(true)
+  /// Reminder on the morning of a demo day (email and push). Students only.
+  remindMorning  Boolean    @default(true)
+  /// Push reminder 10 minutes before a demo. Students only.
+  remind10m      Boolean    @default(true)
   timeFormat     TimeFormat @default(H12)
   /// Last time the worker sent this staff member their daily agenda.
   agendaSentAt   DateTime?
@@ -295,23 +299,27 @@ enum BookingChange {
 /// enforced by the partial unique index `booking_one_active_per_student`
 /// (see the init migration).
 model Booking {
-  id            String        @id @default(cuid())
-  slotId        String
-  assignmentId  String
-  studentId     String
-  status        BookingStatus @default(BOOKED)
-  cancelledAt   DateTime?
-  cancelledById String?
+  id                String         @id @default(cuid())
+  slotId            String
+  assignmentId      String
+  studentId         String
+  status            BookingStatus  @default(BOOKED)
+  cancelledAt       DateTime?
+  cancelledById     String?
   /// The student cancelled with no changes left, so it didn't spend one; they
   /// can't book again themselves until staff grant more (`changeBudget`).
-  freeCancel    Boolean       @default(false)
+  freeCancel        Boolean        @default(false)
   /// Set on the old half of a reschedule or staff move, so history shows what
   /// happened instead of a plain "Cancelled".
-  replacedBy    BookingChange?
-  reminder24hAt DateTime?
-  reminder1hAt  DateTime?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  replacedBy        BookingChange?
+  reminder24hAt     DateTime?
+  reminder1hAt      DateTime?
+  /// When the morning-of reminder was claimed (sent or skipped), so it goes out once.
+  reminderMorningAt DateTime?
+  /// When the 10-minute push reminder was claimed (sent or skipped).
+  reminder10mAt     DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   slot        Slot             @relation(fields: [slotId], references: [id], onDelete: Cascade)
   assignment  Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade)

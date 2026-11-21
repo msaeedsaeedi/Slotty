@@ -80,6 +80,12 @@ export function dayRange(day: string, timezone: string): { start: Date; end: Dat
   return { start: new Date(TZDate.tz(timezone, y, m - 1, d).getTime()), end: new Date(TZDate.tz(timezone, y, m - 1, d + 1).getTime()) };
 }
 
+/** The instant it is `hour`:00 in `timezone` on the calendar day `date` falls on there. */
+export function atLocalHour(date: Date, timezone: string, hour: number): Date {
+  const [y, m, d] = fmtData(date, timezone, "yyyy-MM-dd").split("-").map(Number);
+  return new Date(TZDate.tz(timezone, y, m - 1, d, hour).getTime());
+}
+
 /** Timezones a course can be set to. Pakistan only for now; more will follow. */
 export const SUPPORTED_TIMEZONES = [{ id: "Asia/Karachi", label: "Pakistan time (PKT, UTC+5)", short: "Pakistan time" }] as const;
 
