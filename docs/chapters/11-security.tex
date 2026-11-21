@@ -11,7 +11,7 @@ This chapter gathers the controls described elsewhere into one view an auditor c
   \endhead
   Account isolation & Dedicated account in an Organization; SCPs deny other regions, large or expensive resources, root-user actions, leaving the Organization and tampering with CloudTrail & \cref{sec:aws-guardrails}\\
   Audit (cloud) & Organization CloudTrail with log-file validation, 90 days, in the management account & \src{infra/aws/org}\\
-  Audit (app) & Moderation-relevant changes written in the same transaction as the change & \cref{ch:crosscutting}\\
+  Audit (app) & Moderation-relevant changes written in the same transaction as the change; append-only, enforced by a database trigger that refuses \code{UPDATE} and \code{DELETE} & \cref{ch:crosscutting}\\
   Network & Tasks and database in private subnets; database subnets have no route out; security groups allow only the next hop; no SSH anywhere & \cref{ch:aws}\\
   Edge & TLS 1.2+ with HSTS; origin reachable only with CloudFront's secret header; API Gateway throttling & \cref{sec:aws-request-path}\\
   Data at rest & RDS, EBS, S3 and SSM encrypted with AWS-managed keys & \src{infra/aws/app}\\
@@ -26,6 +26,7 @@ This chapter gathers the controls described elsewhere into one view an auditor c
   Accounts & Argon2 password hashes, database sessions (30 days), reset links valid 2 hours (a new one voids the last), invites 14 days, silent success on unknown emails & \cref{ch:rules}\\
   Abuse limits & Failed sign-ins back off exponentially per email and are capped per network; reset requests capped per network, reset emails per recipient; shared through PostgreSQL across web tasks, with hashed keys (ADR-026) & \cref{ch:rules}\\
   Usage data & First-party only, stored in RDS; pseudonymous visitor key (HMAC with an SSM secret), route templates instead of paths, no IP or user agent, scrubbed error text; opt-out in Account; feedback and survey answers stored without the user and with coarsened times; raw events 90 days, totals 13 months & \cref{sec:rules-usage}, ADR-015\\
+  Exports & CSV exports pass every header and cell through \code{safeCell}: text starting with \code{= + - @} (also after leading spaces), a tab or a carriage return gets a leading apostrophe, so spreadsheet apps show it instead of running it as a formula & \src{src/lib/csv.ts}\\
   Platform separation & Insights and feedback readable only by a dedicated platform account (never an admin, never in a course), granted from the command line only; hidden from the admin console and its audit log; never tracked itself & \cref{ch:rules}, ADR-016\\
   Browser policy & \code{Content-Security-Policy-Report-Only} (\code{'self'} only) in production; \code{X-Frame-Options}, \code{nosniff}, referrer policy & \src{next.config.ts}\\
   Supply chain & Lockfile installs; base images pinned by version and the TeX image by digest (base-image digests: issue \#40); RDS CA bundle checked by SHA-256; ECR scan on push & \src{Dockerfile}\\
