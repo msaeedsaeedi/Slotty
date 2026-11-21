@@ -17,7 +17,7 @@
  */
 import "dotenv/config";
 import { Client } from "pg";
-import { appUrl } from "@/server/app-url";
+import { runStartupChecks } from "@/server/startup-checks";
 import { db } from "@/server/db";
 import { closeMailer, deliverPendingEmails } from "@/server/mailer";
 import { OUTBOX_CHANNEL } from "@/server/outbox-signal";
@@ -189,11 +189,12 @@ async function reconnect() {
 let loops: Promise<unknown> = Promise.resolve();
 
 async function main() {
-  appUrl(); // fail fast: emails built without a valid APP_URL would link to the wrong place
+  // Fail fast: a bad APP_URL breaks every link, and a deployment without SMTP would only log emails.
+  runStartupChecks();
   const listenOk = await startListener();
   log(
     `started: delivery ${listenOk ? `on notify (backstop ${BACKSTOP_MS / 1000}s)` : `polling every ${POLL_MS / 1000}s`}, ` +
-      `schedule every ${SCHEDULE_MS / 1000}s, SMTP ${process.env.SMTP_HOST ? "on" : "off — printing emails"}, push ${isPushConfigured() ? "on" : "off"}`,
+      `schedule every ${SCHEDULE_MS / 1000}s, SMTP ${process.env.SMTP_HOST ? "on" : "off (local only: emails noted without their body)"}, push ${isPushConfigured() ? "on" : "off"}`,
   );
   loops = Promise.all([deliveryLoop(), scheduleLoop()]);
   await loops;

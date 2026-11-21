@@ -8,7 +8,11 @@ const CONCURRENCY = 5;
 
 let transport: Transporter | null | undefined;
 
-/** One pooled SMTP transport for the worker's lifetime (null = print emails instead). */
+/**
+ * One pooled SMTP transport for the worker's lifetime (null = local development only: the
+ * email is marked sent and noted in the log without its body; deployments refuse to start
+ * without SMTP, `mailConfigProblems`).
+ */
 function getTransport() {
   if (transport !== undefined) return transport;
   const host = process.env.SMTP_HOST;
@@ -32,7 +36,8 @@ export function closeMailer() {
 }
 
 /**
- * Deliver pending outbox emails. Without SMTP configured, emails are printed to the console.
+ * Deliver pending outbox emails. Without SMTP (local development only), each is noted in the
+ * log without its body.
  * `fetched === batchSize` means there may be more waiting.
  */
 export async function deliverPendingEmails(batchSize = 50): Promise<{ sent: number; failed: number; fetched: number }> {
@@ -54,7 +59,8 @@ export async function deliverPendingEmails(batchSize = 50): Promise<{ sent: numb
       if (smtp) {
         await smtp.sendMail({ from, to: email.to, subject: email.subject, text: email.text, html: email.html ?? undefined });
       } else {
-        console.log(`\n✉️  To: ${email.to}\n   Subject: ${email.subject}\n   ${email.text.replace(/\n/g, "\n   ")}\n`);
+        // Never the body: it can hold invite and reset links, or marks, and logs are kept.
+        console.log(`✉️  To: ${email.to} · Subject: ${email.subject} (not sent: SMTP_HOST is unset; read it at /dev/mail)`);
       }
       await db.emailOutbox.update({ where: { id: email.id }, data: { status: "SENT", sentAt: new Date(), lastError: null } });
       return "sent" as const;

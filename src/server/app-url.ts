@@ -26,6 +26,21 @@ export function appUrl(): string {
   return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
 }
 
+/**
+ * Is APP_URL a local address (localhost, a loopback IP, or a .local / .localhost name such as
+ * the dev Caddy's slotty.local)? Unset counts as local, since appUrl() then falls back to
+ * localhost outside production.
+ */
+export function isLocalAppUrl(raw = process.env.APP_URL): boolean {
+  if (!raw?.trim()) return true;
+  try {
+    const host = new URL(raw.trim()).hostname.replace(/^\[|\]$/g, "");
+    return host === "localhost" || host === "::1" || /^127\./.test(host) || /\.(local|localhost)$/.test(host);
+  } catch {
+    return false;
+  }
+}
+
 /** Absolute link to an app path, e.g. absoluteUrl("/invite/abc"). */
 export function absoluteUrl(path: string): string {
   return `${appUrl()}${path.startsWith("/") ? path : `/${path}`}`;
