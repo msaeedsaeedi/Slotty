@@ -118,5 +118,6 @@ test("with an instructor, TA submissions wait for review and the instructor fina
 
   await student.reload();
   await expect(student.getByText("Your result")).toBeVisible();
-  await expect(student.getByText("10 / 10")).toBeVisible();
+  await expect(student.getByText("10 / 10", { exact: true })).toBeVisible();
+  await expect(student.getByText("Marked: 10 / 10")).toBeVisible();
 });

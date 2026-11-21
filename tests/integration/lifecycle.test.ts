@@ -9,6 +9,7 @@ import {
   getOrCreateEvaluation,
   reviewEvaluation,
   saveEvaluation,
+  listMyVisibleMarks,
   submitEvaluations,
   unlockEvaluation,
 } from "@/server/services/evaluations";
@@ -168,18 +169,23 @@ describe("evaluation lifecycle", () => {
       privateNotes: "Struggled with questions on complexity",
     });
     expect(await getMyResult(ann, assignment.id)).toBeNull(); // not released yet
+    expect((await listMyVisibleMarks(ann)).size).toBe(0);
 
     const [result] = await submitEvaluations(ta, [ev.id]);
     expect(result.status).toBe("FINALIZED");
     const mine = await getMyResult(ann, assignment.id);
     expect(mine).toMatchObject({ totalMarks: 8.5, maxMarks: 10, feedback: "Nice work" });
     expect(JSON.stringify(mine)).not.toContain("Struggled");
+    expect((await listMyVisibleMarks(ann, { courseId: course.id })).get(assignment.id)).toEqual({ total: 8.5, underReview: false });
+    expect((await listMyVisibleMarks(ta)).size).toBe(0);
 
     await expect(saveEvaluation(ta, ev.id, { scores: [], totalMarks: 1 })).rejects.toThrow(/locked/);
     await expect(markAttendance(ta, booking!.id, "NO_SHOW", inHours(1, slots[0].startsAt))).rejects.toThrow(/locked/);
     // With no instructor, the TA may unlock to fix a mistake.
     await unlockEvaluation(ta, ev.id, "typo");
     expect((await db.evaluation.findUniqueOrThrow({ where: { id: ev.id } })).status).toBe("RETURNED");
+    // While staff correct them, the student keeps seeing the released total.
+    expect((await listMyVisibleMarks(ann)).get(assignment.id)).toEqual({ total: 8.5, underReview: true });
 
     const { csv } = await exportAssignmentCsv(ta, assignment.id);
     expect(csv).toContain("Ann");

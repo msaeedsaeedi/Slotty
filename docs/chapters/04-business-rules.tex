@@ -77,6 +77,25 @@ Staff can grant one student an exception on one assignment:
 
 The freeze window, capacity and draft slots still apply.
 
+\subsection{What a student sees about their demo}\label{sec:student-demo-state}
+
+\code{studentDemoState} (\src{src/domain/student-demo.ts}) works out one state from the slot time and the booking and evaluation status together, because the booking stays \code{BOOKED} until staff record attendance. The course page, the assignment page and \route{/bookings} all use it.
+
+\begin{xltabular}{\linewidth}{@{}P{58mm} L@{}}
+  \toprule
+  \thead{Situation} & \thead{Student sees}\\
+  \midrule
+  Booked, before the slot & \ui{Booked}, with time, venue and the change actions\\
+  Booked, during the slot & \ui{In progress}, with the meeting link\\
+  Booked, slot ended & \ui{Done: waiting for attendance}\\
+  Completed, marks not released & \ui{Completed: marks pending}\\
+  Marks released (\code{visibleMarks}) & \ui{Marked: N / max}, also without a completed booking; while staff correct unlocked marks, the released total, marked as being corrected\\
+  No-show & \ui{Missed}, saying what happened and opening the staff request\\
+  \bottomrule
+\end{xltabular}
+
+Calendar, reschedule, cancel and the push prompt show only in the \ui{Booked} state; the server's own checks (\code{canCancelBooking}, \code{canReschedule}, \code{canChangeMarkedBooking}) are unchanged.
+
 \section{Staff tools \& student requests}
 
 {\tablefont
