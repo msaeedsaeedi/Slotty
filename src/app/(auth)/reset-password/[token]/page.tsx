@@ -1,5 +1,6 @@
 import { resetPasswordAction } from "@/app/actions/auth";
-import { ActionForm, SubmitButton } from "@/components/action-form";
+import { ActionForm } from "@/components/action-form";
+import { PublicSubmit } from "@/components/public/public-submit";
 import { PublicHeading } from "@/components/public/public-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import { PasswordFields } from "../../password-fields";
@@ -10,13 +11,13 @@ export default async function ResetPasswordPage({ params }: PageProps<"/reset-pa
   const { token } = await params;
   return (
     <>
-      <PublicHeading kicker="Gate · password" title="Choose a new password" />
+      <PublicHeading title="Choose a new password" center />
       <Card>
         <CardContent>
           <ActionForm action={resetPasswordAction} className="space-y-4">
             <input type="hidden" name="token" value={token} />
             <PasswordFields />
-            <SubmitButton className="w-full">Save password</SubmitButton>
+            <PublicSubmit>Save password</PublicSubmit>
           </ActionForm>
         </CardContent>
       </Card>

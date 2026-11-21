@@ -1,27 +1,30 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { loginAction } from "@/app/actions/auth";
-import { ActionForm, SubmitButton } from "@/components/action-form";
+import { ActionForm } from "@/components/action-form";
+import { PublicSubmit } from "@/components/public/public-submit";
 import { PublicHeading } from "@/components/public/public-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ClearSavedPages } from "@/components/pwa";
 import { getCurrentUser } from "@/server/auth/session";
-import { SUPPORT_EMAIL, supportMailto } from "@/lib/site";
 
 export const metadata = { title: "Sign in" };
 
+/**
+ * Two fields and one big action. The only other choice, "Forgot password?", is a full-width
+ * target right under it; how accounts work sits behind "No account yet?".
+ */
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   if (await getCurrentUser()) redirect("/dashboard");
   const { next } = await searchParams;
   return (
     <>
       <ClearSavedPages />
-      <PublicHeading kicker="Gate · sign in" title="Sign in" />
+      <PublicHeading title="Sign in" center />
       <Card>
         <CardContent>
-          <p className="mb-5 text-[var(--text-2)]">Use the email your course staff added you with.</p>
           <ActionForm action={loginAction} className="space-y-4">
             <input type="hidden" name="next" value={typeof next === "string" ? next : ""} />
             <div className="space-y-2">
@@ -29,32 +32,28 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
               <Input id="email" name="email" type="email" autoComplete="email" required autoFocus />
             </div>
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <Link href="/forgot-password" className="text-xs text-[var(--text-2)] hover:text-[var(--text)] hover:underline">
-                  Forgot password?
-                </Link>
-              </div>
+              <Label htmlFor="password">Password</Label>
               <Input id="password" name="password" type="password" autoComplete="current-password" required />
             </div>
-            <SubmitButton className="w-full">Sign in</SubmitButton>
+            <PublicSubmit>Sign in</PublicSubmit>
           </ActionForm>
-          <div className="mt-6 space-y-1 border-t border-[var(--line)] pt-4 text-xs leading-relaxed text-[var(--text-3)]">
-            <p className="font-medium text-[var(--text-2)]">No account yet?</p>
-            <p>
-              Slotty is invite-only: your course staff add you, and you get an email to set a password. Invite expired? Use{" "}
-              <Link href="/forgot-password" className="underline underline-offset-2 hover:text-[var(--text)]">
-                Forgot password
-              </Link>{" "}
-              to get a new one. Still stuck? Email{" "}
-              <a href={supportMailto("Help signing in")} className="underline underline-offset-2 hover:text-[var(--text)]">
-                {SUPPORT_EMAIL}
-              </a>
-              .
-            </p>
-          </div>
+          <Link
+            href="/forgot-password"
+            className="mt-2 flex min-h-11 w-full items-center justify-center rounded-full text-sm text-[var(--text-2)] transition-colors hover:bg-white/[0.04] hover:text-[var(--text)]"
+          >
+            Forgot password?
+          </Link>
         </CardContent>
       </Card>
+      <details className="group mt-4 text-center text-[13px] text-[var(--text-3)]">
+        <summary className="inline-flex min-h-11 cursor-pointer list-none items-center px-2 text-[var(--text-2)] hover:text-[var(--text)]">
+          No account yet?
+        </summary>
+        <p className="mx-auto max-w-[340px] leading-relaxed">
+          Slotty is invite-only: your course staff add you and you get an email to set a password. Invite expired? Use Forgot password to get a new
+          one.
+        </p>
+      </details>
     </>
   );
 }

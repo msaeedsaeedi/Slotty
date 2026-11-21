@@ -2,6 +2,8 @@ import "../landing/landing.css";
 import "./public.css";
 import Link from "next/link";
 import { mono, sans } from "../landing/fonts";
+import { HeroShader } from "../landing/hero-shader";
+import { MotionFlag } from "../landing/motion";
 import { SiteFooter } from "../landing/site-footer";
 import { Wordmark } from "../landing/wordmark";
 
@@ -13,31 +15,26 @@ import { Wordmark } from "../landing/wordmark";
 export function PublicShell({ children }: { children: React.ReactNode }) {
   return (
     <div data-theme="slotty-landing" data-public className={`${sans.variable} ${mono.variable} flex flex-1 flex-col`}>
-      <header className="border-b border-[var(--line)]">
-        <div className="lp-container flex h-16 items-center">
-          <Wordmark />
-          <Link
-            href="/"
-            className="ml-auto inline-flex min-h-11 items-center px-1 text-[15px] text-[var(--text-2)] transition-colors duration-100 hover:text-[var(--text)]"
-          >
-            How it works
-          </Link>
-        </div>
-      </header>
-      {children}
+      <MotionFlag />
+      {/* The hero's light: the same warm haze as the landing page, under the header and the page. */}
+      <div className="lp-hero relative isolate flex flex-1 flex-col overflow-hidden">
+        <HeroShader />
+        <header>
+          <div className="lp-container flex h-16 items-center">
+            <Wordmark />
+            <Link href="/" className="lp-btn lp-btn-quiet lp-btn-sm ml-auto">
+              How it works
+            </Link>
+          </div>
+        </header>
+        {children}
+      </div>
       <SiteFooter mobileBar={false} />
     </div>
   );
 }
 
-/** A small monospace label, then the page's condensed headline. */
-export function PublicHeading({ kicker, title, id }: { kicker: string; title: string; id?: string }) {
-  return (
-    <div className="mb-6">
-      <p className="pub-kicker">{kicker}</p>
-      <h1 id={id} className="lp-h1 mt-2 text-[clamp(40px,8vw,56px)]">
-        {title}
-      </h1>
-    </div>
-  );
+/** The page's headline in the landing's condensed type. */
+export function PublicHeading({ title, center = false }: { title: string; center?: boolean }) {
+  return <h1 className={`lp-h1 mb-7 text-[clamp(44px,9vw,64px)] ${center ? "text-center" : ""}`}>{title}</h1>;
 }

@@ -138,10 +138,16 @@ export function ActionForm({
 }
 
 /** Submit button with a pending spinner. Disabled while offline: changes are never queued for later. */
-export function SubmitButton({ children, ...props }: ComponentProps<typeof Button>) {
+/** Whether the surrounding form is submitting, and whether the browser is online (for custom submit buttons). */
+export function useSubmitState() {
   const { pending: nativePending } = useFormStatus();
   const pending = useContext(PendingContext) || nativePending;
   const online = useOnline();
+  return { pending, online };
+}
+
+export function SubmitButton({ children, ...props }: ComponentProps<typeof Button>) {
+  const { pending, online } = useSubmitState();
   return (
     <Button type="submit" {...props} disabled={pending || !online || props.disabled} title={!online ? "You're offline" : props.title}>
       {pending && <Loader2 className="animate-spin" />}

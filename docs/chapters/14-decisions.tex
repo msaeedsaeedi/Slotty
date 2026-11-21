@@ -426,18 +426,25 @@ Add one for every deliberate trade-off.
    so a visitor who clicked \ui{Sign in} landed in what looked like a different product (issue
    \#60).}
   {Every signed-out page uses \code{PublicShell} (\src{src/components/public}): the landing
-   wrapper (\code{data-theme="slotty-landing"}), its fonts and footer, and a slim header with the
-   wordmark and \ui{How it works}. \src{public.css} maps the app's shadcn colour tokens to the
-   landing palette inside that wrapper, so the forms keep the app's \code{Card}, \code{Input},
-   \code{Button} and \code{ActionForm} with unchanged behaviour, labels and limits. The submit
-   button is the page's one amber action; errors use the red, success the green of ADR-020's
-   three signal colours. Headlines use the condensed landing type under a small monospace label;
-   no split-flap cells (ADR-020 keeps those for times and statuses). Dark only, like the landing
-   page; no new motion.}
+   wrapper (\code{data-theme="slotty-landing"}), its fonts and footer, the hero's haze shader
+   (\code{HeroShader}) behind a header with the wordmark and the menu's quiet \ui{How it works}
+   pill, and on the sign-in pages the hero's faint split-flap mark behind the form panel.
+   \src{public.css} maps the app's shadcn colour tokens to the landing palette inside that
+   wrapper and restyles \code{Card} as the landing's board and \code{Input} as recessed pills
+   with a thin amber focus edge, so the forms keep the app's components and \code{ActionForm}
+   with unchanged behaviour, labels and limits. The submit button is \code{PublicSubmit}, the
+   hero's amber pill (\code{lp-btn-primary}) with the same pending and offline handling as
+   \code{SubmitButton}; errors use the red, success the green of ADR-020's three signal colours.
+   Headlines use the condensed landing type, centred. Each page offers as few choices as it can:
+   on sign-in, two fields, one large button, a full-width \ui{Forgot password?} under it, and the
+   invite explanation behind \ui{No account yet?}. Dark only, like the landing page; the shader
+   draws one still frame under reduced motion.}
   {Two looks to keep apart: the signed-in app keeps its own theme until the app revamp (issue
    \#58) decides how far the landing look goes. Overrides for sizes and fills the components set
    with Tailwind utilities sit outside the CSS layers in \src{public.css}, so a component change
-   there needs a look at the public pages too. Rejected: restyling the components themselves
-   (would change the app as well), separate form components for public pages (two copies of the
-   same behaviour), a light variant (the landing page is dark only).}
+   there needs a look at the public pages too. The shader runs on every public page (about 30
+   frames a second at half resolution, only while visible). Rejected: restyling the components
+   themselves (would change the app as well), separate form components for public pages (two
+   copies of the same behaviour), a light variant (the landing page is dark only), a plain
+   background (the pages felt empty next to the landing page).}
   {The app revamp (\#58) adopts the landing look, so the mapping can move to the app's own tokens.}

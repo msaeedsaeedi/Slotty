@@ -9,7 +9,7 @@ export default function PrivacyPage() {
   return (
     <PublicShell>
       <main id="main" className="pub-prose mx-auto w-full max-w-[680px] flex-1 space-y-6 px-5 py-12 sm:py-20">
-        <PublicHeading kicker="Privacy" title="Privacy and usage data" />
+        <PublicHeading title="Privacy and usage data" />
         <p>
           Slotty keeps the information it needs to run your course: your account, bookings, marks and the notifications it sends. This page covers
           the extra data it collects to find out what to improve.

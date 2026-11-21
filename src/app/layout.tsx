@@ -22,7 +22,8 @@ export const viewport: Viewport = { themeColor: "#111111" };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    // The landing and public pages scroll smoothly (landing.css); this tells Next.js to turn that off during route changes.
+    <html lang="en" data-scroll-behavior="smooth" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col bg-muted/30">
         {children}
         <Toaster richColors position="top-center" />

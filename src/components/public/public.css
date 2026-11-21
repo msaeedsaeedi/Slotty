@@ -39,18 +39,6 @@
     color: var(--text);
   }
 
-  [data-public] [data-slot="label"] {
-    color: var(--text);
-  }
-
-  [data-public] .pub-kicker {
-    font-family: var(--lp-mono);
-    font-size: 12px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-3);
-  }
-
   [data-public] .pub-prose {
     color: var(--text-2);
     font-size: 16px;
@@ -77,22 +65,62 @@
 }
 
 /*
- * Outside the layers on purpose: these replace sizes and fills that the components set with
- * Tailwind utilities (h-8, bg-transparent, md:text-sm), which outrank anything in a layer.
+ * Outside the layers on purpose: these replace sizes, fills and rings that the components set
+ * with Tailwind utilities (h-8, bg-card, bg-transparent, ring-3, md:text-sm), which outrank
+ * anything in a layer.
  */
+
+/* The form panel: the landing's board, a little see-through so the haze shows at its edges. */
+[data-public] [data-slot="card"] {
+  border-radius: 20px;
+  background: linear-gradient(to bottom, rgb(26 25 23 / 0.86), rgb(20 20 18 / 0.9) 40%);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    0 0 0 1px var(--line),
+    0 30px 60px -30px rgb(0 0 0 / 0.9);
+  /* The card's own padding (top, bottom and sides) comes from this variable. */
+  --card-spacing: 24px;
+}
+
+@media (min-width: 640px) {
+  [data-public] [data-slot="card"] {
+    --card-spacing: 28px;
+  }
+}
+
+/* Fields: pills like the landing's buttons, recessed into the board. */
 [data-public] [data-slot="input"] {
-  height: 44px;
-  background: var(--panel-2);
+  height: 42px;
+  border-radius: 999px;
+  padding-inline: 18px;
+  border: 1px solid var(--line-strong);
+  background: linear-gradient(to bottom, #141412, #191815);
   color: var(--text);
   font-size: 16px; /* no zoom on focus on iOS */
+  box-shadow:
+    inset 0 1px 2px rgb(0 0 0 / 0.55),
+    0 1px 0 rgb(255 255 255 / 0.04);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
-[data-public] button[type="submit"] {
-  min-height: 44px;
-  font-size: 15px;
-  font-weight: 600;
+[data-public] [data-slot="input"]:hover {
+  border-color: #4c4942;
 }
 
-[data-public] button[type="submit"]:hover {
-  background: #ffbe45;
+/* Focus: a thin amber edge and a faint glow, not a thick ring. */
+[data-public] [data-slot="input"]:focus-visible {
+  border-color: rgb(255 178 36 / 0.7);
+  box-shadow:
+    inset 0 1px 2px rgb(0 0 0 / 0.55),
+    0 0 0 3px rgb(255 178 36 / 0.12);
+}
+
+[data-public] [data-slot="label"] {
+  padding-inline-start: 4px;
+  font-size: 13px;
+  color: var(--text-2);
 }
