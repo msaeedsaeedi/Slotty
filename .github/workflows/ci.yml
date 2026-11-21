@@ -2,9 +2,9 @@
 # push to dev and master. Jobs run in parallel; each database is a throwaway Postgres
 # (Testcontainers). PRs into master are releases and must also pass "Release PR" (ADR-027).
 # Deploying is .github/workflows/deploy.yml, which doesn't wait for this: protection makes a PR be
-# up to date and green before it merges, so master is what CI already tested. The back-merge
-# workflow starts this by hand (workflow_dispatch) on the branch it opens, since a PR opened by
-# the workflow token starts no workflow itself.
+# up to date and green before it merges, so master is what CI already tested. On the Back-merge
+# workflow's PRs it runs once a maintainer approves it (GitHub's rule for PRs opened by a
+# workflow).
 name: CI
 
 on:

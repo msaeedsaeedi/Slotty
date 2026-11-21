@@ -86,9 +86,10 @@ in between.
   \item Merging it deploys, then tags \code{vX.Y.Z} and publishes the release with notes grouped by
     the merged pull requests' labels (\src{.github/release.yml}).
   \item The \emph{Back-merge} workflow opens a pull request bringing \code{master} back into
-    \code{dev} and starts CI on it; merge it, so the next release is up to date with
-    \code{master}. (It can't push to \code{dev} itself: the branch has no bypass, and GitHub
-    doesn't let a personal repository exempt GitHub Actions.)
+    \code{dev}. GitHub holds CI on a pull request opened by a workflow until a maintainer
+    approves it: \emph{Approve workflows to run}, then merge once \textbf{CI ok} passes, so the
+    next release is up to date with \code{master}. (It can't push to \code{dev} itself: the
+    branch has no bypass, and GitHub doesn't let a personal repository exempt GitHub Actions.)
   \item The release's milestone closes; unfinished issues move to the next one.
 \end{enumerate}
 A tag ruleset lets nobody but repository admins move or delete \code{v*} tags; the Deploy

@@ -401,13 +401,15 @@ Add one for every deliberate trade-off.
    CI's \emph{Release PR} job: right source, a new version in \src{package.json}, no tag for it
    yet. A push to \code{master} deploys; after \route{/health} reports the new version the
    workflow tags it and publishes the release with generated notes. A \emph{Back-merge} workflow
-   opens a pull request from \code{master} into \code{dev} and starts CI on it. The build role
+   opens a pull request from \code{master} into \code{dev}, whose CI runs once the maintainer
+   approves it. The build role
    trusts \code{master} and \code{v*} tags (kept for redeploys and emergency rollbacks); the
    \code{production} environment allows both. Rollback is normally a revert pull request into
    \code{master}.}
   {\code{master} equals production except while a deploy is running or has just failed, which
    the failed run shows; tags mean ``went live''. Each release is two pull requests (the version
-   bump on \code{dev}, then \code{dev} into \code{master}) plus the back-merge. GitHub lets
+   bump on \code{dev}, then \code{dev} into \code{master}) plus the back-merge, which needs one
+   approval click before its CI runs. GitHub lets
    neither workflows push to a protected branch nor exempt GitHub Actions in a personal
    repository, so the back-merge is a pull request, and the tag ruleset no longer restricts
    creating tags (moving and deleting them still is). Rejected: keeping releases as a separate
