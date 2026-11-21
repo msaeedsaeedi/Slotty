@@ -4,15 +4,17 @@ import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { Card } from "@/components/ui/card";
 import { db } from "@/server/db";
+import { isDeployed } from "@/server/startup-checks";
 
 export const metadata = { title: "Dev mailbox" };
 
 /**
  * Development only: every queued email, so invites and reminders can be followed
- * without SMTP. Production builds hide it unless ENABLE_DEV_MAIL=1 (the e2e server).
+ * without SMTP. Production builds hide it unless ENABLE_DEV_MAIL=1 (the e2e server), and a
+ * deployment (public APP_URL) never shows it; it also refuses to start with the flag set.
  */
 export default async function DevMailPage({ searchParams }: PageProps<"/dev/mail">) {
-  if (process.env.NODE_ENV === "production" && process.env.ENABLE_DEV_MAIL !== "1") notFound();
+  if (isDeployed() || (process.env.NODE_ENV === "production" && process.env.ENABLE_DEV_MAIL !== "1")) notFound();
   const { to } = await searchParams;
   const emails = await db.emailOutbox.findMany({
     where: typeof to === "string" && to ? { to: { contains: to } } : {},

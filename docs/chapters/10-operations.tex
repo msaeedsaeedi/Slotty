@@ -36,7 +36,9 @@ The rollout job's log says which step stopped it and, for a service, prints its 
   \item[Migrations failed] The services were not touched. Fix the migration in a new pull request.
   \item[A service did not roll out] The circuit breaker rolled it back, or its tasks didn't become
     healthy within 10 minutes. The service events and the task's log group (\code{/slotty/web} or
-    \code{/slotty/worker}) say why; usually a missing setting or a crash at start-up.
+    \code{/slotty/worker}) say why; usually a missing setting or a crash at start-up. Lines
+    starting \code{[startup]} name the setting: \envvar{APP_URL}, \envvar{SMTP_HOST},
+    \envvar{MAIL_FROM}, or \envvar{ENABLE_DEV_MAIL} set where it mustn't be (appendix~B).
   \item[\route{/health} doesn't report the release] The tasks run but the public path doesn't
     reach them, or the database check fails: see \route{/health}'s answer and the API Gateway
     log group.
