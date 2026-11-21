@@ -10,7 +10,6 @@ export function SiteFooter() {
       <div className="lp-container flex flex-col gap-3 py-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
           <Wordmark />
-          <span className="lp-mono text-[11px] text-[var(--text-3)]">Times in Pakistan time (PKT)</span>
         </div>
         <nav aria-label="Footer" className="flex flex-wrap gap-x-6">
           <Link href="/privacy" className={link}>
