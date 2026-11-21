@@ -1,17 +1,42 @@
 \chapter{How Slotty is changed}\label{ch:changes}
-\chapterstatus{complete}{2026-11-17}{\src{CLAUDE.md}, \src{.github/workflows}, ADR-017}
+\chapterstatus{complete}{2026-11-21}{\src{CLAUDE.md}, \src{.github}, the \emph{Slotty} GitHub Project, ADR-017, ADR-024}
 
 Every change, whether a person or an AI coding agent writes it, follows the same short path. The
 standing rules an agent needs (stack, architecture rules, decisions, what is forbidden and what is
 mandatory) are in \src{CLAUDE.md}, which Claude Code reads automatically; people follow the same
 file.
 
+\section{Planning: backlog, sprints, releases}\label{sec:planning}
+Slotty runs real courses with students' personal data and marks, so only work that was chosen gets
+built and shipped (ADR-024). Planning lives in the \emph{Slotty} GitHub Project, which collects
+the repository's issues and pull requests.
+\begin{description}
+  \item[Backlog] Every piece of work starts as an issue (feature, bug or chore template). Its
+    fields: \emph{Status} (Backlog, Ready, In progress, In review, Done), \emph{Priority} (P0 now,
+    P1 next, P2 soon, P3 some day), \emph{Size} (XS--XL) and labels for type and area. An issue is
+    \emph{Ready} once it has acceptance criteria, a priority and a size, and no open
+    \code{needs-decision}.
+  \item[Sprint] Two weeks, starting on a Monday (the project's \emph{Sprint} iteration). Planning
+    picks Ready issues, highest priority first, into the sprint and the release milestone it will
+    ship in. Only sprint issues are worked on; anything new goes to the backlog, except a P0, which
+    may enter a running sprint.
+  \item[Release] A sprint ends with a release of what was merged (\cref{sec:releases}): release
+    notes are generated from the merged pull requests' labels, the milestone closes, and anything
+    unfinished moves to the next sprint.
+  \item[Security] Vulnerabilities are reported and tracked privately (\src{SECURITY.md}, draft
+    security advisories); the public issue for one names the work, not the weakness, until its
+    fix is released.
+  \item[Done] Merged with \textbf{CI ok} green, documented, and live in a published release.
+\end{description}
+
 \section{The path of a change}
 \begin{enumerate}
+  \item \textbf{Start from a sprint issue.} Move it to \emph{In progress}.
   \item \textbf{Agree the design first.} Describe the outcome, read the chapter for the area,
     and settle the open questions in conversation (or an issue) before writing code. A deliberate
     trade-off becomes a decision record (\cref{ch:decisions}).
-  \item \textbf{Branch off \code{master}} and implement under the architecture rules
+  \item \textbf{Branch off \code{master}} as \code{<type>/<issue>-<slug>} (for example
+    \code{fix/28-request-logging}) and implement under the architecture rules
     (\cref{ch:blocks}): business rules in \src{src/domain} with unit tests, services that check the
     actor, notifications through the outbox, audited moderation changes.
   \item \textbf{Run the checks}: \code{bun run typecheck}, \code{bun run lint},
@@ -19,8 +44,10 @@ file.
     CI runs all of them again; Docker is the only thing they need.
   \item \textbf{Update this document} in the same pull request (table below), add a change-log
     line (\cref{app:changelog}) and check \code{bun run docs:build}.
-  \item \textbf{Open a pull request.} It merges once \textbf{CI ok} is green and the branch is up
-    to date with \code{master}; merging deploys (\cref{ch:delivery}). Migrations must keep the previous release working.
+  \item \textbf{Open a pull request} from the template, with \code{Closes \#<issue>} and a
+    release-notes label. It merges once \textbf{CI ok} is green and the branch is up to date with
+    \code{master}. Merging does not deploy; the next release does (\cref{sec:releases}). Migrations
+    must keep the previous release working, which is also what makes a rollback safe.
   \item \textbf{Infrastructure} (\src{infra/aws}): show the \code{terraform plan}, get it approved,
     then apply exactly that plan. Task-definition changes go live on the next deploy.
 \end{enumerate}

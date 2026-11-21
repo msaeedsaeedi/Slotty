@@ -1,15 +1,21 @@
-# Deploys every push to master to AWS (infra/aws). It doesn't re-run CI: master's branch
-# protection only merges PRs that are up to date and green ("CI ok"), so this commit is what CI
-# tested (ADR-022). Repository variables (Settings → Secrets and variables → Actions → Variables)
-# come from `terraform output github_actions_variables` in infra/aws/app; until they're set,
-# nothing runs.
+# Deploys a published GitHub Release (tag vX.Y.Z) to AWS (infra/aws), ADR-024. Merging to master
+# doesn't deploy: what goes live is chosen by publishing a release from master. It doesn't re-run
+# CI: master only takes PRs that are up to date and green ("CI ok"), so the tagged commit is one CI
+# tested (ADR-022). Run it by hand from a tag ("Use workflow from" → Tags) to redeploy a release or,
+# with `rollback`, go back to an older one. Repository variables (Settings → Secrets and variables
+# → Actions → Variables) come from `terraform output github_actions_variables` in infra/aws/app;
+# until they're set, nothing runs.
 name: Deploy
 
 on:
-  push:
-    branches: [master]
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
+      rollback:
+        description: Deploy this release even though a newer one is live (skips migrations)
+        type: boolean
+        default: false
       force_migrate:
         description: Run the migrate task even if prisma/migrations didn't change
         type: boolean
@@ -19,13 +25,17 @@ permissions:
   contents: read
 
 env:
+  # The tagged commit; images are tagged with it. RELEASE is what /health reports.
   IMAGE_TAG: ${{ github.sha }}
+  RELEASE: ${{ github.ref_name }}
   ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
 
 jobs:
   build:
     name: Build and push images
-    if: github.ref == 'refs/heads/master' && vars.AWS_BUILD_ROLE_ARN != ''
+    # Release tags only (the tag ruleset lets only admins create them); the build role trusts
+    # refs/tags/v* and nothing else.
+    if: startsWith(github.ref, 'refs/tags/v') && vars.AWS_BUILD_ROLE_ARN != ''
     # Native ARM64 for Graviton Fargate (free for public repositories).
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
@@ -34,6 +44,19 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      # A release is a commit on master whose package.json carries the same version.
+      - name: Check the release
+        run: |
+          version="v$(jq -r .version package.json)"
+          if [ "$version" != "$RELEASE" ]; then
+            echo "::error::package.json says $version but the tag is $RELEASE"; exit 1
+          fi
+          if ! git merge-base --is-ancestor "$IMAGE_TAG" origin/master; then
+            echo "::error::$RELEASE ($IMAGE_TAG) is not on master"; exit 1
+          fi
 
       - uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
@@ -76,7 +99,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     # Its own approval rules, history and the OIDC subject the deploy role trusts. The
-    # environment's deployment-branch rule allows master only.
+    # environment's deployment rule allows v* tags only.
     environment:
       name: production
       url: ${{ vars.APP_URL }}
@@ -92,6 +115,7 @@ jobs:
       ECS_SECURITY_GROUP: ${{ vars.ECS_SECURITY_GROUP }}
       APP_URL: ${{ vars.APP_URL }}
       FORCE_MIGRATE: ${{ inputs.force_migrate && '1' || '' }}
+      ROLLBACK: ${{ inputs.rollback && '1' || '' }}
     steps:
       # Full history: deploy.sh compares this commit with the running release.
       - uses: actions/checkout@v7.0.1

@@ -1,0 +1,40 @@
+name: Bug
+description: Slotty does something it shouldn't, or doesn't do what it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "**Security problem?** Don't file it here. Report it privately: Security → Report a vulnerability."
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Role, course and assignment setup, then the clicks. Use test data, not real student details.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual
+    validations:
+      required: true
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Data impact
+      options:
+        - None (display or usability only)
+        - Integrity (wrong marks, bookings or attendance saved)
+        - Confidentiality (someone saw data they shouldn't)
+        - Availability (people can't book, mark or sign in)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The `version` at https://slotty.msaeedsaeedi.com/health
+  - type: textarea
+    id: notes
+    attributes:
+      label: Screenshots, logs, notes

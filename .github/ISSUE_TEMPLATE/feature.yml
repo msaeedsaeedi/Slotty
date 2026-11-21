@@ -1,0 +1,47 @@
+name: Feature
+description: Something a user should be able to do that they can't yet.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: story
+    attributes:
+      label: User story
+      description: Who wants it, what they want, and why.
+      placeholder: As a TA, I want …, so that …
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: What must be true for this to be done. One per line.
+      placeholder: |
+        - Given …, when …, then …
+    validations:
+      required: true
+  - type: checkboxes
+    id: roles
+    attributes:
+      label: Roles affected
+      options:
+        - label: Student
+        - label: TA
+        - label: Instructor
+        - label: Admin
+        - label: Platform
+  - type: checkboxes
+    id: data
+    attributes:
+      label: Personal data
+      description: Tick if it reads, stores, shows, exports or sends personal data or marks.
+      options:
+        - label: Touches personal data or marks (needs access rules, audit and a docs ch. 11 note)
+  - type: textarea
+    id: docs
+    attributes:
+      label: Docs chapters affected
+      description: "Flows → 3, rules → 4, modules → 5, schema → 6, patterns → 7, AWS → 8/12, CI/CD → 9, runbooks → 10, security → 11"
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes, designs, open questions

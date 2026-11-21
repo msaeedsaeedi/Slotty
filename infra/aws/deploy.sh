@@ -5,16 +5,20 @@
 # Used by .github/workflows/deploy.yml; it also works by hand from a checkout with the same
 # variables (values from `terraform output github_actions_variables` in infra/aws/app):
 #
-#   IMAGE_TAG=<git sha> ECR_REPOSITORY=… ECS_CLUSTER=slotty ECS_SUBNETS=subnet-a,subnet-b \
-#   ECS_SECURITY_GROUP=sg-… APP_URL=https://… infra/aws/deploy.sh
+#   IMAGE_TAG=<git sha> RELEASE=v1.2.0 ECR_REPOSITORY=… ECS_CLUSTER=slotty \
+#   ECS_SUBNETS=subnet-a,subnet-b ECS_SECURITY_GROUP=sg-… APP_URL=https://… infra/aws/deploy.sh
 #
-# FORCE_MIGRATE=1 runs the migrate task even when no migration changed.
+# RELEASE (the release tag) becomes APP_VERSION and is what /health reports; it defaults to
+# IMAGE_TAG. FORCE_MIGRATE=1 runs the migrate task even when no migration changed. ROLLBACK=1
+# deploys a release older than the running one, without running migrations (ADR-024).
 set -euo pipefail
 
 : "${IMAGE_TAG:?}" "${ECR_REPOSITORY:?}" "${ECS_CLUSTER:?}" "${ECS_SUBNETS:?}" "${ECS_SECURITY_GROUP:?}"
 command -v jq >/dev/null || { echo "[deploy] needs jq" >&2; exit 1; }
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
+
+RELEASE=${RELEASE:-$IMAGE_TAG}
 
 log() { printf '[deploy %3ss] %s\n' "$SECONDS" "$*"; }
 
@@ -23,7 +27,7 @@ log() { printf '[deploy %3ss] %s\n' "$SECONDS" "$*"; }
 register() {
   local family=$1 image=$2
   aws ecs describe-task-definition --task-definition "$family" --query taskDefinition --output json \
-    | jq --arg image "$image" --arg version "$IMAGE_TAG" '
+    | jq --arg image "$image" --arg version "$RELEASE" '
         .containerDefinitions[0].image = $image
         | .containerDefinitions[0].environment = ([.containerDefinitions[0].environment[]? | select(.name != "APP_VERSION")]
             + [{name: "APP_VERSION", value: $version}])
@@ -43,29 +47,43 @@ running_version() {
     --query 'taskDefinition.containerDefinitions[0].environment[?name==`APP_VERSION`] | [0].value' --output text
 }
 
+# The running release is a tag (v1.2.0) or, before ADR-024, a commit SHA; prev_sha is its commit.
 prev=$(running_version 2>/dev/null || true)
 [ "$prev" = "None" ] && prev=""
+commit_of() {
+  git rev-parse -q --verify "$1^{commit}" 2>/dev/null && return
+  git fetch -q origin "refs/tags/$1:refs/tags/$1" 2>/dev/null || git fetch -q origin "$1" 2>/dev/null || return 0
+  git rev-parse -q --verify "$1^{commit}" 2>/dev/null || true
+}
+prev_sha=""
+[ -n "$prev" ] && prev_sha=$(commit_of "$prev")
 have_prev=false
-if [ -n "$prev" ] && { git cat-file -e "$prev^{commit}" 2>/dev/null || git fetch -q origin "$prev" 2>/dev/null; }; then
-  have_prev=true
-fi
+[ -n "$prev_sha" ] && have_prev=true
+rolling_back=false
 
-# Two merges close together: if this commit is older than the running release (its rollout was
-# queued behind the newer one's), deploying it would go backwards. Stop instead.
-if $have_prev && [ "$prev" != "$IMAGE_TAG" ] && git merge-base --is-ancestor "$IMAGE_TAG" "$prev" 2>/dev/null; then
-  log "${prev:0:12}, a newer commit, is already live; not deploying ${IMAGE_TAG:0:12}"
-  exit 0
+# Going backwards: this commit is older than the running release. Only on purpose (ROLLBACK=1);
+# otherwise it's a run queued behind a newer release, so stop without changing anything.
+if $have_prev && [ "$prev_sha" != "$IMAGE_TAG" ] && git merge-base --is-ancestor "$IMAGE_TAG" "$prev_sha" 2>/dev/null; then
+  if [ "${ROLLBACK:-}" != "1" ]; then
+    log "$prev, a newer release, is already live; not deploying $RELEASE (set ROLLBACK=1 to go back)"
+    exit 0
+  fi
+  log "rolling back from $prev to $RELEASE"
+  rolling_back=true
 fi
 
 # Do migrations need to run? Yes unless the running release is known, its commit is available,
 # and prisma/migrations is identical between it and this one.
 needs_migrations() {
   [ "${FORCE_MIGRATE:-}" = "1" ] && { log "FORCE_MIGRATE=1"; return 0; }
+  # Migrations are expand-then-contract, so the older release runs on the newer schema; the
+  # older migrate image has nothing to apply anyway.
+  $rolling_back && { log "rollback: schema left as it is"; return 1; }
   [ -z "$prev" ] && { log "running release unknown"; return 0; }
-  [ "$prev" = "$IMAGE_TAG" ] && { log "redeploying the running release"; return 1; }
   $have_prev || { log "can't fetch running release $prev"; return 0; }
-  if git diff --quiet "$prev" "$IMAGE_TAG" -- prisma/migrations; then
-    log "no migration changes since ${prev:0:12}"
+  [ "$prev_sha" = "$IMAGE_TAG" ] && { log "redeploying the running release"; return 1; }
+  if git diff --quiet "$prev_sha" "$IMAGE_TAG" -- prisma/migrations; then
+    log "no migration changes since $prev"
     return 1
   fi
   return 0
@@ -153,13 +171,13 @@ if [ -n "${APP_URL:-}" ]; then
   ok=0
   for _ in $(seq 60); do
     version=$(curl -fsS --max-time 5 "$APP_URL/health" 2>/dev/null | jq -r '.version // empty' || true)
-    if [ "$version" = "$IMAGE_TAG" ]; then ok=$((ok + 1)); [ "$ok" -ge 3 ] && break; else ok=0; fi
+    if [ "$version" = "$RELEASE" ]; then ok=$((ok + 1)); [ "$ok" -ge 3 ] && break; else ok=0; fi
     sleep 2
   done
   if [ "$ok" -lt 3 ]; then
-    log "$APP_URL/health doesn't report $IMAGE_TAG (last answer: ${version:-none})"
+    log "$APP_URL/health doesn't report $RELEASE (last answer: ${version:-none})"
     exit 1
   fi
-  log "healthy: $APP_URL serves $IMAGE_TAG"
+  log "healthy: $APP_URL serves $RELEASE"
 fi
-log "done: $IMAGE_TAG"
+log "done: $RELEASE ($IMAGE_TAG)"

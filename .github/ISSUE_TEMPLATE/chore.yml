@@ -1,0 +1,21 @@
+name: Chore
+description: Tooling, infrastructure, dependencies, refactors, documentation.
+labels: [chore]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What and why
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+    validations:
+      required: true
+  - type: textarea
+    id: risk
+    attributes:
+      label: Cost, risk and rollback
+      description: AWS cost change (ch. 12), Terraform plan needed, how to undo it.

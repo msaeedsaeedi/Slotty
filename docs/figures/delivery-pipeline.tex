@@ -8,14 +8,14 @@
   \node[gate, right=of jobs] (ok) {CI ok\\[-1pt]\textcolor{muted}{\tiny required, up to date}};
   \draw[flow] (pr) -- (jobs);
   \draw[flow] (jobs) -- (ok);
-  % Deploy: every merge
-  \node[ext, text width=16mm, below=9mm of pr] (merge) {merge to master};
+  % Deploy: a published release (merges collect on master until then)
+  \node[ext, text width=16mm, below=9mm of pr] (merge) {publish release\\[-1pt]\textcolor{muted}{\tiny tag vX.Y.Z}};
   \node[st, right=of merge] (build) {build ARM64\\[-1pt]\textcolor{muted}{\tiny app + migrate, one bake}};
   \node[aws=compute, box=20mm, minimum height=11mm, right=of build] (ecr) {ECR\\[-1pt]\textcolor{muted}{\tiny <sha>}};
   \node[gate, right=of ecr] (mig) {migrate task\\[-1pt]\textcolor{muted}{\tiny if migrations changed}};
   \node[st, below=6mm of mig] (roll) {update services\\[-1pt]\textcolor{muted}{\tiny circuit breaker}};
   \node[gate, left=of roll] (verify) {verify rollout\\[-1pt]\textcolor{muted}{\tiny new release on /health}};
-  \draw[flow] (ok.south) -- ++(0,-3mm) -| node[edgelabel, pos=0.25, above]{merge} (merge.north);
+  \draw[flow] (ok.south) -- ++(0,-3mm) -| node[edgelabel, pos=0.25, above]{merge, then release} (merge.north);
   \draw[flow] (merge) -- (build);
   \draw[flow] (build) -- (ecr);
   \draw[flow] (ecr) -- (mig);
