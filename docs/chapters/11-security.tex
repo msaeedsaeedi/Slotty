@@ -17,7 +17,7 @@ This chapter gathers the controls described elsewhere into one view an auditor c
   Data at rest & RDS, EBS, S3 and SSM encrypted with AWS-managed keys & \src{infra/aws/app}\\
   Data in transit & TLS everywhere; database connections verify the certificate and host name against the RDS CA & \cref{ch:aws}\\
   Secrets & SSM SecureStrings readable only by the ECS execution role; none in the image or the repository; Terraform state private and encrypted & \src{infra/aws/app/secrets.tf}\\
-  Deploy identity & GitHub OIDC, master branch of this repository only, least-privilege role; no stored keys & \cref{ch:delivery}\\
+  Deploy identity & GitHub OIDC, no stored keys: a build role (ECR push) for this repository's master branch and a deploy role (ECS) for its \code{production} environment only; master requires a green, up-to-date pull request, and outside contributors' workflows need approval & \cref{ch:delivery}\\
   Email & SPF, DKIM and DMARC (\code{p=quarantine}); sending identity limited to the domain & \src{infra/aws/app/ses.tf}\\
   Support mail & Slotty's AWS account receives no mail: the domain's MX records point to Cloudflare Email Routing, which forwards \code{support@} to the owner's inbox & \src{infra/aws/app/dns.tf}, ADR-021\\
   Public surface & Only \route{/} (landing, no data beyond the session check) and \route{/privacy} are public content; \code{robots.txt} keeps everything else out of search engines; unauthenticated visits aren't tracked & \src{src/app/page.tsx}, \src{src/app/robots.ts}\\

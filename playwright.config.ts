@@ -1,9 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
-import { parse } from "dotenv";
-import { readFileSync } from "node:fs";
 
-const testEnv = parse(readFileSync(".env.test"));
+// Set by tests/e2e/run.ts, which starts a throwaway Postgres first: run `bun run test:e2e`.
+const DATABASE_URL = process.env.E2E_DATABASE_URL;
+if (!DATABASE_URL) throw new Error("Run the e2e tests with `bun run test:e2e` (it starts their database)");
 const PORT = 3100;
+const CI = !!process.env.CI;
 
 export default defineConfig({
   testDir: "tests/e2e",
@@ -12,8 +13,8 @@ export default defineConfig({
   timeout: 120_000,
   expect: { timeout: 15_000 },
   retries: 0,
-  reporter: [["list"]],
-  globalSetup: "./tests/e2e/global-setup.ts",
+  forbidOnly: CI,
+  reporter: CI ? [["list"], ["html", { open: "never" }], ["github"]] : [["list"]],
   use: {
     baseURL: `http://localhost:${PORT}`,
     trace: "retain-on-failure",
@@ -27,6 +28,12 @@ export default defineConfig({
     url: `http://localhost:${PORT}/login`,
     reuseExistingServer: false,
     timeout: 600_000,
-    env: { ...testEnv, NEXT_DIST_DIR: ".next-e2e", ENABLE_DEV_MAIL: "1" },
+    env: {
+      DATABASE_URL,
+      APP_URL: `http://localhost:${PORT}`,
+      SMTP_HOST: "",
+      NEXT_DIST_DIR: ".next-e2e",
+      ENABLE_DEV_MAIL: "1",
+    },
   },
 });

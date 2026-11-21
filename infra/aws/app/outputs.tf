@@ -28,6 +28,7 @@ output "nat_instance_id" {
 # Repository variables for .github/workflows/deploy.yml (Settings → Secrets and variables → Actions → Variables).
 output "github_actions_variables" {
   value = {
+    AWS_BUILD_ROLE_ARN  = aws_iam_role.build.arn
     AWS_DEPLOY_ROLE_ARN = aws_iam_role.deploy.arn
     ECR_REPOSITORY      = aws_ecr_repository.app.repository_url
     ECS_CLUSTER         = aws_ecs_cluster.main.name

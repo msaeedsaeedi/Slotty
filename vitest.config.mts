@@ -1,9 +1,5 @@
 import { defineConfig } from "vitest/config";
 import path from "node:path";
-import { parse } from "dotenv";
-import { readFileSync } from "node:fs";
-
-const testEnv = parse(readFileSync(path.resolve(import.meta.dirname, ".env.test")));
 
 export default defineConfig({
   resolve: { alias: { "@": path.resolve(import.meta.dirname, "src") } },
@@ -16,9 +12,10 @@ export default defineConfig({
           name: "integration",
           include: ["tests/integration/**/*.test.ts"],
           environment: "node",
-          env: testEnv,
+          // DATABASE_URL is set per worker by setup.ts (a throwaway Postgres; needs Docker).
+          env: { APP_URL: "http://localhost:3100", SMTP_HOST: "" },
           globalSetup: ["tests/integration/global-setup.ts"],
-          fileParallelism: false,
+          setupFiles: ["tests/integration/setup.ts"],
           testTimeout: 60_000,
           hookTimeout: 120_000,
         },

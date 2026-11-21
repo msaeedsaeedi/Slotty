@@ -3,10 +3,11 @@
 #   worker          node dist/jobs/worker.js
 #   first admin     node dist/jobs/create-admin.js   (ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_NAME)
 #   platform team   node dist/jobs/platform-access.js grant|revoke   (PLATFORM_EMAIL / PLATFORM_PASSWORD / PLATFORM_NAME)
-# Migrations need the Prisma CLI (~270 MB), so they get their own image, the `migrate` target:
-#   docker build -t slotty-app .                                  # web, worker, admin
+# Migrations need the Prisma CLI (~270 MB), so they get their own image, the `migrate` target.
+# Both build together with `docker buildx bake` (docker-bake.hcl), as CI does; or one at a time:
+#   docker build --target app -t slotty-app .                     # web, worker, admin
 #   docker build --target migrate -t slotty-app:migrate .         # prisma migrate deploy
-# Configuration is read at runtime only, so the same image runs on a VPS or on AWS (ECS) unchanged.
+# Configuration is read at runtime only, so the same image runs anywhere (AWS ECS in production).
 # The runtime is plain Node: the web app is Next's standalone output (only the files it traces),
 # and the worker scripts are bundled by Bun at build time.
 

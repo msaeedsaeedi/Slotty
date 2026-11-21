@@ -1,5 +1,5 @@
 \chapter{Operations and runbooks}\label{ch:ops}
-\chapterstatus{draft}{2026-11-16}{\src{infra/aws}, \src{infra/aws/deploy.sh}}
+\chapterstatus{draft}{2026-11-21}{\src{infra/aws}, \src{infra/aws/deploy.sh}}
 
 \section{Access}
 Operators reach \code{slotty-prod} from the management account; nobody has a user in it.
@@ -19,8 +19,25 @@ The values the commands need (subnets, security group, cluster) are in
 
 \section{Runbooks}
 \subsection{Deploy}
-Merge to \code{master}. To redeploy without a code change (for example after changing
-configuration in Terraform), run the \emph{CI / Deploy} workflow by hand from GitHub.
+Merge to \code{master}; the pull request must be green and up to date (\cref{sec:ci}). To redeploy
+without a code change (for example after changing configuration in Terraform), run the
+\emph{Deploy} workflow by hand from GitHub; it reuses the commit's images and skips the migrate
+task unless \emph{force\_migrate} is ticked. \code{curl https://<domain>/health} shows the
+release that is serving (\code{version}, the commit SHA).
+
+\subsection{A deploy failed}
+The rollout job's log says which step stopped it and, for a service, prints its recent ECS events.
+\begin{description}
+  \item[Migrations failed] The services were not touched. Fix the migration in a new pull request.
+  \item[A service did not roll out] The circuit breaker rolled it back, or its tasks didn't become
+    healthy within 10 minutes. The service events and the task's log group (\code{/slotty/web} or
+    \code{/slotty/worker}) say why; usually a missing setting or a crash at start-up.
+  \item[\route{/health} doesn't report the release] The tasks run but the public path doesn't
+    reach them, or the database check fails: see \route{/health}'s answer and the API Gateway
+    log group.
+  \item[A newer commit is already live] Not a failure: two merges were close together and the
+    newer one deployed first.
+\end{description}
 
 \subsection{Roll back}
 Point the services at the previous task-definition revisions; nothing is rebuilt:

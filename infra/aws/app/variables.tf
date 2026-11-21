@@ -16,7 +16,8 @@ variable "alert_email" {
 
 variable "github_oidc_subject_prefix" {
   description = <<-EOT
-    Subject prefix of the repository's GitHub OIDC tokens; only its master branch may deploy.
+    Subject prefix of the repository's GitHub OIDC tokens; only its master branch may build
+    and only its `production` environment may deploy.
     This repo uses immutable subjects (owner and repo IDs), so a renamed or re-created repo
     with the same name can't deploy. Check with:
       gh api repos/<owner>/<repo>/actions/oidc/customization/sub   (sub_claim_prefix)

@@ -15,15 +15,12 @@ Next.js 16 (App Router, Server Actions), TypeScript, PostgreSQL with Prisma 7, T
 
 ## Getting started
 
-There are three ways to run Slotty, each with its own database in the same local Postgres:
-
 | | Command | URL | Database |
 | --- | --- | --- | --- |
-| Development | `bun run dev` + `bun run worker` | https://slotty.local (Caddy) or http://localhost:3000 | `slotty` (`.env`) |
-| Production image, locally | `bun run app:up` | http://localhost:3001 | `slotty_app` |
-| Tests | `bun run test`, `bun run test:e2e` | http://localhost:3100 (e2e) | `slotty_test` (`.env.test`) |
+| Development | `bun run dev` + `bun run worker` | https://slotty.local (Caddy) or http://localhost:3000 | `slotty` in the local Postgres (`.env`) |
+| Tests | `bun run test`, `bun run test:e2e` | http://localhost:3100 (e2e) | a throwaway Postgres per run (Testcontainers) |
 
-The real production stack (VPS) lives in `deploy/`, described [below](#deploying-single-vps).
+Production runs on AWS (`infra/aws`), deployed on every merge to `master`; see [Deploying](#deploying).
 
 ### Development
 
@@ -48,10 +45,6 @@ Emails go to Mailpit, at **http://localhost:8025**. If `SMTP_HOST` is empty, the
 
 Other database scripts: `bun run db:studio` opens Prisma Studio, and `bun run db:reset` wipes the dev database and re-applies migrations and the seed.
 
-### Production image, locally
-
-`bun run app:up` builds the same Docker image that `deploy/` runs. It then runs migrate, web and worker against `slotty_app`, at **http://localhost:3001**, with email going to Mailpit. Use it to check the build, migrations and the service worker before deploying. `bun run infra:down` stops everything.
-
 ### Demo accounts (after `db:seed`)
 
 | Email | Password | What they see |
@@ -63,39 +56,21 @@ Other database scripts: `bun run db:studio` opens Prisma Studio, and `bun run db
 
 ## Tests
 
+Tests need Docker running but nothing else: integration and e2e runs each start their own Postgres 17 container (Testcontainers, `tests/support/postgres.ts`), migrate it, and remove it afterwards. They never touch the dev database.
+
 ```bash
-bun run infra:up      # the slotty_test database lives in the same Postgres (see .env.test)
 bun run test:unit     # domain rules: slot generation, booking rules, evaluation states, CSV parsing
-bun run test:int      # services against the test DB, including a 20-way booking race
-bun run test:e2e      # Playwright: the full loop in a real browser (starts its own server on :3100)
+bun run test:int      # services against a throwaway database (one copy per worker, files run in parallel)
+bun run test:e2e      # Playwright: the full loop in a real browser (a production build on :3100)
 ```
 
-## Deploying (single VPS)
+CI (`.github/workflows/ci.yml`) runs all of these on every pull request, plus a Docker build of both images and the docs PDF when `docs/` changes. `master` only accepts pull requests whose **CI ok** check is green and that are up to date with `master`.
 
-Slotty runs as one Docker image in three roles: **web** (`next start`), **worker** (email, push, reminders and automations) and a one-off **migrate** step. `deploy/docker-compose.yml` runs these together with Postgres and Caddy, which provides HTTPS automatically.
+## Deploying
 
-1. Get a VPS with Docker (2 GB RAM is enough), and point your domain's DNS at it.
-2. Clone the repo, then `cd deploy && cp .env.example .env` and fill it in. You need the domain, `APP_URL`, a Postgres password, SMTP details and VAPID keys.
-3. `docker compose up -d --build`. Migrations run first, then the web app and worker start, and Caddy fetches the certificate.
-4. Create the first admin. Don't run `db:seed` in production, because it creates demo accounts:
-   `docker compose run --rm -e ADMIN_EMAIL=you@uni.edu -e ADMIN_PASSWORD='…' web bun run admin:create`
-5. Back up nightly with `deploy/backup.sh` (the cron line is in the file), and copy the dumps off the server. To restore: `docker compose exec -T postgres pg_restore -U slotty -d slotty --clean < backups/<file>.dump`.
+Merging to `master` deploys (`.github/workflows/deploy.yml`): both images are built on an ARM64 runner and pushed to ECR, then `infra/aws/deploy.sh` runs migrations as a one-off ECS task (skipped when `prisma/migrations` hasn't changed) and rolls out the web and worker services. The deploy finishes when the new release answers on `/health`. Details, runbooks and decisions are in the system documentation (chapters 8–10 and 14).
 
-To update: `git pull && docker compose up -d --build`. To check it's running: `docker compose ps`, `docker compose logs -f web worker`, or `https://<domain>/health`.
-
-**Rules to keep in mind:**
-- One worker is enough. Every job claims its rows before acting, so a second worker shares the work instead of sending duplicates. Delivery is at-least-once: a crash mid-send can repeat that one message.
-- Keep the VAPID keys stable. New keys invalidate existing push subscriptions.
-- HTTPS is required for login cookies, the service worker and push. `APP_URL` must be the public `https://` address.
-- All configuration is read at runtime, so the same image works in every environment.
-
-**Moving to AWS later:**
-- Push the image to ECR.
-- Run web as an ECS service behind an ALB, which does TLS and uses `/health` for health checks.
-- Run the worker as an ECS service (1 task is enough), with a stop timeout of at least 30 seconds.
-- Run migrations as a one-off task on each deploy.
-- Use RDS for Postgres, and SES for SMTP.
-- Before running more than one web instance, set the same `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` on every instance (see Next's self-hosting guide).
+Building the images locally: `docker buildx bake` (see `docker-bake.hcl`).
 
 ## Project layout
 
@@ -108,7 +83,6 @@ src/app/(auth)/        Sign in, invite, password reset
 src/app/(app)/         Signed-in app: dashboard, student pages, /courses/[id]/manage (staff), /admin
 src/jobs/worker.ts     Email/push outbox delivery, reminders, automations
 infra/                 Local Docker services (Postgres, Mailpit, Caddy); infra/aws: AWS Terraform and deploy script
-deploy/                Production stack for one VPS (compose, Caddy, backups)
 prisma/                Schema, migrations, seed
 docs/                  System documentation (LaTeX): journeys, rules, architecture, AWS, operations, decisions
 ```

@@ -88,7 +88,7 @@ script nonces first.
 
 \section{Configuration and start-up}
 All configuration is read from the environment at run time (\cref{app:config}), so one image runs
-locally, on a VPS and on AWS. Production refuses to start with configuration that would silently
+locally and on AWS. Production refuses to start with configuration that would silently
 break links (\src{src/server/startup-checks.ts}).
 
 \section{Requests from the edge}
@@ -96,9 +96,10 @@ On AWS, requests arrive through CloudFront and API Gateway. \src{src/proxy.ts} (
 refuses any request without CloudFront's secret \code{x-origin-verify} header and resets the
 forwarded host and protocol to \envvar{APP_URL}, because API Gateway replaces them with its own
 hostname and Next's Server Actions compare the forwarded host with the \code{Origin} header
-(\cref{sec:aws-request-path}). With \envvar{ORIGIN_VERIFY_SECRET} unset (development, VPS) it does
+(\cref{sec:aws-request-path}). With \envvar{ORIGIN_VERIFY_SECRET} unset (development) it does
 nothing. \route{/health/live} answers without touching the database, for container health
-checks; \route{/health} also checks the database, for monitoring.
+checks; \route{/health} also checks the database and reports the running release
+(\envvar{APP_VERSION}), for monitoring and for the deploy's last check (\cref{sec:deploy}).
 
 \begin{todo}
   \begin{itemize}

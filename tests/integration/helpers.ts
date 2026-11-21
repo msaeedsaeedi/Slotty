@@ -1,4 +1,5 @@
 import { db } from "@/server/db";
+import { isTestDatabaseUrl } from "../support/postgres";
 import type { Actor } from "@/server/services/access";
 import { createAssignment, publishAssignment } from "@/server/services/assignments";
 import { createCourse, createVenue } from "@/server/services/courses";
@@ -6,7 +7,7 @@ import { addAvailability } from "@/server/services/slots";
 
 /** Wipe every table (test DB only). */
 export async function resetDb() {
-  if (!/\/slotty_test(\?|$)/.test(process.env.DATABASE_URL ?? "")) throw new Error("Refusing to reset a non-test database");
+  if (!isTestDatabaseUrl(process.env.DATABASE_URL)) throw new Error("Refusing to reset a non-test database");
   const tables = await db.$queryRaw<{ tablename: string }[]>`
     SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`;
   await db.$executeRawUnsafe(`TRUNCATE ${tables.map((t) => `"${t.tablename}"`).join(", ")} CASCADE`);
