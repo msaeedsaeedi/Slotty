@@ -11,7 +11,10 @@ Slotty: demo scheduling and evaluation for university courses. System documentat
 - Checks before a pull request: `bun run typecheck`, `bun run lint`, `bun run test` (unit + integration), and `bun run test:e2e` for user-facing changes. They need Docker running (in an agent shell: `sg docker -c "bun run test"`). CI (`.github/workflows/ci.yml`) runs them all; `master` only takes PRs with a green **CI ok** that are up to date.
 
 ## Way of working
-- Work on a branch off `master` and open a pull request. Merging to `master` deploys to production automatically (`.github/workflows/deploy.yml`).
+- Work is planned in the **Slotty GitHub Project** (backlog, two-week sprints, release milestones; docs ch. 13). Build only issues in the current sprint; new ideas and findings become a Backlog issue, not code.
+- Branch off `master` as `<type>/<issue>-<slug>`; open a pull request from the template with `Closes #<issue>` and a release-notes label.
+- Merging to `master` does **not** deploy. Publishing a GitHub Release (`vX.Y.Z`, matching `package.json`) does (`.github/workflows/deploy.yml`, ADR-024). Never tag or publish a release without the user's go-ahead.
+- Security weaknesses are tracked in private draft advisories with neutrally worded public issues; the repository is public.
 - Iterate on the design in conversation first; implement when the user says go.
 
 ## Architecture rules
@@ -28,7 +31,7 @@ Slotty: demo scheduling and evaluation for university courses. System documentat
 - Services are covered by integration tests against a throwaway Postgres (Testcontainers, `tests/support/postgres.ts`; `tests/integration`, `bun run test`); user flows by Playwright (`tests/e2e`, `bun run test:e2e` → `tests/e2e/run.ts`, a production build on :3100).
 
 ## Deployment
-- Application: merge to `master`; `.github/workflows/deploy.yml` builds both ARM64 images (`docker-bake.hcl`), runs migrations as a one-off ECS task when `prisma/migrations` changed, rolls out web and worker and checks `/health` reports the new release (`infra/aws/deploy.sh`, ADR-022).
+- Application: publish a release (docs ch. 9); `.github/workflows/deploy.yml` builds both ARM64 images (`docker-bake.hcl`), runs migrations as a one-off ECS task when `prisma/migrations` changed, rolls out web and worker and checks `/health` reports the new release (`infra/aws/deploy.sh`, ADR-022).
 - Infrastructure: Terraform in `infra/aws/org` (management account) and `infra/aws/app` (slotty-prod). Always show `terraform plan` and get approval before `apply`; never apply unreviewed.
 - Migrations must keep the previous release working (expand, then contract in a later release): rollback does not undo them.
 

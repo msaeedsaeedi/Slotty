@@ -1,0 +1,19 @@
+# Categories for generated release notes (Releases → Draft a new release → Generate release notes).
+changelog:
+  exclude:
+    labels: [skip-release-notes]
+  categories:
+    - title: Breaking changes
+      labels: [breaking]
+    - title: Features
+      labels: [enhancement]
+    - title: Security
+      labels: [security]
+    - title: Fixes
+      labels: [bug]
+    - title: Documentation
+      labels: [documentation]
+    - title: Maintenance
+      labels: [chore]
+    - title: Other changes
+      labels: ["*"]

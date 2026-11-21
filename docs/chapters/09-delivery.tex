@@ -1,15 +1,17 @@
 \chapter{Build, test and delivery}\label{ch:delivery}
-\chapterstatus{complete}{2026-11-21}{\src{.github/workflows/ci.yml}, \src{.github/workflows/deploy.yml}, \src{infra/aws/deploy.sh}, \src{docker-bake.hcl}, \src{Dockerfile}}
+\chapterstatus{complete}{2026-11-21}{\src{.github/workflows/ci.yml}, \src{.github/workflows/deploy.yml}, \src{.github/release.yml}, \src{infra/aws/deploy.sh}, \src{docker-bake.hcl}, \src{Dockerfile}}
 
-Two workflows: \emph{CI} decides whether a change may merge; \emph{Deploy} puts
-\code{master} live. Every pull request runs the whole test suite; every merge to \code{master} is
-deployed, in about four minutes. Nobody deploys by hand and nobody holds long-lived AWS keys for it.
+Two workflows: \emph{CI} decides whether a change may merge; \emph{Deploy} puts a release live.
+Every pull request runs the whole test suite. Merging to \code{master} does not deploy: publishing
+a GitHub Release (tag \code{vX.Y.Z}) from \code{master} does, in about four minutes (ADR-024), so
+what reaches users is chosen release by release. Nobody deploys from a laptop and nobody holds
+long-lived AWS keys for it.
 
 \begin{figure}[htbp]
   \centering
   \input{figures/delivery-pipeline}
-  \caption{The pipeline. CI gates the merge; Deploy starts from the merge. A failing step stops
-    everything after it, and production keeps the previous release.}
+  \caption{The pipeline. CI gates the merge; Deploy starts from a published release. A failing
+    step stops everything after it, and production keeps the previous release.}
   \label{fig:pipeline}
 \end{figure}
 
@@ -53,8 +55,27 @@ outside contributors wait for an approval before any workflow runs. Fork pull re
 secrets or AWS: they run with a read-only token and can't obtain an OIDC token for the roles.
 
 \section{Deploy}\label{sec:deploy}
-\src{.github/workflows/deploy.yml} runs on every push to \code{master} (and by hand, with an option
-to force the migrate task). It has two jobs.
+\src{.github/workflows/deploy.yml} runs when a GitHub Release is published, and by hand from a
+release tag (\emph{Use workflow from} → \emph{Tags}) to redeploy it or, with \emph{rollback}, go
+back to it; \emph{force\_migrate} runs the migrate task regardless. It has two jobs. Before
+building, the first checks that the tag points at a commit on \code{master} and equals
+\code{v} plus \src{package.json}'s \code{version}; a run from a branch does nothing.
+
+\subsection{Releases and versions}\label{sec:releases}
+Versions follow semantic versioning. Until the pilot is signed off they are pre-releases,
+\code{v1.0.0-beta.N}; then \code{v1.0.0}, minor versions for features and patch versions for
+fixes. Each sprint ends with one release (\cref{ch:changes}); an urgent fix gets a patch release
+in between.
+\begin{enumerate}
+  \item A pull request titled \emph{Release vX.Y.Z} sets \code{version} in \src{package.json} and
+    adds a change-log line. It merges like any other.
+  \item On GitHub, \emph{Releases} → \emph{Draft a new release}: a new tag \code{vX.Y.Z} on
+    \code{master}, \emph{Generate release notes} (grouped by label, \src{.github/release.yml}),
+    tick \emph{pre-release} for a beta, publish. Publishing starts Deploy.
+  \item The release's milestone closes; unfinished issues move to the next one.
+\end{enumerate}
+A tag ruleset lets only repository admins create, move or delete \code{v*} tags, so a tag (and the
+build role it unlocks) is always a deliberate release.
 
 \subsection{Build}
 One Buildx run (\src{docker-bake.hcl}) builds both images natively on GitHub's ARM64 runner,
@@ -77,14 +98,15 @@ The rollout job runs in the \code{production} GitHub Environment (deployment his
 identity the deploy role trusts), one at a time. \src{infra/aws/deploy.sh} does the work, and runs
 the same by hand:
 \begin{enumerate}
-  \item Reads the running release (the web service's \envvar{APP_VERSION}). If this commit is older
-    than it (two merges close together, the newer one already live), it stops without changing
-    anything.
+  \item Reads the running release (the web service's \envvar{APP_VERSION}: the release tag, or a
+    commit SHA for releases before ADR-024). If this commit is older than it, it stops without
+    changing anything, unless \emph{rollback} is ticked: then it deploys the older release and
+    leaves the schema as it is.
   \item Runs the migrate task, waits for it to stop and prints its log, unless
     \src{prisma/migrations} is identical in both releases. A non-zero exit stops the deploy; the
     services stay on the previous release.
   \item Registers new revisions of the \code{slotty-web} and \code{slotty-worker} task definitions
-    (the latest revision with only the image and \envvar{APP_VERSION} changed) and updates both
+    (the latest revision with only the image and \envvar{APP_VERSION}, set to the tag, changed) and updates both
     services. Configuration changes made in Terraform therefore ride along with the next deploy.
   \item Checks every 5 seconds, up to 10 minutes, until each service's primary deployment is the
     new revision, runs the desired count, and no older deployment has tasks left. Web tasks only
@@ -129,13 +151,14 @@ renamed or re-created repository with the same name cannot use them:
   \toprule
   \thead{Role} & \thead{Trusted subject} & \thead{Can}\\
   \midrule
-  \code{slotty-github-build} & \code{…:ref:refs/heads/master} & Push and describe images in the \code{slotty} ECR repository.\\
+  \code{slotty-github-build} & \code{…:ref:refs/tags/v*} & Push and describe images in the \code{slotty} ECR repository.\\
   \code{slotty-github-deploy} & \code{…:environment:production} & Register task definitions, run the migrate task and read its log, update and describe the web and worker services, pass the two task roles.\\
   \bottomrule
 \end{xltabular}
 
-The \code{production} environment's deployment-branch rule allows \code{master} only, so neither
-role is reachable from a pull request. Permissions are listed in \src{infra/aws/app/iam.tf}.
+The \code{production} environment's deployment rule allows \code{v*} tags only, and only admins
+can create those tags, so neither role is reachable from a pull request or a branch. Permissions
+are listed in \src{infra/aws/app/iam.tf}.
 
 The workflow reads its targets from repository variables (\code{AWS_BUILD_ROLE_ARN},
 \code{AWS_DEPLOY_ROLE_ARN}, \code{ECR_REPOSITORY}, \code{ECS_CLUSTER}, \code{ECS_SUBNETS},

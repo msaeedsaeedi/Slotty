@@ -98,7 +98,7 @@ Add one for every deliberate trade-off.
   {CI's role stays narrow. A configuration change in Terraform goes live on the next deploy.}
   {—}
 
-\adr{011}{Immutable OIDC subject for deploys}{2026-11-16}{Accepted; subjects changed by ADR-022}
+\adr{011}{Immutable OIDC subject for deploys}{2026-11-16}{Accepted; subjects changed by ADR-022 and ADR-024}
   {The repository issues GitHub's immutable OIDC subjects, which include owner and repository IDs.}
   {Trust exactly \code{<prefix>:ref:refs/heads/master} with the ID-based prefix.}
   {A renamed or re-created repository with the same name cannot deploy.}
@@ -271,7 +271,7 @@ Add one for every deliberate trade-off.
   {Several people answer support, or replies must come from \code{support@}: add a mailbox and
    replace the MX and SPF records with the provider's, plus its DKIM key.}
 
-\adr{022}{CI gates the merge; the deploy verifies its own rollout}{2026-11-21}{Accepted; changes ADR-011's subjects}
+\adr{022}{CI gates the merge; the deploy verifies its own rollout}{2026-11-21}{Accepted; changes ADR-011's subjects; deploy trigger changed by ADR-024}
   {A merge took 8.5--9 minutes to go live: checks that had already passed on the pull request ran
    again, the two images were built one after the other, the migrate task ran on every deploy,
    and the rollout waited about two minutes after the new tasks served (and the old ones were
@@ -314,3 +314,28 @@ Add one for every deliberate trade-off.
    (CI and laptops would differ), an in-process Postgres such as PGlite (not the production engine),
    keeping \src{deploy} (an untested second path that drifts).}
   {Slotty needs to run somewhere other than AWS again.}
+
+\adr{024}{Planned releases: a GitHub Project, sprints, and deploys from published releases}{2026-11-21}{Accepted; changes ADR-022's trigger and ADR-011's build subject}
+  {Every merge to \code{master} went to production within minutes, and work was tracked as a
+   loose list of issues. Slotty now holds real students' marks and personal data, so a change
+   reaching users should be a decision, grouped with others, versioned and reversible; and
+   security weaknesses shouldn't be described publicly before they're fixed, since the
+   repository is public.}
+  {Work is planned in the \emph{Slotty} GitHub Project: a prioritised backlog, two-week sprints,
+   one release milestone per sprint (\cref{sec:planning}). Deploy runs when a GitHub Release is
+   published from \code{master} (tag \code{vX.Y.Z}, matching \src{package.json}); merges collect
+   on \code{master} until then. \envvar{APP_VERSION} and \route{/health} report the tag. A rollback
+   is the Deploy workflow run from an older tag, without migrations. The build role trusts
+   \code{…:ref:refs/tags/v*} instead of the master branch; the \code{production} environment
+   allows only \code{v*} tags; a tag ruleset lets only admins create them. Vulnerabilities go
+   through private reporting and draft advisories, with neutral public issues.}
+  {What is live is always a named, documented release, and \code{master} may be ahead of
+   production. Releasing is a manual step (a version pull request, then publishing), and
+   unreleased work on \code{master} must be reverted before a hotfix release, since a release is
+   always a commit on \code{master}. A rollback relies on expand-then-contract migrations; the
+   deploy doesn't undo schema changes. Rejected: continuous deployment with releases as labels
+   (nobody chooses what ships), release branches (one maintainer, one environment), a staging
+   environment (over the \$50 budget), feature flags (deferred until a change needs a dark
+   launch).}
+  {More than one maintainer merges regularly (add required reviews and a merge queue), or a
+   staging environment fits the budget (deploy \code{master} there and releases to production).}

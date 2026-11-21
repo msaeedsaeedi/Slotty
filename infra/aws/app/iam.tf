@@ -60,10 +60,11 @@ resource "aws_iam_role_policy" "task_exec" {
 }
 
 # ── GitHub Actions roles (OIDC, no stored keys) ──
-# Two roles, so each job gets only what it needs (ADR-022):
-#   build  — pushes images to ECR; any job on the master branch (it runs alongside CI).
+# Two roles, so each job gets only what it needs (ADR-022). Both serve a published release
+# (ADR-024):
+#   build  — pushes images to ECR; any job on a v* tag, which only admins can create (tag ruleset).
 #   deploy — migrates and rolls out on ECS; only jobs in the `production` GitHub Environment,
-#            whose deployment-branch rule allows master only.
+#            whose deployment rule allows v* tags only.
 
 resource "aws_iam_openid_connect_provider" "github" {
   url            = "https://token.actions.githubusercontent.com"
@@ -73,7 +74,7 @@ resource "aws_iam_openid_connect_provider" "github" {
 locals {
   github_trust = {
     for role, subject in {
-      build  = "${var.github_oidc_subject_prefix}:ref:refs/heads/master"
+      build  = "${var.github_oidc_subject_prefix}:ref:refs/tags/v*"
       deploy = "${var.github_oidc_subject_prefix}:environment:production"
       } : role => jsonencode({
         Version = "2012-10-17"
@@ -82,10 +83,9 @@ locals {
           Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
           Action    = "sts:AssumeRoleWithWebIdentity"
           Condition = {
-            StringEquals = {
-              "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-              "token.actions.githubusercontent.com:sub" = subject
-            }
+            StringEquals = { "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com" }
+            # StringLike for the tag wildcard; the deploy subject has none, so it matches exactly.
+            StringLike = { "token.actions.githubusercontent.com:sub" = subject }
           }
         }]
     })

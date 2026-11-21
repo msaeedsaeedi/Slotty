@@ -19,11 +19,16 @@ The values the commands need (subnets, security group, cluster) are in
 
 \section{Runbooks}
 \subsection{Deploy}
-Merge to \code{master}; the pull request must be green and up to date (\cref{sec:ci}). To redeploy
-without a code change (for example after changing configuration in Terraform), run the
-\emph{Deploy} workflow by hand from GitHub; it reuses the commit's images and skips the migrate
-task unless \emph{force\_migrate} is ticked. \code{curl https://<domain>/health} shows the
-release that is serving (\code{version}, the commit SHA).
+Publish a release (\cref{sec:releases}); merging alone deploys nothing. To redeploy without a code
+change (for example after changing configuration in Terraform), run the \emph{Deploy} workflow by
+hand from the running release's tag; it reuses the images and skips the migrate task unless
+\emph{force\_migrate} is ticked. \code{curl https://<domain>/health} shows the release that is
+serving (\code{version}, the tag).
+
+\subsection{Hotfix}
+Branch off \code{master}, fix, merge, then publish the next patch release (\code{v1.2.1}). A
+release is always a commit on \code{master}, so if \code{master} already holds unreleased work
+that mustn't ship yet, revert it first and merge it again after the release.
 
 \subsection{A deploy failed}
 The rollout job's log says which step stopped it and, for a service, prints its recent ECS events.
@@ -35,12 +40,18 @@ The rollout job's log says which step stopped it and, for a service, prints its 
   \item[\route{/health} doesn't report the release] The tasks run but the public path doesn't
     reach them, or the database check fails: see \route{/health}'s answer and the API Gateway
     log group.
-  \item[A newer commit is already live] Not a failure: two merges were close together and the
-    newer one deployed first.
+  \item[A newer release is already live] Not a failure: an older release's run was queued behind
+    a newer one. To go back on purpose, see below.
+  \item[package.json says … but the tag is …] The release was tagged before the
+    \emph{Release vX.Y.Z} pull request merged, or on the wrong commit. Delete the release and its
+    tag (admins only) and publish again.
 \end{description}
 
 \subsection{Roll back}
-Point the services at the previous task-definition revisions; nothing is rebuilt:
+Run \emph{Deploy} by hand from the older release's tag with \emph{rollback} ticked. Its images are
+still in ECR, so nothing is rebuilt; the migrate task doesn't run and \route{/health} confirms the
+older release. If GitHub is unavailable, point the services at the previous task-definition
+revisions instead:
 \begin{lstlisting}[language=bash]
 aws ecs update-service --profile slotty-prod --cluster slotty --service web    --task-definition slotty-web:<n>
 aws ecs update-service --profile slotty-prod --cluster slotty --service worker --task-definition slotty-worker:<n>
