@@ -8,7 +8,8 @@ import { makeUser, resetDb } from "./helpers";
 
 beforeEach(resetDb);
 
-const t0 = new Date("2026-11-21T12:00:00Z");
+// Relative to the real clock: reset links expire against `new Date()`, so a fixed date stops working two hours later.
+const t0 = new Date();
 const at = (s: number) => new Date(t0.getTime() + s * 1000);
 
 async function withPassword(name: string, password = "correct-horse") {

@@ -1,4 +1,4 @@
-import Papa from "papaparse";
+import { toSafeCsv } from "@/lib/csv";
 import { fmtData } from "@/lib/time";
 import { db } from "@/server/db";
 import { assertAssignmentRole, assertCourseRole, STAFF, type Actor } from "./access";
@@ -70,6 +70,8 @@ export async function courseProgress(actor: Actor, courseId: string, now = new D
   });
 }
 
+const criterionHeader = (c: { label: string; maxPoints: number }) => `${c.label} (/${c.maxPoints})`;
+
 /** One row per student: booking, attendance, rubric scores, total and evaluation status. */
 export async function exportAssignmentCsv(actor: Actor, assignmentId: string): Promise<{ filename: string; csv: string }> {
   const { assignment } = await assertAssignmentRole(db, actor, assignmentId, STAFF);
@@ -81,32 +83,40 @@ export async function exportAssignmentCsv(actor: Actor, assignmentId: string): P
   ]);
   const scoreBy = new Map(scores.map((s) => [`${s.evaluationId}:${s.criterionId}`, s.points]));
 
-  const rows = roster.map(({ student, section, booking, evaluation }) => {
-    const row: Record<string, string | number> = {
-      student_name: student.name,
-      student_email: student.email,
-      section: section ?? "",
-      slot_start: booking ? fmtData(booking.slot.startsAt, tz, "yyyy-MM-dd HH:mm") : "",
-      slot_end: booking ? fmtData(booking.slot.endsAt, tz, "yyyy-MM-dd HH:mm") : "",
-      timezone: tz,
-      ta: booking?.slot.ta.name ?? "",
-      venue: booking?.slot.venue?.name ?? "",
-      attendance: booking ? { BOOKED: "pending", COMPLETED: "completed", NO_SHOW: "no-show", CANCELLED: "" }[booking.status] : "not booked",
-    };
-    for (const c of criteria) {
-      row[`${c.label} (/${c.maxPoints})`] = evaluation ? (scoreBy.get(`${evaluation.id}:${c.id}`) ?? "") : "";
-    }
-    row[`total (/${assignment.maxMarks})`] = evaluation?.totalMarks ?? "";
-    row.evaluation_status = evaluation?.status.toLowerCase() ?? "not started";
-    row.evaluator = evaluation?.evaluator.name ?? "";
-    row.feedback = evaluation?.feedback ?? "";
-    return row;
-  });
-
+  const headers = [
+    "student_name",
+    "student_email",
+    "section",
+    "slot_start",
+    "slot_end",
+    "timezone",
+    "ta",
+    "venue",
+    "attendance",
+    ...criteria.map(criterionHeader),
+    `total (/${assignment.maxMarks})`,
+    "evaluation_status",
+    "evaluator",
+    "feedback",
+  ];
   const safe = (s: string) => s.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase();
-  // Prefix cells that spreadsheet apps would treat as formulas.
-  const csv = Papa.unparse(
-    rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, typeof v === "string" && /^[=+\-@]/.test(v) ? `'${v}` : v]))),
-  );
+  // Headers and cells are escaped so spreadsheet apps never run them as formulas.
+  const rows = roster.map(({ student, section, booking, evaluation }) => [
+    student.name,
+    student.email,
+    section ?? "",
+    booking ? fmtData(booking.slot.startsAt, tz, "yyyy-MM-dd HH:mm") : "",
+    booking ? fmtData(booking.slot.endsAt, tz, "yyyy-MM-dd HH:mm") : "",
+    tz,
+    booking?.slot.ta.name ?? "",
+    booking?.slot.venue?.name ?? "",
+    booking ? { BOOKED: "pending", COMPLETED: "completed", NO_SHOW: "no-show", CANCELLED: "" }[booking.status] : "not booked",
+    ...criteria.map((c) => (evaluation ? (scoreBy.get(`${evaluation.id}:${c.id}`) ?? "") : "")),
+    evaluation?.totalMarks ?? "",
+    evaluation?.status.toLowerCase() ?? "not started",
+    evaluation?.evaluator.name ?? "",
+    evaluation?.feedback ?? "",
+  ]);
+  const csv = toSafeCsv(headers, rows);
   return { filename: `${safe(assignment.course.code)}-${safe(assignment.title)}.csv`, csv };
 }
