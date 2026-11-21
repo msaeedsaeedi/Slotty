@@ -2,6 +2,7 @@ import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { canSubmit, canTransition, computeTotal, nextStatus, validateScores, type EvaluationStatus } from "@/domain/evaluation";
 import { assertRule, DomainError } from "@/domain/result";
+import { visibleMarks, type VisibleMarks } from "@/domain/student-demo";
 import { dayRange, fmtData } from "@/lib/time";
 import { db, type Tx } from "@/server/db";
 import { assertAssignmentRole, assertCourseRole, assertCourseWritable, courseHasInstructor, STAFF, type Actor } from "./access";
@@ -524,6 +525,20 @@ export async function getMyResult(actor: Actor, assignmentId: string): Promise<(
   if (evaluation.status === "FINALIZED") return { ...studentView(evaluation), underReview: false };
   if (evaluation.released) return { ...(evaluation.released as unknown as StudentResult), underReview: true };
   return null;
+}
+
+/** Released marks per assignment for the signed-in student (totals only, for status badges). */
+export async function listMyVisibleMarks(actor: Actor, filter?: { courseId?: string }): Promise<Map<string, VisibleMarks>> {
+  const evaluations = await db.evaluation.findMany({
+    where: { studentId: actor.id, ...(filter?.courseId ? { assignment: { courseId: filter.courseId } } : {}) },
+    select: { assignmentId: true, status: true, totalMarks: true, released: true },
+  });
+  const marks = new Map<string, VisibleMarks>();
+  for (const e of evaluations) {
+    const visible = visibleMarks(e);
+    if (visible) marks.set(e.assignmentId, visible);
+  }
+  return marks;
 }
 
 /** Finalize several submitted evaluations at once (instructor review queue). */

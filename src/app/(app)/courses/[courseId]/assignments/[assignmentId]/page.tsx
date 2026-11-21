@@ -10,7 +10,9 @@ import { PushPrompt } from "@/components/pwa";
 import { vapidPublicKey } from "@/server/push-config";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { EmptyState, PageHeader } from "@/components/page-header";
+import { DemoStateBadge, demoStateHint } from "@/components/demo-state";
 import { StatusBadge } from "@/components/status-badge";
+import { studentDemoState } from "@/domain/student-demo";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,6 +60,15 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
   const open = assignment.status === "PUBLISHED" || (assignment.status === "CLOSED" && allowance.lateBooking);
   const booking = history.find((b) => b.status !== "CANCELLED");
   const bookingState = booking && { status: booking.status, slotStartsAt: booking.slot.startsAt };
+  const demoState = studentDemoState({
+    booking: booking ? { status: booking.status, startsAt: booking.slot.startsAt, endsAt: booking.slot.endsAt } : null,
+    marks: result ? { total: result.totalMarks, underReview: result.underReview } : null,
+    now,
+  });
+  // Booking actions (calendar, reschedule, cancel, push prompt) only before the slot starts.
+  const upcoming = demoState?.kind === "BOOKED";
+  const missed = demoState?.kind === "MISSED";
+  const stateHint = demoState && demoStateHint(demoState);
   // Once the demo has marks, the booking is pinned (the server refuses changes too).
   const markedRule = { ok: false as const, reason: "Your demo has been marked, so this booking can't be changed." };
   const cancelRule = bookingState ? (marked ? markedRule : canCancelBooking({ now, assignmentStatus: assignment.status, policy, booking: bookingState, allowance })) : null;
@@ -97,7 +108,8 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
   const noSlotsToBook = open && !outOfChanges && !bookingOpensLater && bookable.length === 0;
   // Stuck = there's no self-service way forward, so offer the staff request up front.
   const frozen = booking?.status === "BOOKED" && isFrozen(booking.slot.startsAt, now, policy.freezeHours);
-  const stuck = (!booking && (!open || outOfChanges || noSlotsToBook)) || (booking?.status === "BOOKED" && !marked && (frozen || (!canMove && !cancelRule?.ok)));
+  const stuck =
+    missed || (!booking && (!open || outOfChanges || noSlotsToBook)) || (booking?.status === "BOOKED" && !marked && (frozen || (!canMove && !cancelRule?.ok)));
   // Locked out of self-service: say why and point to the request box, without an empty "Book a slot" section.
   const lockedOut = !open || outOfChanges;
 
@@ -163,7 +175,7 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
           <CardHeader>
             <div className="flex items-center justify-between gap-2">
               <CardDescription>Your demo</CardDescription>
-              <StatusBadge status={booking.status} />
+              {demoState ? <DemoStateBadge state={demoState} maxMarks={assignment.maxMarks} /> : <StatusBadge status={booking.status} />}
             </div>
             <CardTitle className="text-xl">{fmt(booking.slot.startsAt, tz, "EEEE d MMMM")}</CardTitle>
           </CardHeader>
@@ -184,8 +196,9 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
             <p className="flex items-center gap-2">
               <User className="size-4 text-muted-foreground" /> {booking.slot.ta.name}
             </p>
-            {booking.status === "BOOKED" && <AddToCalendar options={bookingCalendarOptions(booking)} />}
-            {booking.status === "BOOKED" && (
+            {stateHint && <p className="pt-1 text-muted-foreground">{stateHint}</p>}
+            {upcoming && <AddToCalendar options={bookingCalendarOptions(booking)} />}
+            {upcoming && (
               <div className="flex flex-wrap items-center gap-2 pt-3">
                 {rescheduling ? (
                   <Button asChild variant="outline" size="sm">
@@ -223,7 +236,7 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
         </Alert>
       )}
 
-      {booking?.status === "BOOKED" && !rescheduling && <PushPrompt publicKey={vapidPublicKey()} />}
+      {upcoming && !rescheduling && <PushPrompt publicKey={vapidPublicKey()} />}
 
       {showPicker && lockedOut && (
         <Alert>
@@ -345,9 +358,11 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
           timezone={tz}
           now={now}
           open={stuck}
-          title={stuck ? "Need a different time? Ask course staff" : "Need help with your booking?"}
+          title={missed ? "Missed your demo? Ask course staff" : stuck ? "Need a different time? Ask course staff" : "Need help with your booking?"}
           hint={
-            frozen
+            missed
+              ? "Say what happened and which times would work. Staff can correct the attendance or give you another slot."
+              : frozen
               ? "Your slot is locked, so only staff can change it. Say what happened and which times would work."
               : "Explain what you need, e.g. times that would work for you. Staff can move you without using your changes."
           }
