@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { assignStaffAction, createCourseAction, setCourseArchivedAction } from "@/app/actions/admin";
+import { assignStaffAction, createCourseAction, removeStaffAction, setCourseArchivedAction } from "@/app/actions/admin";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { EmptyState } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -111,6 +111,27 @@ export default async function AdminCoursesPage({ searchParams }: PageProps<"/adm
                           </select>
                           <SubmitButton size="sm">Add</SubmitButton>
                         </ActionForm>
+                      </details>
+                    )}
+                    {!c.archived && !noStaff && (
+                      <details className="group flex-1">
+                        <summary className="cursor-pointer text-sm font-medium text-primary">Remove staff member</summary>
+                        <ul className="mt-2 space-y-1">
+                          {[...c.instructors.map((u) => ({ ...u, role: "instructor" })), ...c.tas.map((u) => ({ ...u, role: "TA" }))].map((u) => (
+                            <li key={u.id} className="flex items-center gap-2">
+                              <span className="min-w-0 flex-1 truncate">
+                                {u.name} <span className="text-muted-foreground">({u.role})</span>
+                              </span>
+                              <ActionForm action={removeStaffAction} compact confirm={`Remove ${u.name} from ${c.code}? They lose access to the course.`} confirmLabel="Remove">
+                                <input type="hidden" name="courseId" value={c.id} />
+                                <input type="hidden" name="userId" value={u.id} />
+                                <SubmitButton size="sm" variant="ghost">
+                                  Remove
+                                </SubmitButton>
+                              </ActionForm>
+                            </li>
+                          ))}
+                        </ul>
                       </details>
                     )}
                     <ActionForm

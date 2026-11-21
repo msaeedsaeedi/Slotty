@@ -22,10 +22,12 @@ describe("who can hold which role", () => {
     const ta = await makeUser("Tara TA");
     const sam = await makeUser("Sam Student");
     const cs1 = await adminCreateCourse(admin, { code: "CS1", title: "One", term: "T", timezone: "Asia/Karachi", staff: { email: prof.email, role: "INSTRUCTOR" } });
+    const lead = await makeUser("Lead");
     const { course } = await setupCourse(ta);
     await enroll(course.id, [sam]);
+    await adminAssignStaff(admin, course.id, { email: lead.email, role: "INSTRUCTOR" });
 
-    const r = await importRoster(ta, course.id, `email,role\n${prof.email},ta\n${prof.email.replace("prof", "x")},ta`);
+    const r = await importRoster(lead, course.id, `email,role\n${prof.email},ta\n${prof.email.replace("prof", "x")},ta`);
     expect(r.errors).toEqual([expect.objectContaining({ line: 2, message: expect.stringMatching(/instructor in CS1/) })]);
     await expect(adminAssignStaff(admin, course.id, { email: prof.email, role: "TA" })).rejects.toThrow(/instructors can't also be TAs/);
     await expect(adminAssignStaff(admin, cs1.course.id, { email: ta.email, role: "INSTRUCTOR" })).rejects.toThrow(/TAs can't also be instructors/);
@@ -74,7 +76,10 @@ describe("who can hold which role", () => {
     // With an instructor, the TA no longer runs the course's settings.
     await expect(updateCourse(ta, course.id, { code: "CS101", title: "X", term: "T", timezone: "UTC" })).rejects.toThrow(/instructor/);
     await expect(setCourseArchived(ta, course.id, true)).rejects.toThrow(/instructor/);
-    expect((await addMember(admin, course.id, { email: "co@uni.edu", name: "Co", role: "INSTRUCTOR" })).enrolled).toBe(1);
+    // Admins read courses but change nothing inside them; staff go through the console.
+    await expect(addMember(admin, course.id, { email: "co@uni.edu", name: "Co", role: "INSTRUCTOR" })).rejects.toThrow(/read-only/);
+    await expect(setCourseArchived(admin, course.id, true)).rejects.toThrow(/read-only/);
+    await adminAssignStaff(admin, course.id, { email: "co@uni.edu", name: "Co", role: "INSTRUCTOR" });
     await setCourseArchived(prof, course.id, true);
   });
 });

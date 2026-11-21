@@ -6,6 +6,7 @@ import {
   adminAssignStaff,
   adminCreateCourse,
   adminInviteUser,
+  adminRemoveStaff,
   adminRetryEmails,
   adminSendAccessEmail,
   adminSetAdmin,
@@ -60,6 +61,13 @@ export async function assignStaffAction(_: ActionState, fd: FormData): Promise<A
     const role = str(fd, "role") === "TA" ? "TA" : "INSTRUCTOR";
     const r = await adminAssignStaff(await requireUser(), str(fd, "courseId"), { email: str(fd, "email"), name: str(fd, "name") || undefined, role });
     return `${r.name} added as ${role === "TA" ? "TA" : "instructor"}${r.invited ? " and invited by email" : ""}.`;
+  });
+}
+
+export async function removeStaffAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run(async () => {
+    const r = await adminRemoveStaff(await requireUser(), str(fd, "courseId"), str(fd, "userId"));
+    return `${r.name} removed from the course.`;
   });
 }
 

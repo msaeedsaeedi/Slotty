@@ -29,7 +29,7 @@ export const evaluationInput = z.object({
 /** Staff view of one student's evaluation (created on first open). */
 export async function getOrCreateEvaluation(actor: Actor, assignmentId: string, studentId: string) {
   return db.$transaction(async (tx) => {
-    const { assignment } = await assertAssignmentRole(tx, actor, assignmentId, STAFF);
+    const { assignment } = await assertAssignmentRole(tx, actor, assignmentId, STAFF, { write: true });
     const enrollment = await tx.enrollment.findUnique({
       where: { courseId_userId: { courseId: assignment.courseId, userId: studentId } },
     });
@@ -91,7 +91,7 @@ async function loadForStaff(tx: Tx, actor: Actor, evaluationId: string) {
   if (!evaluation) throw new DomainError("Evaluation not found.", "NOT_FOUND");
   const role = await assertCourseRole(tx, actor, evaluation.assignment.courseId, STAFF);
   // Every caller changes the evaluation, so archived courses are read-only here.
-  assertCourseWritable(evaluation.assignment.course);
+  assertCourseWritable(actor, evaluation.assignment.course);
   return { evaluation, role };
 }
 
@@ -280,6 +280,18 @@ export async function getMarkingSheet(
 export type MarkingSheet = Awaited<ReturnType<typeof getMarkingSheet>>;
 
 /**
+ * Where a link to one booking should open the marking sheet: that booking's
+ * day, and everyone's demos when someone else hosts it. Null for a booking
+ * outside this assignment.
+ */
+export async function markingSheetFocus(actor: Actor, assignmentId: string, bookingId: string) {
+  const { assignment } = await assertAssignmentRole(db, actor, assignmentId, STAFF);
+  const b = await db.booking.findUnique({ where: { id: bookingId }, select: { assignmentId: true, slot: { select: { startsAt: true, taId: true } } } });
+  if (!b || b.assignmentId !== assignmentId) return null;
+  return { startsAt: b.slot.startsAt, timezone: assignment.course.timezone, hostedByMe: b.slot.taId === actor.id };
+}
+
+/**
  * Submit evaluations. With an instructor in the course they go to SUBMITTED for
  * review; without one, the TA's submission is final.
  */
@@ -454,6 +466,12 @@ export async function listAssignmentRoster(actor: Actor, assignmentId: string) {
 }
 
 /** Evaluations awaiting instructor review in a course. */
+/** Submitted evaluations waiting for the instructor (the Review tab's badge). */
+export async function pendingReviewCount(actor: Actor, courseId: string) {
+  await assertCourseRole(db, actor, courseId, ["INSTRUCTOR"]);
+  return db.evaluation.count({ where: { status: "SUBMITTED", assignment: { courseId } } });
+}
+
 export async function listReviewQueue(actor: Actor, courseId: string) {
   await assertCourseRole(db, actor, courseId, ["INSTRUCTOR"]);
   return db.evaluation.findMany({

@@ -20,19 +20,21 @@ const STATUS_LABEL = {
 } as const;
 
 const TEMPLATE = "email,name,role,section\nada@uni.edu,Ada Lovelace,student,A\nsam@uni.edu,Sam Khan,ta,\n";
-const TEMPLATE_HREF = `data:text/csv;charset=utf-8,${encodeURIComponent(TEMPLATE)}`;
+const STUDENT_TEMPLATE = "email,name,role,section\nada@uni.edu,Ada Lovelace,student,A\n";
+const templateHref = (canAddTAs: boolean) => `data:text/csv;charset=utf-8,${encodeURIComponent(canAddTAs ? TEMPLATE : STUDENT_TEMPLATE)}`;
 
-export function RosterImport({ courseId, canAddInstructors }: { courseId: string; canAddInstructors: boolean }) {
+/** `canAddTAs`: only instructors add, promote or demote TAs (`canManageTAs`); instructors are named from the admin console. */
+export function RosterImport({ courseId, canAddTAs }: { courseId: string; canAddTAs: boolean }) {
   return (
     <div className="space-y-4">
-      <AddPerson courseId={courseId} canAddInstructors={canAddInstructors} />
-      <ImportList courseId={courseId} canAddInstructors={canAddInstructors} />
+      <AddPerson courseId={courseId} canAddTAs={canAddTAs} />
+      <ImportList courseId={courseId} canAddTAs={canAddTAs} />
     </div>
   );
 }
 
 /** The quick way to add a TA, a late student, or anyone else one at a time. */
-function AddPerson({ courseId, canAddInstructors }: { courseId: string; canAddInstructors: boolean }) {
+function AddPerson({ courseId, canAddTAs }: { courseId: string; canAddTAs: boolean }) {
   return (
     <Card>
       <CardHeader>
@@ -55,8 +57,7 @@ function AddPerson({ courseId, canAddInstructors }: { courseId: string; canAddIn
               <Label htmlFor="add-role">Role</Label>
               <select id="add-role" name="role" defaultValue="STUDENT" className="h-8 w-full rounded-lg border bg-background px-2 text-sm">
                 <option value="STUDENT">Student</option>
-                <option value="TA">TA</option>
-                {canAddInstructors && <option value="INSTRUCTOR">Instructor</option>}
+                {canAddTAs && <option value="TA">TA</option>}
               </select>
             </div>
             <div className="space-y-1.5">
@@ -71,7 +72,7 @@ function AddPerson({ courseId, canAddInstructors }: { courseId: string; canAddIn
   );
 }
 
-function ImportList({ courseId, canAddInstructors }: { courseId: string; canAddInstructors: boolean }) {
+function ImportList({ courseId, canAddTAs }: { courseId: string; canAddTAs: boolean }) {
   const [preview, previewAction] = useActionState(previewRosterAction, null);
   const [dismissed, setDismissed] = useState<object | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -97,7 +98,7 @@ function ImportList({ courseId, canAddInstructors }: { courseId: string; canAddI
                   {[
                     ["email", "Required"],
                     ["name", "Optional — used for new accounts"],
-                    ["role", canAddInstructors ? "student (default), ta or instructor" : "student (default) or ta"],
+                    ["role", canAddTAs ? "student (default) or ta" : "student (TAs are added by the instructor, or by an admin when there is none)"],
                     ["section", "Optional, e.g. A"],
                   ].map(([col, note]) => (
                     <tr key={col}>
@@ -109,7 +110,7 @@ function ImportList({ courseId, canAddInstructors }: { courseId: string; canAddI
               </table>
               <p className="text-xs text-muted-foreground">
                 Google Classroom exports work as they are.{" "}
-                <a href={TEMPLATE_HREF} download="slotty-class-list.csv" className="inline-flex items-center gap-1 font-medium text-foreground underline">
+                <a href={templateHref(canAddTAs)} download="slotty-class-list.csv" className="inline-flex items-center gap-1 font-medium text-foreground underline">
                   <Download className="size-3" /> Download a template
                 </a>
               </p>

@@ -5,7 +5,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireUser } from "@/server/auth/session";
 import { load } from "@/server/page-utils";
-import { listMembers } from "@/server/services/courses";
+import { getCourseForActor, listMembers } from "@/server/services/courses";
 import { RosterImport } from "./roster-import";
 import { plural } from "@/lib/utils";
 
@@ -14,7 +14,12 @@ export const metadata = { title: "People" };
 export default async function RosterPage({ params }: PageProps<"/courses/[courseId]/manage/roster">) {
   const { courseId } = await params;
   const user = await requireUser();
-  const members = await load(listMembers(user, courseId));
+  const [members, { role }] = await Promise.all([load(listMembers(user, courseId)), load(getCourseForActor(user, courseId))]);
+  // Admins only read courses; staff changes happen in Administration → Courses.
+  const canEdit = !user.isAdmin;
+  // Only instructors manage TAs (`canManageTAs`); instructors are named by an admin.
+  const canManageTAs = canEdit && role === "INSTRUCTOR";
+  const canRemove = (memberRole: string) => canEdit && (memberRole === "STUDENT" || (memberRole === "TA" && canManageTAs));
   const counts = { STUDENT: 0, TA: 0, INSTRUCTOR: 0 };
   for (const m of members) counts[m.role]++;
 
@@ -54,7 +59,7 @@ export default async function RosterPage({ params }: PageProps<"/courses/[course
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
-                    {m.user.status === "INVITED" && (
+                    {canEdit && m.user.status === "INVITED" && (
                       <ActionForm action={resendInviteAction} compact>
                         <input type="hidden" name="courseId" value={courseId} />
                         <input type="hidden" name="userId" value={m.userId} />
@@ -63,7 +68,7 @@ export default async function RosterPage({ params }: PageProps<"/courses/[course
                         </SubmitButton>
                       </ActionForm>
                     )}
-                    {m.userId !== user.id && (m.role !== "INSTRUCTOR" || user.isAdmin) && (
+                    {m.userId !== user.id && canRemove(m.role) && (
                       <ActionForm action={removeMemberAction} compact confirmLabel="Remove" confirm={`Remove ${m.user.name} from this course? Their upcoming bookings will be cancelled and they'll be told.`}>
                         <input type="hidden" name="courseId" value={courseId} />
                         <input type="hidden" name="userId" value={m.userId} />
@@ -79,7 +84,7 @@ export default async function RosterPage({ params }: PageProps<"/courses/[course
           </TableBody>
         </Table>
       </Card>
-      <RosterImport courseId={courseId} canAddInstructors={user.isAdmin} />
+      {canEdit && <RosterImport courseId={courseId} canAddTAs={canManageTAs} />}
     </div>
   );
 }

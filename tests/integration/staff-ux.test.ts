@@ -144,8 +144,8 @@ describe("adding one person", () => {
     const ta = await makeUser("Tara TA");
     const { course } = await setupCourse(ta);
     await expect(addMember(ta, course.id, { email: "new@test.edu", role: "STUDENT" })).rejects.toThrow(/name/);
-    expect(await addMember(ta, course.id, { email: "New@Test.edu", name: "Nia", role: "TA" })).toMatchObject({ invited: 1, name: "Nia" });
-    await expect(addMember(ta, course.id, { email: "new@test.edu", role: "TA" })).rejects.toThrow(/already/);
+    expect(await addMember(ta, course.id, { email: "New@Test.edu", name: "Nia", role: "STUDENT" })).toMatchObject({ invited: 1, name: "Nia" });
+    await expect(addMember(ta, course.id, { email: "new@test.edu", role: "STUDENT" })).rejects.toThrow(/already/);
     await expect(addMember(ta, course.id, { email: "boss@test.edu", name: "Boss", role: "INSTRUCTOR" })).rejects.toThrow(/Only a Slotty admin/);
   });
 

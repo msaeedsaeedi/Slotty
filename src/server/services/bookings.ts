@@ -134,7 +134,7 @@ export async function bookSlot(actor: Actor, slotId: string, now = new Date()) {
       const slot = get(slotId);
       const { assignment } = slot;
       await assertCourseRole(tx, actor, assignment.courseId, ["STUDENT"]);
-      assertCourseWritable(assignment.course);
+      assertCourseWritable(actor, assignment.course);
       if (!assignment.policy) throw new DomainError("This assignment is not open for booking.");
 
       const existing = await tx.booking.findFirst({
@@ -176,7 +176,7 @@ export async function cancelBooking(actor: Actor, bookingId: string, now = new D
     const booking = await loadOwnBooking(tx, actor, bookingId);
     await assertNotMarked(tx, booking.assignmentId, actor.id, "student");
     const slot = (await lockSlots(tx, [booking.slotId]))(booking.slotId);
-    assertCourseWritable(slot.assignment.course);
+    assertCourseWritable(actor, slot.assignment.course);
     const policy = slot.assignment.policy!;
     const { budget, allowance } = await loadChangeState(tx, booking.assignmentId, actor.id, policy);
     assertRule(
@@ -213,7 +213,7 @@ export async function rescheduleBooking(actor: Actor, bookingId: string, newSlot
       const to = get(newSlotId);
       if (to.assignmentId !== booking.assignmentId) throw new DomainError("That slot belongs to a different assignment.");
       const { assignment } = to;
-      assertCourseWritable(assignment.course);
+      assertCourseWritable(actor, assignment.course);
 
       const { budget, allowance } = await loadChangeState(tx, booking.assignmentId, actor.id, assignment.policy!);
       assertRule(
@@ -287,7 +287,7 @@ async function loadBookingForStaff(tx: Tx, actor: Actor, bookingId: string) {
   });
   if (!booking) throw new DomainError("Booking not found.", "NOT_FOUND");
   await assertCourseRole(tx, actor, booking.assignment.courseId, STAFF);
-  assertCourseWritable(booking.assignment.course);
+  assertCourseWritable(actor, booking.assignment.course);
   return booking;
 }
 
@@ -360,7 +360,7 @@ export async function staffPlaceStudent(
     if (slot.assignmentId !== args.assignmentId) throw new DomainError("That slot belongs to a different assignment.");
     const { assignment } = slot;
     await assertCourseRole(tx, actor, assignment.courseId, STAFF);
-    assertCourseWritable(assignment.course);
+    assertCourseWritable(actor, assignment.course);
     const enrollment = await tx.enrollment.findUnique({
       where: { courseId_userId: { courseId: assignment.courseId, userId: args.studentId } },
       include: { user: { select: { name: true } } },
@@ -450,7 +450,7 @@ export async function setAllowance(actor: Actor, assignmentId: string, studentId
     const assignment = await tx.assignment.findUnique({ where: { id: assignmentId }, include: { course: true } });
     if (!assignment) throw new DomainError("Assignment not found.", "NOT_FOUND");
     await assertCourseRole(tx, actor, assignment.courseId, STAFF);
-    assertCourseWritable(assignment.course);
+    assertCourseWritable(actor, assignment.course);
     const enrollment = await tx.enrollment.findUnique({ where: { courseId_userId: { courseId: assignment.courseId, userId: studentId } } });
     if (!enrollment || enrollment.role !== "STUDENT") throw new DomainError("Student not found in this course.", "NOT_FOUND");
 

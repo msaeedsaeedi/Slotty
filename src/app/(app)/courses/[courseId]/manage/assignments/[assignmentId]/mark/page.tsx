@@ -1,9 +1,8 @@
 import { addDays, format, parseISO } from "date-fns";
 import { fmt, fmtData, fmtTimeRange, tzLabel } from "@/lib/time";
 import { requireUser } from "@/server/auth/session";
-import { db } from "@/server/db";
 import { load } from "@/server/page-utils";
-import { getMarkingSheet } from "@/server/services/evaluations";
+import { getMarkingSheet, markingSheetFocus } from "@/server/services/evaluations";
 import { TrackView } from "@/components/analytics";
 import { MarkingSheet, type SheetRow } from "./marking-sheet";
 
@@ -32,13 +31,10 @@ export default async function MarkPage({ params, searchParams }: PageProps<"/cou
   // when someone else hosts it (e.g. "Mark" from the Students tab).
   let day = one(sp.day);
   if (bookingId) {
-    const b = await db.booking.findUnique({
-      where: { id: bookingId },
-      select: { slot: { select: { startsAt: true, taId: true } }, assignment: { select: { course: { select: { timezone: true } } } } },
-    });
-    if (b) {
-      day ??= fmtData(b.slot.startsAt, b.assignment.course.timezone, "yyyy-MM-dd");
-      if (b.slot.taId !== user.id) scope = "everyone";
+    const focus = await load(markingSheetFocus(user, assignmentId, bookingId));
+    if (focus) {
+      day ??= fmtData(focus.startsAt, focus.timezone, "yyyy-MM-dd");
+      if (!focus.hostedByMe) scope = "everyone";
     }
   }
   const sheet = await load(getMarkingSheet(user, assignmentId, { day: day && DAY_RE.test(day) ? day : undefined, todo, studentId, scope }));

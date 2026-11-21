@@ -37,7 +37,7 @@ export default async function ManageAssignmentPage({ params, searchParams }: Pag
   const [slots, venues, staff, roster, waiting, busy] = await Promise.all([
     listSlotsForStaff(user, assignmentId),
     listVenues(user, courseId),
-    listCourseStaff(courseId),
+    listCourseStaff(user, courseId),
     listAssignmentRoster(user, assignmentId),
     waitlistCount(user, assignmentId),
     listHostBusy(user, assignmentId),

@@ -11,7 +11,7 @@ const RENOTIFY_MS = 30 * 60_000;
 export async function joinWaitlist(actor: Actor, assignmentId: string) {
   return db.$transaction(async (tx) => {
     const { assignment } = await assertAssignmentRole(tx, actor, assignmentId, ["STUDENT"]);
-    assertCourseWritable(assignment.course);
+    assertCourseWritable(actor, assignment.course);
     if (assignment.status !== "PUBLISHED") throw new DomainError("This assignment is not open for booking.");
     const active = await tx.booking.findFirst({ where: { assignmentId, studentId: actor.id, status: { in: [...ACTIVE_BOOKING] } } });
     if (active) throw new DomainError("You already have a booking for this assignment.");

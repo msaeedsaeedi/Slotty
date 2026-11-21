@@ -1,6 +1,6 @@
 import type { CourseRole } from "@/generated/prisma/client";
 import { assertRule, DomainError } from "@/domain/result";
-import { canManageCourse } from "@/domain/roles";
+import { canChangeCourseData, canManageCourse } from "@/domain/roles";
 import type { Tx } from "@/server/db";
 
 /** The authenticated user a service call acts on behalf of. */
@@ -15,7 +15,10 @@ export interface Actor {
 
 export const STAFF: CourseRole[] = ["INSTRUCTOR", "TA"];
 
-/** The actor's role in a course; admins are treated as instructors (moderation). */
+/**
+ * The actor's role in a course. Admins read any course as if they were its
+ * instructor, but every change is refused for them (`assertCourseWritable`).
+ */
 export async function courseRoleOf(tx: Tx, actor: Actor, courseId: string): Promise<CourseRole | null> {
   const enrollment = await tx.enrollment.findUnique({
     where: { courseId_userId: { courseId, userId: actor.id } },
@@ -26,14 +29,18 @@ export async function courseRoleOf(tx: Tx, actor: Actor, courseId: string): Prom
 }
 
 export interface AccessOptions {
-  /** The call changes course data, so archived (read-only) courses are refused. */
+  /** The call changes course data: refused for admins and in archived (read-only) courses. */
   write?: boolean;
 }
 
 export const ARCHIVED_MESSAGE = "This course is archived and read-only. Restore it in Settings to make changes.";
 
-/** Archived courses are read-only. */
-export function assertCourseWritable(course: { archived: boolean }): void {
+/**
+ * Every change to course data passes here: admins only read courses
+ * (`canChangeCourseData`), and archived courses are read-only.
+ */
+export function assertCourseWritable(actor: Actor, course: { archived: boolean }): void {
+  assertRule(canChangeCourseData(actor), "FORBIDDEN");
   if (course.archived) throw new DomainError(ARCHIVED_MESSAGE, "CONFLICT");
 }
 
@@ -49,7 +56,9 @@ export async function assertCourseRole(
   if (!roles.includes(role)) throw new DomainError("You don't have permission to do that.", "FORBIDDEN");
   if (opts.write) {
     const course = await tx.course.findUnique({ where: { id: courseId }, select: { archived: true } });
-    if (course) assertCourseWritable(course);
+    // An admin's role doesn't come from an enrollment, so the course may not exist.
+    if (!course) throw new DomainError("Course not found.", "NOT_FOUND");
+    assertCourseWritable(actor, course);
   }
   return role;
 }
@@ -85,13 +94,14 @@ export async function assertAssignmentRole(tx: Tx, actor: Actor, assignmentId: s
   });
   if (!assignment) throw new DomainError("Assignment not found.", "NOT_FOUND");
   const role = await assertCourseRole(tx, actor, assignment.courseId, roles);
-  if (opts.write) assertCourseWritable(assignment.course);
+  if (opts.write) assertCourseWritable(actor, assignment.course);
   return { assignment, role };
 }
 
 /**
  * Course settings and archiving: the instructor manages the course, a TA only
- * when it has no instructor (`canManageCourse`). Admins count as instructors.
+ * when it has no instructor (`canManageCourse`). Admins can open Settings but
+ * not change anything (`opts.write`).
  */
 export async function assertCourseManager(tx: Tx, actor: Actor, courseId: string, opts: AccessOptions = {}): Promise<CourseRole> {
   const role = await assertStaff(tx, actor, courseId, opts);

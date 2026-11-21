@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { StatusBadge } from "@/components/status-badge";
 import { db } from "@/server/db";
+import { pendingReviewCount } from "@/server/services/evaluations";
 import { requireUser } from "@/server/auth/session";
 import { load } from "@/server/page-utils";
 import { getCourseForActor } from "@/server/services/courses";
@@ -15,8 +16,8 @@ export default async function ManageLayout({ children, params }: LayoutProps<"/c
   const { course, role } = await load(getCourseForActor(user, courseId));
   if (role === "STUDENT") redirect(`/courses/${courseId}`);
   const [pendingReview, openRequests, manages] = await Promise.all([
-    role === "INSTRUCTOR" ? db.evaluation.count({ where: { status: "SUBMITTED", assignment: { courseId } } }) : 0,
-    openRequestCount(courseId),
+    role === "INSTRUCTOR" ? pendingReviewCount(user, courseId) : 0,
+    openRequestCount(user, courseId),
     canManageCourseFor(db, user, courseId),
   ]);
 
@@ -63,6 +64,15 @@ export default async function ManageLayout({ children, params }: LayoutProps<"/c
           </p>
         }
       />
+      {user.isAdmin && (
+        <p role="note" className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          You&apos;re viewing this course as an admin, read-only. To add or remove staff, or archive the course, use{" "}
+          <Link href="/admin/courses" className="font-medium underline">
+            Administration → Courses
+          </Link>
+          .
+        </p>
+      )}
       {children}
     </div>
   );

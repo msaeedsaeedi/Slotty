@@ -2,10 +2,10 @@ import { z } from "zod";
 import type { CourseRole } from "@/generated/prisma/client";
 import { assertRule, DomainError } from "@/domain/result";
 import { parseRoster, type RosterError, type RosterRow } from "@/domain/csv-roster";
-import { canCreateCourse, canManageInstructors, canTakeRole } from "@/domain/roles";
+import { canChangeCourseData, canCreateCourse, canManageInstructors, canManageTAs, canTakeRole } from "@/domain/roles";
 import { fmtRange, isValidTimezone } from "@/lib/time";
 import { db, type Tx } from "@/server/db";
-import { assertCanJoinCourses, assertCourseManager, assertCourseRole, assertStaff, courseRoleOf, type Actor } from "./access";
+import { assertCanJoinCourses, assertCourseManager, assertCourseRole, assertStaff, courseHasInstructor, courseRoleOf, type Actor } from "./access";
 import { audit } from "./audit";
 import { issueInvite } from "./accounts";
 import { notify } from "./notify";
@@ -52,7 +52,9 @@ export async function updateCourse(actor: Actor, courseId: string, input: z.inpu
 
 export async function setCourseArchived(actor: Actor, courseId: string, archived: boolean) {
   return db.$transaction(async (tx) => {
+    // Not `write: true`: restoring an archived course must stay possible.
     await assertCourseManager(tx, actor, courseId);
+    assertRule(canChangeCourseData(actor), "FORBIDDEN");
     await tx.course.update({ where: { id: courseId }, data: { archived } });
     await audit(tx, actor, { action: archived ? "course.archive" : "course.unarchive", entityType: "Course", entityId: courseId });
   });
@@ -96,7 +98,8 @@ export async function listMembers(actor: Actor, courseId: string) {
   });
 }
 
-export async function listCourseStaff(courseId: string) {
+export async function listCourseStaff(actor: Actor, courseId: string) {
+  await assertStaff(db, actor, courseId);
   return db.enrollment.findMany({
     where: { courseId, role: { in: ["TA", "INSTRUCTOR"] } },
     include: { user: { select: { id: true, name: true, email: true } } },
@@ -118,15 +121,44 @@ export async function rolesElsewhere(tx: Tx, userId: string, courseId: string) {
 }
 
 /**
+ * What each user (not currently enrolled) once did in this course: "student"
+ * if they booked or were marked, "staff" if they hosted or marked demos. Used
+ * by `canTakeRole` so removing and re-adding someone can't switch them
+ * between student and staff.
+ */
+export async function pastRolesHere(tx: Tx, userIds: string[], courseId: string) {
+  const past = new Map<string, "student" | "staff">();
+  if (userIds.length === 0) return past;
+  const inCourse = { assignment: { courseId } };
+  const [booked, marked, hosted, marker] = await Promise.all([
+    tx.booking.findMany({ where: { studentId: { in: userIds }, ...inCourse }, select: { studentId: true }, distinct: ["studentId"] }),
+    tx.evaluation.findMany({ where: { studentId: { in: userIds }, ...inCourse }, select: { studentId: true }, distinct: ["studentId"] }),
+    tx.slot.findMany({ where: { taId: { in: userIds }, ...inCourse }, select: { taId: true }, distinct: ["taId"] }),
+    tx.evaluation.findMany({ where: { evaluatorId: { in: userIds }, ...inCourse }, select: { evaluatorId: true }, distinct: ["evaluatorId"] }),
+  ]);
+  for (const r of hosted) past.set(r.taId, "staff");
+  for (const r of marker) past.set(r.evaluatorId, "staff");
+  for (const r of [...booked, ...marked]) past.set(r.studentId, "student");
+  return past;
+}
+
+/**
  * Rows that can't be added become skipped lines: admins (never course members)
- * and people whose role would clash with their role in another course.
+ * and people whose role would clash with their role here or in another course.
+ * Only call it after the actor's access is checked: the reasons name other
+ * courses.
  */
 async function screenRows(tx: Tx, courseId: string, parsed: { rows: RosterRow[]; errors: RosterError[] }) {
   const users = await tx.user.findMany({
     where: { email: { in: parsed.rows.map((r) => r.email) } },
-    select: { email: true, isAdmin: true, platformAccess: true, enrollments: { select: { courseId: true, role: true, course: { select: { code: true } } } } },
+    select: { id: true, email: true, isAdmin: true, platformAccess: true, enrollments: { select: { courseId: true, role: true, course: { select: { code: true } } } } },
   });
   const byEmail = new Map(users.map((u) => [u.email, u]));
+  const past = await pastRolesHere(
+    tx,
+    users.filter((u) => !u.enrollments.some((e) => e.courseId === courseId)).map((u) => u.id),
+    courseId,
+  );
   const rows: RosterRow[] = [];
   const errors = [...parsed.errors];
   for (const r of parsed.rows) {
@@ -145,6 +177,7 @@ async function screenRows(tx: Tx, courseId: string, parsed: { rows: RosterRow[];
       r.role,
       enrollments.filter((e) => e.courseId !== courseId).map((e) => ({ role: e.role, course: e.course.code })),
       here,
+      u ? past.get(u.id) : null,
     );
     if (!fits.ok) {
       errors.push({ line: r.line, message: `${r.email} ${fits.reason}` });
@@ -210,21 +243,23 @@ export async function addMember(actor: Actor, courseId: string, input: z.input<t
 async function importRows(actor: Actor, courseId: string, parsed: { rows: RosterRow[]; errors: RosterError[] }) {
   return db.$transaction(
     async (tx) => {
+      // Access first: the screening below names people's other courses.
+      const role = await assertStaff(tx, actor, courseId, { write: true });
       const { rows, errors } = await screenRows(tx, courseId, parsed);
       if (rows.length === 0) throw new DomainError(errors[0]?.message ?? "The list has no valid rows.");
-      await assertStaff(tx, actor, courseId, { write: true });
-      // Only admins name instructors, or change or demote one.
-      if (!actor.isAdmin) {
-        const instructorEmails = new Set(
-          (
-            await tx.enrollment.findMany({
-              where: { courseId, role: "INSTRUCTOR", user: { email: { in: rows.map((r) => r.email) } } },
-              select: { user: { select: { email: true } } },
-            })
-          ).map((e) => e.user.email),
-        );
-        if (rows.some((r) => r.role === "INSTRUCTOR" || instructorEmails.has(r.email))) assertRule(canManageInstructors(actor), "FORBIDDEN");
-      }
+      // Rows that add or change staff: only admins name instructors (from the
+      // console), and only instructors add, promote or demote TAs.
+      const current = new Map(
+        (
+          await tx.enrollment.findMany({
+            where: { courseId, user: { email: { in: rows.map((r) => r.email) } } },
+            select: { role: true, user: { select: { email: true } } },
+          })
+        ).map((e) => [e.user.email, e.role]),
+      );
+      const changes = rows.filter((r) => current.get(r.email) !== r.role).map((r) => [r.role, current.get(r.email)]);
+      if (changes.some((c) => c.includes("INSTRUCTOR"))) assertRule(canManageInstructors(actor), "FORBIDDEN");
+      if (changes.some((c) => c.includes("TA"))) assertRule(canManageTAs(role, role === "INSTRUCTOR" || (await courseHasInstructor(tx, courseId))), "FORBIDDEN");
       const course = await tx.course.findUniqueOrThrow({ where: { id: courseId } });
       const summary = { invited: 0, enrolled: 0, updated: 0, unchanged: 0 };
       // Students joining after demos opened are told what they still need to book.
@@ -246,11 +281,6 @@ async function importRows(actor: Actor, courseId: string, parsed: { rows: Roster
           // A blank section keeps the one they have: re-adding someone never wipes it.
           const section = row.section ?? existing.section;
           if (existing.role === row.role && existing.section === section) {
-            summary.unchanged++;
-            continue;
-          }
-          // Never demote yourself out of staff by accident.
-          if (user.id === actor.id && row.role === "STUDENT") {
             summary.unchanged++;
             continue;
           }
@@ -289,50 +319,69 @@ async function importRows(actor: Actor, courseId: string, parsed: { rows: Roster
  */
 export async function removeMember(actor: Actor, courseId: string, userId: string, now = new Date()) {
   return db.$transaction(async (tx) => {
-    await assertStaff(tx, actor, courseId, { write: true });
+    const role = await assertStaff(tx, actor, courseId, { write: true });
     const target = await tx.enrollment.findUnique({
       where: { courseId_userId: { courseId, userId } },
       include: { user: { select: { name: true } }, course: true },
     });
     if (!target) throw new DomainError("Member not found.", "NOT_FOUND");
-    if (target.role === "INSTRUCTOR") assertRule(canManageInstructors(actor), "FORBIDDEN");
     if (userId === actor.id) throw new DomainError("You can't remove yourself.");
-
-    let released = 0;
-    if (target.role === "STUDENT") {
-      const upcoming = await tx.booking.findMany({
-        where: { studentId: userId, status: "BOOKED", assignment: { courseId }, slot: { startsAt: { gt: now } } },
-        include: { slot: true },
-      });
-      if (upcoming.length) {
-        await tx.booking.updateMany({
-          where: { id: { in: upcoming.map((b) => b.id) } },
-          data: { status: "CANCELLED", cancelledAt: now, cancelledById: actor.id },
-        });
-        await notify(tx, [userId], {
-          type: "course.removed",
-          title: `Removed from ${target.course.code}`,
-          body: `You were removed from ${target.course.code} — ${target.course.title}, so your upcoming demo${upcoming.length === 1 ? " was" : "s were"} cancelled:\n${upcoming
-            .map((b) => fmtRange(b.slot.startsAt, b.slot.endsAt, target.course.timezone))
-            .join("\n")}`,
-        });
-        released = upcoming.length;
-      }
-    } else {
-      const hosted = await tx.slot.count({
-        where: { taId: userId, status: { not: "CANCELLED" }, startsAt: { gt: now }, assignment: { courseId } },
-      });
-      if (hosted > 0) {
-        throw new DomainError(
-          `${target.user.name} hosts ${hosted} upcoming slot${hosted === 1 ? "" : "s"}. Reassign them to another host on the assignment's Slots tab first.`,
-          "CONFLICT",
-        );
-      }
-    }
-    await tx.enrollment.delete({ where: { id: target.id } });
-    await audit(tx, actor, { action: "enrollment.remove", entityType: "Enrollment", entityId: target.id, before: target, after: { releasedBookings: released } });
-    return { released };
+    if (target.role === "INSTRUCTOR") assertRule(canManageInstructors(actor), "FORBIDDEN");
+    if (target.role === "TA") assertRule(canManageTAs(role, role === "INSTRUCTOR" || (await courseHasInstructor(tx, courseId))), "FORBIDDEN");
+    return dropEnrollment(tx, actor, target, now);
   });
+}
+
+type EnrollmentToDrop = {
+  id: string;
+  userId: string;
+  courseId: string;
+  role: CourseRole;
+  user: { name: string };
+  course: { code: string; title: string; timezone: string };
+};
+
+/**
+ * Remove an enrollment once access is checked (course roster or admin console).
+ * A student's upcoming bookings are released and they're told; staff who host
+ * upcoming slots are refused until those are handed over.
+ */
+export async function dropEnrollment(tx: Tx, actor: Actor, target: EnrollmentToDrop, now = new Date()) {
+  const { userId, courseId } = target;
+  let released = 0;
+  if (target.role === "STUDENT") {
+    const upcoming = await tx.booking.findMany({
+      where: { studentId: userId, status: "BOOKED", assignment: { courseId }, slot: { startsAt: { gt: now } } },
+      include: { slot: true },
+    });
+    if (upcoming.length) {
+      await tx.booking.updateMany({
+        where: { id: { in: upcoming.map((b) => b.id) } },
+        data: { status: "CANCELLED", cancelledAt: now, cancelledById: actor.id },
+      });
+      await notify(tx, [userId], {
+        type: "course.removed",
+        title: `Removed from ${target.course.code}`,
+        body: `You were removed from ${target.course.code} — ${target.course.title}, so your upcoming demo${upcoming.length === 1 ? " was" : "s were"} cancelled:\n${upcoming
+          .map((b) => fmtRange(b.slot.startsAt, b.slot.endsAt, target.course.timezone))
+          .join("\n")}`,
+      });
+      released = upcoming.length;
+    }
+  } else {
+    const hosted = await tx.slot.count({
+      where: { taId: userId, status: { not: "CANCELLED" }, startsAt: { gt: now }, assignment: { courseId } },
+    });
+    if (hosted > 0) {
+      throw new DomainError(
+        `${target.user.name} hosts ${hosted} upcoming slot${hosted === 1 ? "" : "s"}. Reassign them to another host on the assignment's Slots tab first.`,
+        "CONFLICT",
+      );
+    }
+  }
+  await tx.enrollment.delete({ where: { id: target.id } });
+  await audit(tx, actor, { action: "enrollment.remove", entityType: "Enrollment", entityId: target.id, before: target, after: { releasedBookings: released } });
+  return { released };
 }
 
 export async function resendInvite(actor: Actor, courseId: string, userId: string) {
