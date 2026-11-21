@@ -19,7 +19,7 @@ This chapter gathers the controls described elsewhere into one view an auditor c
   Secrets & SSM SecureStrings readable only by the ECS execution role; none in the image or the repository; Terraform state private and encrypted & \src{infra/aws/app/secrets.tf}\\
   Deploy identity & GitHub OIDC, master branch of this repository only, least-privilege role; no stored keys & \cref{ch:delivery}\\
   Email & SPF, DKIM and DMARC (\code{p=quarantine}); sending identity limited to the domain & \src{infra/aws/app/ses.tf}\\
-  Inbound mail & Only \code{support@} receives; SES spam and virus scan, failures dropped; raw messages in a private, TLS-only bucket for 30 days; the forwarder can only read that prefix and send as \code{support@}; the destination address is kept out of the repository & \src{infra/aws/app/support-mail.tf}\\
+  Support mail & Slotty's AWS account receives no mail; \code{support@msaeedsaeedi.com} is forwarded by Cloudflare Email Routing to the owner's inbox & ADR-021\\
   Public surface & Only \route{/} (landing, no data beyond the session check) and \route{/privacy} are public content; \code{robots.txt} keeps everything else out of search engines; unauthenticated visits aren't tracked & \src{src/app/page.tsx}, \src{src/app/robots.ts}\\
   Application access & Every service checks the actor's role per course; archived courses read-only; admins never course members & \cref{ch:rules}\\
   Accounts & Argon2 password hashes, database sessions (30 days), reset links valid 2 hours, invites 14 days, silent success on unknown emails & \cref{ch:rules}\\

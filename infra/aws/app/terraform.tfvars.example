@@ -2,9 +2,6 @@
 account_role_arn = "arn:aws:iam::<slotty-prod account id>:role/OrganizationAccountAccessRole"
 alert_email      = "you@example.com"
 
-# Where support@<domain> is forwarded (leave empty for no inbound mail).
-support_forward_to = ""
-
 # Set to true after CI has pushed the first image.
 launch = false
 

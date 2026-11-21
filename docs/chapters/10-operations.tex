@@ -71,15 +71,11 @@ fixing the cause. Rotate the SMTP credentials with
 \code{terraform apply -replace=aws_iam_access_key.ses_smtp}, then redeploy.
 
 \subsection{Support mail is not arriving}
-Mail to \code{support@} is forwarded by \code{slotty-support-forwarder} (\cref{sec:aws-email}).
-Its log group \code{/aws/lambda/slotty-support-forwarder} has one line per message:
-\code{forwarded} or \code{dropped} (spam or virus verdict). No line at all means SES didn't
-receive it: check the MX record (\code{dig MX slotty.msaeedsaeedi.com}) and that the
-\code{slotty} receipt rule set is the active one. A send error after two retries arrives as an
-SNS email to the alert address; a bounce at the destination arrives the same way. Raw messages
-stay in \code{slotty-support-mail-<account>/support/} for 30 days, so a lost message can be
-read from there. Change the destination with \tfvar{support_forward_to} and a reviewed
-\code{terraform apply}.
+\code{support@msaeedsaeedi.com} is not handled by Slotty or its AWS account: Cloudflare Email
+Routing on the \code{msaeedsaeedi.com} zone forwards it to the owner's inbox (ADR-021). In the
+Cloudflare dashboard, check \ui{Email} \textrightarrow{} \ui{Email Routing}: the rule for
+\code{support@}, that the destination address is still verified, and the activity log, which
+shows each message as forwarded, dropped or rejected.
 
 \subsection{Usage data looks wrong or empty}
 \route{/platform/insights} says so when \envvar{ANALYTICS_SECRET} isn't set on the web tasks (check

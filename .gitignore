@@ -71,6 +71,3 @@ infra/aws/**/terraform.tfvars
 
 # Documentation build output (bun run docs:build)
 /docs/build/
-
-# Terraform-built Lambda bundles
-infra/aws/**/.build/

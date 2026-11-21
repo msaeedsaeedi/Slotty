@@ -1,8 +1,9 @@
 /**
  * Public facts about this Slotty deployment, shown on the landing page, the sign-in pages and in
- * invite emails. The support address forwards to the product owner (infra/aws/app/support-mail.tf).
+ * invite emails. The support address is forwarded to the product owner's inbox by Cloudflare Email
+ * Routing on msaeedsaeedi.com (ADR-021), outside this repository.
  */
-export const SUPPORT_EMAIL = "support@slotty.msaeedsaeedi.com";
+export const SUPPORT_EMAIL = "support@msaeedsaeedi.com";
 
 /** The university this deployment serves. */
 export const INSTITUTION = "FAST-NUCES";

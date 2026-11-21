@@ -251,18 +251,20 @@ Add one for every deliberate trade-off.
    library (none is installed; CSS covers it).}
   {Slotty serves more than one university, or the page needs content managed by non-developers.}
 
-\adr{021}{Support mail through SES receiving and a Lambda forwarder}{2026-11-20}{Accepted}
-  {The landing and sign-in pages need a support address on Slotty's own domain. The domain is a
-   subdomain delegated to Route 53, so the parent domain's mail forwarding doesn't reach it, and
-   the budget rules out a hosted mailbox.}
-  {\code{support@} is received by SES (spam and virus scan), stored in S3 for 30 days, and
-   re-sent by a small Lambda function from \code{support@} to one personal inbox, with the
-   sender in \code{Reply-To} (\cref{sec:aws-email}). The destination is a Terraform variable
-   kept out of the repository.}
-  {About \$0.05 a month. Replies go out from the personal inbox, not from \code{support@}. Only
-   one receipt rule set can be active per account and region, so any future inbound mail adds
-   rules to \code{slotty}. Rejected: a hosted mailbox such as WorkMail (\$4 per user per month),
-   an external forwarding service (a third party reading support mail, and MX records it
-   controls), SES Mail Manager (an ingress endpoint billed by the hour).}
-  {Several people answer support, or replies need to come from \code{support@}: move to a shared
-   mailbox or a help-desk tool.}
+\adr{021}{Support mail through Cloudflare Email Routing}{2026-11-21}{Accepted}
+  {The landing and sign-in pages need a support address. Slotty's subdomain is delegated to
+   Route 53, so Cloudflare (which serves the parent domain) can't route mail for it. SES can
+   receive mail for the subdomain but can't forward it: that needs a Lambda function that re-sends
+   each message, about fifteen resources to own for one inbox. The owner only needs to receive
+   mail and reply from their own address.}
+  {Use \code{support@msaeedsaeedi.com} on the parent domain, forwarded by Cloudflare Email
+   Routing (free) to the owner's inbox. Replies come from the owner's own address. Nothing in
+   this repository or the AWS account handles inbound mail; \src{src/lib/site.ts} holds the
+   address.}
+  {The address isn't on the Slotty subdomain, and its routing lives in the Cloudflare dashboard,
+   not in Terraform (\cref{ch:ops} says where to look). Rejected: SES receiving with a Lambda
+   forwarder (built, then dropped as more than one inbox needs), a hosted mailbox (a per-user
+   monthly cost), moving the subdomain's DNS back to Cloudflare (every Slotty record would have to
+   move).}
+  {Several people answer support, or replies must come from \code{support@}: add a mailbox with
+   its MX, SPF and DKIM records on the domain that holds the address.}
