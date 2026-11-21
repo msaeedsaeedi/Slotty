@@ -21,7 +21,7 @@ export async function createRequest(actor: Actor, assignmentId: string, input: z
   const data = requestInput.parse(input);
   return db.$transaction(async (tx) => {
     const { assignment } = await assertAssignmentRole(tx, actor, assignmentId, ["STUDENT"]);
-    assertCourseWritable(assignment.course);
+    assertCourseWritable(actor, assignment.course);
     const open = await tx.studentRequest.findFirst({ where: { assignmentId, studentId: actor.id, kind: data.kind, status: "OPEN" } });
     if (open) throw new DomainError("You already have an open request — staff will reply to that one.", "CONFLICT");
 
@@ -57,7 +57,7 @@ export async function resolveRequest(actor: Actor, requestId: string, decision: 
     const request = await tx.studentRequest.findUnique({ where: { id: requestId }, include: { assignment: { include: { course: true } } } });
     if (!request) throw new DomainError("Request not found.", "NOT_FOUND");
     await assertCourseRole(tx, actor, request.assignment.courseId, STAFF);
-    assertCourseWritable(request.assignment.course);
+    assertCourseWritable(actor, request.assignment.course);
     if (request.status !== "OPEN") throw new DomainError("This request has already been answered.");
     if (decision === "DECLINED" && !response.trim()) throw new DomainError("Tell the student why.");
     await tx.studentRequest.update({
@@ -102,7 +102,8 @@ export async function listRequests(actor: Actor, courseId: string, status: "OPEN
   return requests.map((r) => ({ ...r, currentBooking: byStudent.get(key(r.assignmentId, r.studentId)) ?? null }));
 }
 
-export function openRequestCount(courseId: string) {
+export async function openRequestCount(actor: Actor, courseId: string) {
+  await assertCourseRole(db, actor, courseId, STAFF);
   return db.studentRequest.count({ where: { status: "OPEN", assignment: { courseId } } });
 }
 

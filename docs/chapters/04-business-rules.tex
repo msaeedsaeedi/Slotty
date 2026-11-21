@@ -193,17 +193,46 @@ Limits: push arrives even when the app is closed, but the device needs a connect
 
 \begin{itemize}
   \item Every service takes an \code{Actor} and checks the role itself: \code{assertCourseRole}, \code{assertStaff}, \code{assertAdmin}, \code{assertPlatform}.
-  \item \textbf{One kind of staff per person; students are never instructors.} A TA can be a student elsewhere, but an instructor is never a TA or a student in any course, and a TA or student is never an instructor, not even by promotion in their own course (\code{canTakeRole}, \src{src/domain/roles.ts}). Imports skip such rows with a reason; other paths refuse.
-  \item \textbf{Only admins name instructors} (\code{canManageInstructors}). Adding, changing, demoting or removing an instructor (\ui{Add someone}, CSV import, \ui{Remove}) is refused for everyone else, instructors included; the role list and import help show \code{instructor} only to admins. Admins add instructors from the console (\ui{New course}, \ui{Assign staff}).
+  \item \textbf{One kind of staff per person; students are never instructors.} A TA can be a student elsewhere, but an instructor is never a TA or a student in any course, and a TA or student is never an instructor (\code{canTakeRole}, \src{src/domain/roles.ts}). Imports skip such rows with a reason; other paths refuse.
+  \item \textbf{Nobody switches between student and staff in a course} (\code{canTakeRole}, ADR-025). A student there can't be made a TA or instructor, and staff can't be made students, by anyone, admins included. Removing and re-adding doesn't get round it: someone who booked or was marked in the course can't join it as staff, and someone who hosted or marked demos in it can't join as a student (\code{pastRolesHere}).
+  \item \textbf{Only admins name instructors} (\code{canManageInstructors}), from the console (\ui{New course}, \ui{Assign staff}, \ui{Remove staff member}). Adding, changing, demoting or removing an instructor from inside a course is refused for everyone.
+  \item \textbf{Only instructors manage TAs} (\code{canManageTAs}, ADR-025). TAs add and remove students only. In a course without an instructor, co-TAs are added and removed by an admin from the console. \ui{Add someone} offers \ui{TA} only to instructors, and the import help and template follow. Re-importing a TA unchanged isn't a change and is allowed.
   \item \textbf{Self-service courses are run by a TA} (\code{canCreateCourse}). \route{/courses/new} always makes the creator the course's TA; there is no role choice, and the server ignores one. It is open to TAs and to new staff who aren't in any course yet; students (in a course, TA nowhere) and instructors (who can't also be TAs) are refused, and \ui{New course} is hidden for them.
-  \item \textbf{The instructor manages the course; a TA only when there is none} (\code{canManageCourse}, \code{assertCourseManager}). Course details and archiving need it; \ui{Settings} is hidden otherwise. Admins count as instructors.
-  \item \textbf{Admins are only admins.} They count as instructors in any course (to manage it), but are never enrolled: roster imports skip admin emails, \ui{Assign staff} and \ui{Add someone} refuse them, they can't create a course for themselves (they create it from the console and name its instructor or TA), and a course member can't be made admin.
-  \item Nobody can remove themselves or demote themselves through a CSV import. Adding someone already in the course with a blank section keeps their section (a blank never wipes it), and says they're already there.
+  \item \textbf{The instructor manages the course; a TA only when there is none} (\code{canManageCourse}, \code{assertCourseManager}). Course details and archiving need it; \ui{Settings} is hidden otherwise.
+  \item \textbf{Admins read courses but never change them} (\code{canChangeCourseData}, ADR-025). They open any course's pages as if they were its instructor (``Viewing as admin'', with a read-only note), but every change is refused: marks, bookings, slots, requests, venues, assignments, roster, settings and archiving. \code{assertCourseWritable(actor, course)} applies it, with the archived check, to every mutation. They are never enrolled either: roster imports skip admin emails, \ui{Assign staff} and \ui{Add someone} refuse them, they can't create a course for themselves (they create it from the console and name its instructor or TA), and a course member can't be made admin.
+  \item \textbf{Access before data.} A roster import or preview checks the caller's access before it screens the rows, since skip reasons name people's other courses. Staff-only counts and lists (\code{listCourseStaff}, \code{openRequestCount}, \code{pendingReviewCount}, \code{markingSheetFocus}) check access themselves rather than relying on the page.
+  \item Nobody can remove themselves, and nobody can be demoted from staff to student (above). Adding someone already in the course with a blank section keeps their section (a blank never wipes it), and says they're already there.
   \item \textbf{Archived courses are read-only.} Mutations pass \code{{ write: true }} to \code{assertCourseRole} / \code{assertStaff} / \code{assertAssignmentRole}, or call \code{assertCourseWritable}. Only restoring the course is allowed.
   \item Removing a student cancels their upcoming bookings and notifies them. Removing staff is refused while they host upcoming slots.
   \item Admins disabling an account can also release that user's upcoming bookings.
   \item \textbf{Platform accounts are only platform accounts} (\code{User.platformAccess}, \code{canGrantPlatform}). Usage insights and feedback need \code{assertPlatform}, which refuses admins (and any record with both flags). Access is granted only by \src{src/jobs/platform-access.ts}, which refuses admins, course members and inactive accounts; \src{src/jobs/create-admin.ts} refuses platform accounts. Platform accounts are never enrolled (roster imports skip them, \ui{Assign staff} and course creation refuse them, \code{assertCanJoinCourses}), and the admin console doesn't list, count, open or change them; their activity and \code{platform.*} entries are left out of the admin audit log.
 \end{itemize}
+
+\subsection*{Permission matrix}
+
+What each role may do in a course (\code{assertCourseRole} and the rules above). ``Own'' means
+the actor's own bookings, slots or requests. Admins and platform accounts are never enrolled;
+platform accounts see no course at all.
+
+{\tablefont
+\begin{xltabular}{\linewidth}{@{}L c c c c@{}}
+  \toprule
+  \thead{Action} & \thead{Instructor} & \thead{TA} & \thead{Student} & \thead{Admin}\\
+  \midrule
+  Open the course's pages, roster, slots, marks and requests & yes & yes & own view & read\\
+  Book, reschedule, cancel; join the waitlist; ask a question & -- & -- & own & --\\
+  Course details and archiving & yes & without instructor & -- & console\\
+  Add or remove students & yes & yes & -- & --\\
+  Add, promote, demote or remove TAs & yes & -- & -- & console\\
+  Add, change or remove instructors & -- & -- & -- & console\\
+  Switch someone between student and staff & -- & -- & -- & --\\
+  Assignments, venues, and slots for any host & yes & yes, slots for self & -- & --\\
+  Mark attendance, place or cancel students' bookings, grant exceptions & yes & yes & -- & --\\
+  Mark and submit evaluations & yes & yes & -- & --\\
+  Review, finalize and unlock marks & yes & unlock without instructor & -- & --\\
+  Answer students' requests & yes & yes & -- & --\\
+  \bottomrule
+\end{xltabular}}
 
 \section{Accounts}
 

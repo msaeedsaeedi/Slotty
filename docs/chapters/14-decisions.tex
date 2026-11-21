@@ -339,3 +339,32 @@ Add one for every deliberate trade-off.
    launch).}
   {More than one maintainer merges regularly (add required reviews and a merge queue), or a
    staging environment fits the budget (deploy \code{master} there and releases to production).}
+
+\adr{025}{Admins read courses; only instructors manage TAs; nobody switches between student and staff in a course}{2026-11-21}{Accepted; narrows ADR-019: admins no longer act as instructors, TAs no longer manage TAs}
+  {The role audit for issue \#8 found that admins counted as instructors in every course, so they
+   could mark, release and review marks, move and cancel students' bookings and change slots, all
+   from inside the course. A TA could add, promote, demote and remove other TAs, so one TA could
+   give anyone access to a course's marks. Staff could also turn a student into a TA in the same
+   course (who would then see classmates' marks) or a TA into a student, and removing and
+   re-adding someone did the same. And a roster import screened its rows, with reasons naming
+   people's other courses, before it checked the caller's access. Slotty has one admin and about
+   20 real users in its pilot.}
+  {\code{canChangeCourseData}: admins open and read any course (``Viewing as admin'', with a
+   read-only note) but every change is refused; \code{assertCourseWritable} applies it to every
+   mutation, together with the archived check. Staff changes and archiving for admins live in
+   the console (\ui{Assign staff}, the new \ui{Remove staff member}, \ui{Archive}).
+   \code{canManageTAs}: only a course's instructors add, promote, demote or remove TAs; in a course
+   without an instructor, only an admin, from the console. \code{canTakeRole} refuses any change
+   between student and staff within a course, and, through \code{pastRolesHere}, adding as staff
+   someone who booked or was marked there (or as a student someone who hosted or marked there).
+   Imports check access before screening. Staff-only counts and lists check access themselves.}
+  {An admin who wants to fix a mark, a booking or a slot asks the course's staff instead, and an
+   admin's stolen password can no longer change marks directly (it can still name an instructor,
+   which the audit log records). TA-run courses need an admin for every co-TA. Someone who moves
+   from student to TA in a course has to be added to a new course instead. No schema change, so
+   the previous release keeps working. Rejected: keeping admins as instructors (wide blast radius
+   for the one account without two-factor sign-in, \#37), admins managing setup but not marks
+   (still two paths to the same data), letting TA-run courses' TAs add co-TAs (one TA could open
+   the course to anyone), allowing promotion only without history (more rules for a rare case).}
+  {There are several admins with a support rota that needs to act inside courses (add an audited
+   ``act as instructor'' step), or departments want TAs to manage co-TAs.}

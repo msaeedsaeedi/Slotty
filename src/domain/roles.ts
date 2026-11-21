@@ -6,11 +6,31 @@ export type CourseRole = "INSTRUCTOR" | "TA" | "STUDENT";
  * Which course roles one person may hold across courses. A TA can be a student
  * in another course, but an instructor is never a TA or a student anywhere (and
  * a TA or student never an instructor). `elsewhere` is the person's roles in
- * their other courses; `current` is their role in this course, if any, since a
- * student here can't be promoted to instructor either.
+ * their other courses; `current` is their role in this course, if any.
+ *
+ * Within one course nobody moves between student and staff, in either
+ * direction: a promoted student would see their classmates' marks, and a
+ * demoted TA would be marked by colleagues. `pastHere` closes the same gap for
+ * someone removed and added back: "student" if they booked or were marked in
+ * this course, "staff" if they hosted or marked demos in it.
  */
-export function canTakeRole(role: CourseRole, elsewhere: { role: CourseRole; course: string }[], current?: CourseRole | null): RuleResult {
+export function canTakeRole(
+  role: CourseRole,
+  elsewhere: { role: CourseRole; course: string }[],
+  current?: CourseRole | null,
+  pastHere?: "student" | "staff" | null,
+): RuleResult {
   if (role === "INSTRUCTOR" && current === "STUDENT") return deny("is a student in this course, and students can't be instructors.");
+  if (current && (current === "STUDENT") !== (role === "STUDENT")) {
+    return current === "STUDENT"
+      ? deny("is a student in this course, and students can't become staff in the same course.")
+      : deny("is staff in this course, and staff can't become students in the same course.");
+  }
+  if (!current && pastHere && (pastHere === "student") !== (role === "STUDENT")) {
+    return pastHere === "student"
+      ? deny("was a student in this course (bookings or marks), so can't join it as staff.")
+      : deny("has hosted or marked demos in this course, so can't join it as a student.");
+  }
   const clash = elsewhere.find(
     (e) => (role === "INSTRUCTOR" && e.role !== "INSTRUCTOR") || (e.role === "INSTRUCTOR" && role !== "INSTRUCTOR"),
   );
@@ -30,7 +50,30 @@ export function canTakeRole(role: CourseRole, elsewhere: { role: CourseRole; cou
  * (instructors included) manage students and TAs.
  */
 export function canManageInstructors(actor: { isAdmin: boolean }): RuleResult {
-  return actor.isAdmin ? allow : deny("Only a Slotty admin can add, change or remove instructors.");
+  return actor.isAdmin ? allow : deny("Only a Slotty admin can add, change or remove instructors (under Administration → Courses).");
+}
+
+/**
+ * Who may add, change or remove a TA inside a course: its instructors. TAs
+ * manage students only, and in a course without an instructor co-TAs are
+ * added and removed by an admin from the console.
+ */
+export function canManageTAs(role: CourseRole | null, hasInstructor: boolean): RuleResult {
+  if (role === "INSTRUCTOR") return allow;
+  return deny(
+    hasInstructor
+      ? "Only the course instructor can add, change or remove TAs."
+      : "Only a Slotty admin can add, change or remove TAs in a course without an instructor.",
+  );
+}
+
+/**
+ * Admins moderate: they can open any course and read it, but never change
+ * course data (marks, bookings, slots, roster, settings) from inside it. Staff
+ * and archiving are handled from the admin console.
+ */
+export function canChangeCourseData(actor: { isAdmin: boolean }): RuleResult {
+  return actor.isAdmin ? deny("Admins view courses read-only. Staff and archiving are managed under Administration → Courses.") : allow;
 }
 
 /**
@@ -49,7 +92,8 @@ export function canCreateCourse(actor: { isAdmin: boolean; isPlatform?: boolean 
 
 /**
  * Who runs a course (settings, archive): its instructors, or its TAs when it
- * has no instructor. Admins count as instructors.
+ * has no instructor. Admins can read the settings but not change them
+ * (`canChangeCourseData`).
  */
 export function canManageCourse(role: CourseRole | null, hasInstructor: boolean): RuleResult {
   if (role === "INSTRUCTOR") return allow;

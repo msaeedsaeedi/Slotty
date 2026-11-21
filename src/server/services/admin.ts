@@ -3,7 +3,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { DomainError } from "@/domain/result";
 import { db, type Tx } from "@/server/db";
 import { canTakeRole } from "@/domain/roles";
-import { courseInput, rolesElsewhere } from "./courses";
+import { courseInput, dropEnrollment, pastRolesHere, rolesElsewhere } from "./courses";
 import { signalOutbox } from "@/server/outbox-signal";
 import { issueInvite, requestPasswordReset } from "./accounts";
 import { assertAdmin, assertCanJoinCourses, STAFF, type Actor } from "./access";
@@ -346,7 +346,8 @@ async function assignStaff(tx: Tx, actor: Actor, course: { id: string; code: str
   if (user) assertCanJoinCourses(user);
   if (user) {
     const here = await tx.enrollment.findUnique({ where: { courseId_userId: { courseId, userId: user.id } }, select: { role: true } });
-    const fits = canTakeRole(data.role, await rolesElsewhere(tx, user.id, courseId), here?.role);
+    const past = here ? null : (await pastRolesHere(tx, [user.id], courseId)).get(user.id);
+    const fits = canTakeRole(data.role, await rolesElsewhere(tx, user.id, courseId), here?.role, past);
     if (!fits.ok) throw new DomainError(`${user.name} ${fits.reason}`);
   }
   if (!user) {
@@ -369,6 +370,23 @@ async function assignStaff(tx: Tx, actor: Actor, course: { id: string; code: str
     after: { userId: user.id, email: user.email, role: data.role },
   });
   return { invited: user.status === "INVITED", name: user.name };
+}
+
+/**
+ * Remove an instructor or TA from a course. Admins don't change course data
+ * from inside courses, so this is the one place staff are taken off; students
+ * are removed by the course's own staff.
+ */
+export async function adminRemoveStaff(actor: Actor, courseId: string, userId: string, now = new Date()) {
+  assertAdmin(actor);
+  return db.$transaction(async (tx) => {
+    const target = await tx.enrollment.findUnique({
+      where: { courseId_userId: { courseId, userId } },
+      include: { user: { select: { name: true } }, course: true },
+    });
+    if (!target || target.role === "STUDENT") throw new DomainError("Staff member not found.", "NOT_FOUND");
+    return { ...(await dropEnrollment(tx, actor, target, now)), name: target.user.name };
+  });
 }
 
 const inviteInput = z.object({
