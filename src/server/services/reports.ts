@@ -2,6 +2,7 @@ import { toSafeCsv } from "@/lib/csv";
 import { fmtData } from "@/lib/time";
 import { db } from "@/server/db";
 import { assertAssignmentRole, assertCourseRole, STAFF, type Actor } from "./access";
+import { audit } from "./audit";
 import { listAssignmentRoster } from "./evaluations";
 
 export interface AssignmentProgress {
@@ -118,5 +119,7 @@ export async function exportAssignmentCsv(actor: Actor, assignmentId: string): P
     evaluation?.feedback ?? "",
   ]);
   const csv = toSafeCsv(headers, rows);
+  // Exports carry every student's marks out of Slotty, so who took which one is recorded.
+  await audit(db, actor, { action: "report.export", entityType: "Assignment", entityId: assignmentId, after: { format: "csv", students: rows.length } });
   return { filename: `${safe(assignment.course.code)}-${safe(assignment.title)}.csv`, csv };
 }

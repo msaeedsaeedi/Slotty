@@ -124,6 +124,11 @@ async function writeEvaluation(
     assertRule(checkReason(data.overrideNote, { missing: "Add a note explaining the total override." }), "INVALID", "overrideNote");
   }
 
+  const before = await tx.evaluation.findUniqueOrThrow({
+    where: { id: evaluation.id },
+    select: { totalMarks: true, totalOverride: true, overrideNote: true, feedback: true, privateNotes: true, scores: { select: { criterionId: true, points: true, comment: true } } },
+  });
+
   await tx.evaluationScore.deleteMany({ where: { evaluationId: evaluation.id } });
   if (data.scores.length) {
     await tx.evaluationScore.createMany({ data: data.scores.map((s) => ({ ...s, evaluationId: evaluation.id })) });
@@ -139,6 +144,22 @@ async function writeEvaluation(
       evaluatorId: actor.id,
     },
   });
+
+  // Every change to marks is audited (drafts, autosaves, edits after unlock), but only when
+  // something changed. Private notes are recorded as edited, never their text.
+  const snapshot = (e: { totalMarks: number | null; totalOverride: boolean; overrideNote: string | null; feedback: string | null; scores: { criterionId: string; points: number; comment: string | null }[] }) => ({
+    total: e.totalMarks,
+    totalOverride: e.totalOverride,
+    overrideNote: e.overrideNote ?? null,
+    feedback: e.feedback ?? null,
+    scores: Object.fromEntries([...e.scores].sort((a, b) => a.criterionId.localeCompare(b.criterionId)).map((s) => [s.criterionId, { points: s.points, comment: s.comment ?? null }])),
+  });
+  const was = snapshot(before);
+  const now = snapshot({ totalMarks: total, totalOverride: data.totalOverride, overrideNote: data.overrideNote ?? null, feedback: data.feedback ?? null, scores: data.scores.map((s) => ({ criterionId: s.criterionId, points: s.points, comment: s.comment ?? null })) });
+  const privateNotesEdited = (before.privateNotes ?? null) !== (data.privateNotes ?? null);
+  if (JSON.stringify(was) !== JSON.stringify(now) || privateNotesEdited) {
+    await audit(tx, actor, { action: "evaluation.write", entityType: "Evaluation", entityId: evaluation.id, before: was, after: { ...now, ...(privateNotesEdited ? { privateNotesEdited: true } : {}) } });
+  }
   return total;
 }
 

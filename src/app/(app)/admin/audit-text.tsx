@@ -41,6 +41,8 @@ const VERBS: Record<string, string> = {
   "evaluation.finalize": "finalized marks",
   "evaluation.return": "returned marks",
   "evaluation.unlock": "unlocked marks",
+  "evaluation.write": "changed marks",
+  "report.export": "exported marks for",
   "request.resolved": "handled a request",
   "request.declined": "declined a request",
 };
@@ -53,6 +55,7 @@ export const AUDIT_AREAS = [
   ["slot", "Slots"],
   ["booking", "Bookings"],
   ["evaluation", "Marks"],
+  ["report", "Exports"],
   ["request", "Requests"],
   ["email", "Email"],
 ] as const;
