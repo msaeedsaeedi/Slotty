@@ -263,6 +263,8 @@ async function importRows(actor: Actor, courseId: string, parsed: { rows: Roster
       if (changes.some((c) => c.includes("TA"))) assertRule(canManageTAs(role, role === "INSTRUCTOR" || (await courseHasInstructor(tx, courseId))), "FORBIDDEN");
       const course = await tx.course.findUniqueOrThrow({ where: { id: courseId } });
       const summary = { invited: 0, enrolled: 0, updated: 0, unchanged: 0 };
+      // Per person, by account id: who was added or had their role or section changed.
+      const changed: { userId: string; change: "added" | "updated"; role: string; section: string | null; previousRole?: string; previousSection?: string | null }[] = [];
       // Students joining after demos opened are told what they still need to book.
       const open = await tx.assignment.findMany({ where: { courseId, status: "PUBLISHED" }, select: { title: true }, orderBy: { createdAt: "asc" } });
       const openNote = open.length
@@ -286,11 +288,13 @@ async function importRows(actor: Actor, courseId: string, parsed: { rows: Roster
             continue;
           }
           await tx.enrollment.update({ where: { id: existing.id }, data: { role: row.role, section } });
+          changed.push({ userId: user.id, change: "updated", role: row.role, section, previousRole: existing.role, previousSection: existing.section });
           summary.updated++;
           continue;
         }
         assertCanJoinCourses(user);
         await tx.enrollment.create({ data: { courseId, userId: user.id, role: row.role, section: row.section } });
+        changed.push({ userId: user.id, change: "added", role: row.role, section: row.section });
         summary.enrolled++;
         const context = `${actor.name} added you to ${course.code} — ${course.title} (${course.term}) as ${row.role.toLowerCase()}.${
           row.role === "STUDENT" ? openNote : ""
@@ -307,7 +311,7 @@ async function importRows(actor: Actor, courseId: string, parsed: { rows: Roster
           });
         }
       }
-      await audit(tx, actor, { action: "roster.import", entityType: "Course", entityId: courseId, after: summary });
+      await audit(tx, actor, { action: "roster.import", entityType: "Course", entityId: courseId, after: { ...summary, changes: changed } });
       return { ...summary, errors };
     },
     { timeout: 60_000 },

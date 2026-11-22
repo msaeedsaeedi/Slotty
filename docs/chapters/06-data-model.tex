@@ -17,7 +17,7 @@ The schema has 27 models and 12 enums in \src{prisma/schema.prisma}; migrations 
   Booking & \code{Booking} (reminder claims: \code{reminder24hAt}, \code{reminder1hAt}, \code{reminderMorningAt}, \code{reminder10mAt}), \code{BookingAllowance}, \code{WaitlistEntry}, \code{StudentRequest}\\
   Evaluation & \code{Evaluation}, \code{EvaluationScore}\\
   Messaging & \code{Notification}, \code{EmailOutbox}, \code{PushMessage}\\
-  Audit & \code{AuditLog} (append-only: a trigger refuses \code{UPDATE} and \code{DELETE})\\
+  Audit & \code{AuditLog} (append-only: a trigger refuses \code{UPDATE} and \code{DELETE}; \code{before}/\code{after} hold JSON snapshots, people by account id)\\
   Usage and feedback & \code{AnalyticsEvent} (raw, 90 days), \code{AnalyticsDaily} (daily totals, 13 months), \code{Feedback}, \code{SurveyResponse}, \code{SurveyPrompt}; \code{User.shareUsageData}, \code{User.platformAccess}\\
   Preferences & \code{User.emailReminders}, \code{User.emailAgenda}, \code{User.remindMorning}, \code{User.remind10m}, \code{User.timeFormat}\\
   \bottomrule
