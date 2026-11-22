@@ -334,33 +334,25 @@ export async function submitEvaluations(actor: Actor, evaluationIds: string[]) {
 }
 
 /**
- * Tell the student their marks, with the full breakdown so the email stands on
- * its own. Marks released again after a correction say so and show the change.
+ * Tell the student their marks are out. The email and push say only that, with a link: marks,
+ * rubric scores and feedback stay in Slotty, behind sign-in, and never sit in an inbox, a lock
+ * screen or the outbox (#33). Marks released again after a correction say so.
  */
 async function announceMarks(tx: Tx, evaluation: { id: string; studentId: string; assignmentId: string; assignment: { title: string; courseId: string } }) {
   const ev = await tx.evaluation.findUniqueOrThrow({
     where: { id: evaluation.id },
-    include: { scores: { include: { criterion: true } }, assignment: { include: { course: { select: { code: true } } } } },
+    include: { assignment: { include: { course: { select: { code: true } } } } },
   });
   const lastUnlock = await tx.auditLog.findFirst({ where: { action: "evaluation.unlock", entityId: ev.id }, orderBy: { createdAt: "desc" } });
   // A correction made before the student saw the first release is just the release: one item, final marks.
   const unlock = lastUnlock && !(await unseenEarlier(tx, ev.studentId, marksKey(ev.id))) ? lastUnlock : null;
-  const before = (unlock?.before as { totalMarks?: number | null } | null)?.totalMarks;
-  const { title, maxMarks, course } = ev.assignment;
-  const rubric = ev.scores
-    .sort((a, b) => a.criterion.order - b.criterion.order)
-    .map((s) => `• ${s.criterion.label}: ${s.points}/${s.criterion.maxPoints}${s.comment ? ` — ${s.comment}` : ""}`);
-  const summary = [
-    `Total: ${ev.totalMarks ?? "–"} / ${maxMarks}${unlock && before != null && before !== ev.totalMarks ? ` (was ${before})` : ""}`,
-    ...(rubric.length ? ["", ...rubric] : []),
-    ...(ev.feedback ? ["", `Feedback: ${ev.feedback}`] : []),
-  ].join("\n");
+  const { title, course } = ev.assignment;
   await notify(tx, [ev.studentId], {
     type: unlock ? "evaluation.updated" : "evaluation.finalized",
     title: unlock ? `Marks updated: ${title}` : `Marks released: ${title}`,
     body: unlock
-      ? `Your marks for ${course.code} — ${title} were corrected.\n\n${summary}`
-      : `Your ${course.code} demo for ${title} has been marked.\n\n${summary}`,
+      ? `Your marks for ${course.code} — ${title} were corrected. Open Slotty to see them.`
+      : `Your marks for ${course.code} — ${title} are released. Open Slotty to see them and the feedback.`,
     link: `/courses/${ev.assignment.courseId}/assignments/${ev.assignmentId}`,
     groupKey: marksKey(ev.id),
     // Held briefly so a quick correction replaces it instead of sending two emails.
