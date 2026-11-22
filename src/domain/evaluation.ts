@@ -137,3 +137,15 @@ export function canChangeMarkedBooking(evaluation: { status: EvaluationStatus; t
   }
   return deny("they already have marks for this demo. Clear the marks on their student page first.");
 }
+
+/**
+ * Who may read a private note on an evaluation (ADR-031): its author, and the course's enrolled
+ * instructors. `enrolledRole` is the viewer's own enrollment in the course, not the role an
+ * admin is read as (`courseRoleOf`), so admins never read notes. A note without an author
+ * (written before notes had one) is for the instructors only.
+ */
+export function canReadPrivateNote(note: { authorId: string | null }, viewer: { id: string; enrolledRole: "INSTRUCTOR" | "TA" | "STUDENT" | null }): RuleResult {
+  if (viewer.enrolledRole === "INSTRUCTOR") return allow;
+  if (viewer.enrolledRole === "TA" && note.authorId === viewer.id) return allow;
+  return deny("Private notes are for their author and the course instructors only.");
+}

@@ -9,6 +9,7 @@ import { ActionForm, SubmitButton } from "@/components/action-form";
 import { useOnline } from "@/components/pwa";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PrivateNotes, type VisibleNote } from "@/components/private-notes";
 import { Textarea } from "@/components/ui/textarea";
 import { formatLeft, formatUntil } from "@/domain/demo-day";
 import { hasMarkPrecision, MARK_DECIMALS } from "@/domain/evaluation";
@@ -34,7 +35,8 @@ export interface SheetRow {
     totalOverride: boolean;
     overrideNote: string | null;
     feedback: string | null;
-    privateNotes: string | null;
+    /** The notes this viewer may read; theirs (editable here) is `mine`. */
+    notes: VisibleNote[];
     noBookingReason: string | null;
     earlyMarkReason: string | null;
     reviewComment: string | null;
@@ -104,7 +106,7 @@ function draftOf(r: SheetRow): Draft {
   return {
     points: Object.fromEntries((e?.scores ?? []).map((s) => [s.criterionId, String(s.points)])),
     feedback: e?.feedback ?? "",
-    privateNotes: e?.privateNotes ?? "",
+    privateNotes: e?.notes.find((n) => n.mine)?.body ?? "",
     total: e?.totalMarks?.toString() ?? "",
     noBookingReason: "",
     earlyMarkReason: "",
@@ -511,10 +513,13 @@ export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, embedd
               <span className="font-medium">Feedback for the student</span>
               <Textarea id="feedback" rows={2} value={d.feedback} onChange={(e) => edit(current, { feedback: e.target.value })} maxLength={5000} />
             </label>
-            <label className="space-y-1 text-sm">
-              <span className="font-medium">Private note</span> <span className="text-xs text-muted-foreground">(staff only)</span>
-              <Textarea rows={2} value={d.privateNotes} onChange={(e) => edit(current, { privateNotes: e.target.value })} maxLength={5000} />
-            </label>
+            <div className="space-y-2">
+              <label className="block space-y-1 text-sm">
+                <span className="font-medium">Your private note</span> <span className="text-xs text-muted-foreground">(only you and the course instructors see it)</span>
+                <Textarea rows={2} value={d.privateNotes} onChange={(e) => edit(current, { privateNotes: e.target.value })} maxLength={5000} />
+              </label>
+              <PrivateNotes notes={row.evaluation?.notes ?? []} skipMine />
+            </div>
           </div>
         </fieldset>
 

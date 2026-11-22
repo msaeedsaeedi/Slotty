@@ -480,3 +480,23 @@ Add one for every deliberate trade-off.
    would take the site down).}
   {Users notice outages from single-task restarts, or \#65's review finds a better shape.}
 
+\adr{031}{Private notes belong to their author; admins don't read them}{2026-11-22}{Accepted}
+  {\code{Evaluation.privateNotes} was one field per evaluation, readable by every TA and
+   instructor in the course and by every admin, and returned by any query that loaded a whole
+   evaluation. Every save overwrote it, and \code{evaluatorId} with the last saver, so a note had
+   no author. Notes are a marker's own memory of a demo, sometimes about the student as a person.}
+  {Each staff member keeps one private note per evaluation in \code{EvaluationNote} (author,
+   text). Only its author and the course's \emph{enrolled} instructors read it
+   (\code{canReadPrivateNote}): not other TAs, and not admins, although admins read courses as
+   instructors (ADR-025). Saving changes only the saver's own note. Notes are loaded on their own
+   (\code{readableNotes}), never through \code{Evaluation}. Existing notes were copied in without
+   an author and are for instructors only. The old column stays, unmodeled, until a later release
+   drops it (expand, then contract).}
+  {A TA's note can't be read or wiped by a colleague, and no new evaluation query can leak notes
+   by accident. Admins can't see notes when moderating a dispute: the instructor has to. In a course
+   without an instructor, co-TAs no longer see each other's notes. After a rollback the previous
+   release shows only the old notes until it rolls forward again; nothing is lost. Rejected: an
+   author column on the single field (a TA who can't see a colleague's note would wipe it on save),
+   and filtering the field in each query (the next query would leak it again).}
+  {Moderators need notes for disputes, or staff ask for notes shared between co-markers.}
+

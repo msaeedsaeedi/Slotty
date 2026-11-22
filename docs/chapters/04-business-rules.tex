@@ -222,7 +222,8 @@ Limits: push arrives even when the app is closed, but the device needs a connect
   \item Marking a student \textbf{with no booking} needs a reason. It's stored on the evaluation (\code{noBookingReason}), flagged in lists, and audited as \code{evaluation.no_booking}.
   \item A total override needs a note. Attendance locks once the evaluation is \code{SUBMITTED} or \code{FINALIZED}.
   \item Only instructors review. Unlocking needs a reason (in a course without an instructor, the TA can unlock).
-  \item Students see released results only, never drafts or \code{privateNotes}. Unlocking keeps a copy of what the student was shown (\code{Evaluation.released}); until the marks are released again the student keeps seeing it, marked as being corrected, together with any marks question. Releasing clears the copy.
+  \item \textbf{Private notes belong to their author} (\code{canReadPrivateNote}, ADR-031). Each staff member keeps one note per evaluation (\code{EvaluationNote}); saving changes only their own. A note is read by its author and the course's enrolled instructors only: not other TAs, and not admins, who read courses as instructors but aren't enrolled. Notes from before notes had an author are for the instructors only. Services load notes on their own (\code{readableNotes}), never with the evaluation, and they never reach students, exports, emails or push.
+  \item Students see released results only, never drafts or private notes. Unlocking keeps a copy of what the student was shown (\code{Evaluation.released}); until the marks are released again the student keeps seeing it, marked as being corrected, together with any marks question. Releasing clears the copy.
   \item Releasing marks (when submitting is final) asks for confirmation first, and every message uses one word for it: ``released''. Otherwise marks are ``sent for review''.
   \item The marking sheet shows the total as ``--'' while any mark is invalid (non-numeric or outside 0 to the row's maximum).
 \end{itemize}
@@ -268,6 +269,7 @@ platform accounts see no course at all.
   Mark attendance, place or cancel students' bookings, grant exceptions & yes & yes & -- & --\\
   Mark and submit evaluations & yes & yes & -- & --\\
   Review, finalize and unlock marks & yes & unlock without instructor & -- & --\\
+  Read private notes on marks & all & own & -- & --\\
   Answer students' requests & yes & yes & -- & --\\
   \bottomrule
 \end{xltabular}}
