@@ -27,6 +27,7 @@ import { rollupAndPrune } from "@/server/services/analytics";
 import { pruneAuthAttempts } from "@/server/auth/limits";
 import { announceOpenedBookings, closeEndedAssignments, nudgeUnbookedStudents, sendDailyAgendas } from "@/server/services/automations";
 import { queueDueReminders } from "@/server/services/reminders";
+import { pruneMessages } from "@/server/services/retention";
 
 const POLL_MS = Number(process.env.WORKER_INTERVAL_MS ?? 15_000);
 const BACKSTOP_MS = 60_000;
@@ -119,6 +120,8 @@ async function scheduleLoop() {
       const a = await job("analytics", () => rollupAndPrune());
       if (a) report({ analyticsRolled: a.rolled, analyticsPruned: a.prunedRaw + a.prunedDaily });
       report({ authAttemptsPruned: await job("auth-attempts", () => pruneAuthAttempts(db)) });
+      const pruned = await job("retention", () => pruneMessages());
+      if (pruned) report(pruned);
     }
     // Deliver what was just queued without waiting for the next poll (NOTIFY also does this when available).
     if (Object.values(counts).some(Boolean)) delivery.wake();

@@ -141,7 +141,7 @@ describe("notifications", () => {
     expect(moved.title).toMatch(/^New booking time/);
   });
 
-  it("puts the full result in the marks email, and calls a correction an update", async () => {
+  it("keeps marks out of the release message, and calls a correction an update", async () => {
     const prof = await makeUser("Prof");
     const ta = await makeUser("Tara TA");
     const ann = await makeUser("Ann");
@@ -158,9 +158,12 @@ describe("notifications", () => {
     const { reviewEvaluation } = await import("@/server/services/evaluations");
     await reviewEvaluation(prof, draft.evaluationId, "finalize");
     const released = await db.notification.findFirstOrThrow({ where: { userId: ann.id, type: "evaluation.finalized" } });
-    expect(released.body).toContain("Total: 8 / 10");
-    expect(released.body).toContain("• Functionality: 5/6");
-    expect(released.body).toContain("Feedback: Nice");
+    // Marks, scores and feedback stay in Slotty: the message only says they're out and links there.
+    expect(released.body).toMatch(/are released\. Open Slotty/);
+    expect(released.link).toBe(`/courses/${course.id}/assignments/${assignment.id}`);
+    for (const secret of ["8 / 10", "5/6", "Nice", "Total"]) expect(released.body).not.toContain(secret);
+    const email = await db.emailOutbox.findFirstOrThrow({ where: { to: ann.email, subject: { startsWith: "Marks released" } } });
+    for (const secret of ["8 / 10", "5/6", "Nice"]) expect(email.text + (email.html ?? "")).not.toContain(secret);
 
     await unlockEvaluation(prof, draft.evaluationId, "Recount");
     const criteria = await db.rubricCriterion.findMany({ where: { assignmentId: assignment.id } });
@@ -171,8 +174,7 @@ describe("notifications", () => {
     const items = await db.notification.findMany({ where: { userId: ann.id, groupKey: { startsWith: "marks:" } } });
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ type: "evaluation.finalized", title: expect.stringMatching(/^Marks released/) });
-    expect(items[0].body).toContain("Total: 10 / 10");
-    expect(items[0].body).not.toContain("was");
+    expect(items[0].body).not.toContain("10 / 10");
     expect(await db.emailOutbox.count({ where: { to: ann.email, subject: { startsWith: "Marks" } } })).toBe(1);
 
     // Once she has read it, a later correction says what changed.
@@ -182,7 +184,8 @@ describe("notifications", () => {
     await submitEvaluations(prof, [draft.evaluationId]);
     const updated = await db.notification.findFirstOrThrow({ where: { userId: ann.id, type: "evaluation.updated" } });
     expect(updated.title).toMatch(/^Marks updated/);
-    expect(updated.body).toContain("Total: 8 / 10 (was 10)");
+    expect(updated.body).toMatch(/were corrected\. Open Slotty/);
+    expect(updated.body).not.toMatch(/\d+ \/ 10/);
   });
 });
 
