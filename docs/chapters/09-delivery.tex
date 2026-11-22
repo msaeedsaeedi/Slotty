@@ -80,9 +80,9 @@ Versions follow semantic versioning. Until the pilot is signed off they are pre-
 fixes. Each sprint ends with one release (\cref{ch:changes}); an urgent fix gets a patch release
 in between.
 \begin{enumerate}
-  \item On \code{dev}, a pull request titled \emph{Release vX.Y.Z} sets \code{version} in
+  \item On \code{dev}, a pull request titled \code{chore(release): vX.Y.Z} sets \code{version} in
     \src{package.json} and adds a change-log line.
-  \item A pull request from \code{dev} into \code{master}, titled \emph{Release vX.Y.Z}, labelled
+  \item A pull request from \code{dev} into \code{master}, titled \code{chore(release): vX.Y.Z}, labelled
     \code{skip-release-notes}. Besides the usual jobs, CI's \emph{Release PR} job checks that it
     comes from \code{dev} (or a \code{hotfix/} or \code{revert-} branch), that the version differs
     from \code{master}'s, and that no tag has it yet.

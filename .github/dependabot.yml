@@ -17,7 +17,8 @@ updates:
     open-pull-requests-limit: 5
     labels: [chore]
     commit-message:
-      prefix: deps
+      prefix: chore
+      include: scope
     groups:
       bun-minor-and-patch:
         update-types: [minor, patch]
@@ -33,7 +34,8 @@ updates:
       timezone: Asia/Karachi
     labels: [chore]
     commit-message:
-      prefix: deps
+      prefix: chore
+      include: scope
     groups:
       docker-minor-and-patch:
         update-types: [minor, patch]
@@ -52,7 +54,8 @@ updates:
       timezone: Asia/Karachi
     labels: [chore]
     commit-message:
-      prefix: deps
+      prefix: chore
+      include: scope
     groups:
       actions-minor-and-patch:
         update-types: [minor, patch]

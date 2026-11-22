@@ -35,11 +35,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -q -b "$branch" origin/dev
-          if ! git merge --no-ff --no-edit -m "Merge master ($short) back into dev" origin/master; then
+          if ! git merge --no-ff --no-edit -m "chore: merge master ($short) back into dev" origin/master; then
             echo "::error::master doesn't merge cleanly into dev. Merge it by hand: a branch from dev, git merge origin/master, a PR into dev."
             exit 1
           fi
           git push -q origin "$branch"
           gh pr create --base dev --head "$branch" --label skip-release-notes \
-            --title "Back-merge master ($short) into dev" \
+            --title "chore: back-merge master ($short) into dev" \
             --body "Brings master's latest release back into dev, so the next release PR is up to date with master (ADR-027). Opened by the Back-merge workflow, so GitHub waits for a maintainer: **Approve workflows to run** below, then merge once **CI ok** passes."
