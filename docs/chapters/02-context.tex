@@ -36,7 +36,7 @@ In priority order. Each one is a reason behind a decision in \cref{ch:decisions}
     private notes; every moderation-relevant change is audited.
   \item \textbf{Available on demo days.} Demo days are the peak and the moment failure hurts
     most: the web tier runs in two availability zones and scales out on load.
-  \item \textbf{Cheap at bootstrap.} Under \$50 a month on AWS, with growth by changing
+  \item \textbf{Cheap at bootstrap.} Under \$55 a month on AWS, with growth by changing
     variables rather than re-architecting (\cref{ch:cost}).
   \item \textbf{Auditable and changeable.} Infrastructure is code, every change goes through a
     reviewed pull request with its reasoning recorded (\cref{ch:changes}), and this document is
@@ -46,7 +46,7 @@ In priority order. Each one is a reason behind a decision in \cref{ch:decisions}
 \section{Constraints}
 \begin{itemize}
   \item One AWS region (us-east-1) in a dedicated account, enforced by service control policies (\cref{sec:aws-guardrails}).
-  \item Monthly budget of \$50 for the account.
+  \item Monthly budget of \$55 for the account (ADR-030).
   \item Course times are shown in the course timezone; only Pakistan time is offered for now.
   \item Stack: Next.js 16 (App Router), React 19, Prisma 7 with PostgreSQL 17, Bun for tooling
     and the worker build; Node 22 in production.

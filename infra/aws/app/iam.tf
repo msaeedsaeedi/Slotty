@@ -55,6 +55,15 @@ resource "aws_iam_role_policy" "task_exec" {
       Effect   = "Allow"
       Action   = ["ssmmessages:CreateControlChannel", "ssmmessages:CreateDataChannel", "ssmmessages:OpenControlChannel", "ssmmessages:OpenDataChannel"]
       Resource = "*"
+      }, {
+      # Session logging (ecs.tf: the cluster's execute_command_configuration).
+      Effect   = "Allow"
+      Action   = ["logs:CreateLogStream", "logs:PutLogEvents", "logs:DescribeLogStreams"]
+      Resource = "${aws_cloudwatch_log_group.exec.arn}:*"
+      }, {
+      Effect   = "Allow"
+      Action   = "logs:DescribeLogGroups"
+      Resource = "*"
     }]
   })
 }

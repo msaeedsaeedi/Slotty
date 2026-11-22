@@ -1,7 +1,7 @@
 \chapter{Cost model}\label{ch:cost}
 \chapterstatus{complete}{2026-11-16}{AWS Price List API (us-east-1), \src{infra/aws/app/variables.tf}}
 
-The budget is \$50 a month for the \code{slotty-prod} account (\cref{sec:aws-guardrails}). The
+The budget is \$55 a month for the \code{slotty-prod} account (ADR-030) (\cref{sec:aws-guardrails}). The
 estimate below uses on-demand list prices for us-east-1, checked against the AWS Price List API on
 2026-11-16, and 730 hours a month. Fargate Spot has no list price; its line assumes the usual
 discount of about 70\,\%.
@@ -13,7 +13,8 @@ discount of about 70\,\%.
   \midrule
   \endhead
   Fargate web, on demand & 0.5 vCPU × \$0.03238 + 1 GB × \$0.00356 per hour (ARM) & 14.42\\
-  Fargate web, Spot & the same size, about 70\,\% off & 4.60\\
+  Fargate web, Spot & extra tasks only under load (ADR-030); at low traffic none & 0.00\\
+  KMS key & the alerts topic's customer-managed key, \$1 a month plus a few cents of requests & 1.05\\
   Fargate worker, Spot & 0.25 vCPU, 0.5 GB & 2.30\\
   Migrate task & about a minute per deploy & 0.05\\
   RDS \code{db.t4g.micro} & \$0.016 per hour, single AZ & 11.68\\
@@ -28,7 +29,7 @@ discount of about 70\,\%.
   SES & about 5,000 emails & 0.50\\
   Everything else & SSM, ACM, budgets, anomaly detection, CloudTrail (first trail), S3 state & 0.20\\
   \midrule
-  \textbf{Total} & & \textbf{47.69}\\
+  \textbf{Total} & & \textbf{44.14}\\
   \bottomrule
 \end{xltabular}}
 
@@ -54,7 +55,7 @@ change in \src{infra/aws/org/scp.tf}):
   \toprule
   \thead{Change} & \thead{About \$ / month}\\
   \midrule
-  Bootstrap (above) & 48\\
+  Bootstrap (above) & 44\\
   \tfvar{web_max = 6}, \tfvar{db_instance_class = "db.t4g.small"} & 60\\
   \quad + \tfvar{db_multi_az = true} and an Application Load Balancer & 90\\
   \quad + \tfvar{nat_mode = "gateway"} and AWS WAF & 135\\
