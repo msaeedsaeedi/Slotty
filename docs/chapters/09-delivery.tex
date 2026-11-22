@@ -121,8 +121,11 @@ with the version in a comment, the app's packages by \src{bun.lock} and the migr
 by its own lockfile (\src{docker/migrate}), all installed with \code{--frozen-lockfile}, and the
 fck-nat AMI by ID (\tfvar{nat_ami_id}). Dependabot (\src{.github/dependabot.yml}) proposes updates
 every Monday for Bun packages, Docker images and actions, as pull requests into \code{dev} labelled
-\code{chore}, with minor and patch updates grouped; majors come one at a time. They pass the same CI
-as any change. Separately, the repository has Dependabot alerts and security updates on (repository
+\code{chore}, with minor and patch updates grouped. It never proposes a major version: those are
+planned one by one (issue \#107), though a security fix that needs one still arrives as a security
+update. Bun isn't updated by Dependabot either: it is pinned in the Dockerfile, \code{packageManager}
+in \src{package.json} and CI's \envvar{BUN_VERSION}, and Dependabot only sees the first, so upgrade
+all three together by hand. The pull requests pass the same CI as any change. Separately, the repository has Dependabot alerts and security updates on (repository
 settings): a new advisory for a dependency opens a fix pull request right away, not on Monday. The
 fck-nat AMI isn't covered by either: upgrade it by hand (\cref{ch:aws}).
 
