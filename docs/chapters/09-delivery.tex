@@ -16,17 +16,20 @@ long-lived AWS keys for it.
 \end{figure}
 
 \section{CI}\label{sec:ci}
-\src{.github/workflows/ci.yml} runs on every pull request and every push to \code{master}. Its
-jobs run in parallel, each with a time limit; a new push to a pull request cancels the older run.
+\src{.github/workflows/ci.yml} runs on every pull request (and by hand); pushes to \code{dev} and
+\code{master} aren't checked again, because protection only merges a pull request that is up to
+date and green (ADR-035). A \emph{Changed paths} job first lists what the pull request touches, and
+only the jobs that change needs run, in parallel, each with a time limit; a new push to a pull
+request cancels the older run. Back-merge pull requests (\code{master}, already checked, back into
+\code{dev}) run only the first job below.
 
 \begin{xltabular}{\linewidth}{@{}P{30mm} P{24mm} L@{}}
   \toprule
   \thead{Job} & \thead{Typical} & \thead{What it proves}\\
   \midrule
-  Typecheck, lint, unit tests & 0.5 min & \code{bun run typecheck}, \code{bun run lint}, \code{bun run test:unit}: the domain rules (\cref{ch:rules}); then \code{bun run audit}, which fails on any high or critical advisory in either lockfile except the accepted ones (ADR-034).\\
-  Integration tests & 1 min & \code{bun run test:int}: every service against a real PostgreSQL 17, including the booking race.\\
-  End-to-end tests & 5 min & \code{bun run test:e2e}: Playwright drives a production build in Chromium through the user journeys (\cref{ch:journeys}). On failure the report, traces and screenshots are kept for 14 days.\\
-  Docker images & 2--3 min & Pull requests only: both images still build, natively on ARM64, reading \code{master}'s layer cache. Nothing is pushed.\\
+  Typecheck, lint, unit and integration tests & 1.5 min & Unless only \src{docs} changed: \code{bun run typecheck}, \code{bun run lint}, \code{bun run test:unit} (the domain rules, \cref{ch:rules}) and \code{bun run test:int} (every service against a real PostgreSQL 17, including the booking race); then \code{bun run audit}, which fails on any high or critical advisory in either lockfile except the accepted ones (ADR-034). One job, so dependencies install once.\\
+  End-to-end tests & 2.5 min & Unless only \src{docs} changed: \code{bun run test:e2e}: Playwright drives a production build in Chromium through the user journeys (\cref{ch:journeys}). On failure the report, traces and screenshots are kept for 14 days.\\
+  Docker images & 1 min & When the Dockerfile, \src{docker-bake.hcl}, \src{docker}, \code{package.json}, \code{bun.lock} or \src{prisma} changed: both images still build, natively on ARM64, reading \code{master}'s layer cache. Nothing is pushed.\\
   Documentation & 1 min & When \src{docs} changed: this PDF builds, and is kept as an artifact.\\
   \textbf{CI ok} & seconds & Green only if every job above passed or was skipped by design. It is the one check branch protection requires, so adding a job needs no settings change.\\
   \bottomrule

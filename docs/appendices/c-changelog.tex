@@ -6,6 +6,7 @@ Newest first. One line per revision of this document; the pull request has the d
   \toprule
   \thead{Date} & \thead{Change}\\
   \midrule
+  2026-11-23 & Fewer CI minutes (issue \#117, ADR-035): CI checks pull requests only, not pushes to \code{dev} and \code{master}; a \emph{Changed paths} job skips the tests for docs-only pull requests, the image build unless its inputs changed and the PDF unless \src{docs} changed; typecheck, lint, unit and integration tests are one job; Back-merge pull requests run only that job. Ch.~9 and 14 updated.\\
   2026-11-23 & Pinned build inputs and dependency updates (issue \#40, ADR-034): base images by digest, actions by commit SHA, the migrate image from its own lockfile, the fck-nat AMI by ID; Dependabot weekly for Bun, Docker and actions; CI's \code{bun run audit} fails on high or critical advisories except named exceptions; \code{shadcn} is a dev dependency. Ch.~8, 9, 11 and 14 updated.\\
   2026-11-23 & Hotfix v1.0.0-beta.3.1 (issue \#106): every dependency on its latest patch or minor release (Next.js 16.4, React 19.3, Prisma 7.10.1, also in the migrate image), with the lockfile re-resolved, for security advisories in the previous versions. Major upgrades are tracked separately.\\
   2026-11-23 & Session and token hygiene (issue \#44, ADR-033): the session cookie is \code{__Host-slotty_session}, always \code{Secure} (the old name is read until those sessions expire); the personal calendar feed is retired and its stored secrets cleared. Ch.~4, 6, 11 and 14 updated.\\
