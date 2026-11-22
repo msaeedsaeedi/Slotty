@@ -1,52 +1,23 @@
-import { z } from "zod";
+import type { z } from "zod";
+import { checkDemoWindow } from "@/domain/assignments";
 import { checkRubric } from "@/domain/evaluation";
 import { assertRule, DomainError } from "@/domain/result";
+import { assignmentFields, assignmentInput, policyInput } from "@/lib/form-schemas";
 import { fmt, tzLabel } from "@/lib/time";
 import { db, type Tx } from "@/server/db";
 import { assertAssignmentRole, assertCourseRole, assertStaff, STAFF, type Actor } from "./access";
 import { audit } from "./audit";
 import { notify } from "./notify";
 
-const criterionInput = z.object({
-  label: z.string().trim().min(1, "Each rubric row needs a label.").max(120),
-  maxPoints: z.coerce.number().positive("Rubric points must be positive.").max(10_000),
-});
-
-export const policyInput = z
-  .object({
-    windowStart: z.date(),
-    windowEnd: z.date(),
-    slotDurationMin: z.coerce.number().int().min(5, "Slots must be at least 5 minutes.").max(480),
-    bufferMin: z.coerce.number().int().min(0).max(240),
-    capacityPerSlot: z.coerce.number().int().min(1).max(100),
-    bookingOpensAt: z.date().nullable(),
-    freezeHours: z.coerce.number().int().min(0).max(24 * 14),
-    maxReschedules: z.coerce.number().int().min(0).max(20),
-    allowStudentCancel: z.boolean(),
-  })
-  .refine((p) => p.windowEnd > p.windowStart, { message: "The demo window must end after it starts.", path: ["windowEnd"] })
-  .refine((p) => !p.bookingOpensAt || p.bookingOpensAt < p.windowEnd, {
-    message: "Booking must open before the demo window ends.",
-    path: ["bookingOpensAt"],
-  });
-
-const assignmentFields = z.object({
-  title: z.string().trim().min(1, "Title is required.").max(200),
-  description: z.string().trim().max(5000).default(""),
-  maxMarks: z.coerce.number().positive("Max marks must be positive.").max(10_000),
-  criteria: z.array(criterionInput).max(30),
-  policy: policyInput,
-});
-
-export const assignmentInput = assignmentFields.superRefine((a, ctx) => {
-  const rubric = checkRubric(a.criteria, a.maxMarks);
-  if (!rubric.ok) ctx.addIssue({ code: "custom", message: rubric.reason, path: ["criteria"] });
-});
+// Schemas live in lib/form-schemas.ts so the forms can read the same limits (fieldProps).
+export { assignmentInput, policyInput };
 
 export type AssignmentInput = z.input<typeof assignmentInput>;
 
-export async function createAssignment(actor: Actor, courseId: string, input: AssignmentInput) {
+export async function createAssignment(actor: Actor, courseId: string, input: AssignmentInput, now = new Date()) {
   const data = assignmentInput.parse(input);
+  // Only new assignments: an edit of a running or finished one keeps its window.
+  assertRule(checkDemoWindow({ windowStart: data.policy.windowStart, windowEnd: data.policy.windowEnd, now }), "INVALID", "windowEnd");
   return db.$transaction(async (tx) => {
     await assertStaff(tx, actor, courseId, { write: true });
     const assignment = await tx.assignment.create({

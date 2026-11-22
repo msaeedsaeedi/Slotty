@@ -77,6 +77,44 @@ Staff can grant one student an exception on one assignment:
 
 The freeze window, capacity and draft slots still apply.
 
+\subsection{What a student sees about their demo}\label{sec:student-demo-state}
+
+\code{studentDemoState} (\src{src/domain/student-demo.ts}) works out one state from the slot time and the booking and evaluation status together, because the booking stays \code{BOOKED} until staff record attendance. The course page, the assignment page and \route{/bookings} all use it.
+
+\begin{xltabular}{\linewidth}{@{}P{58mm} L@{}}
+  \toprule
+  \thead{Situation} & \thead{Student sees}\\
+  \midrule
+  Booked, before the slot & \ui{Booked}, with time, venue and the change actions\\
+  Booked, during the slot & \ui{In progress}, with the meeting link\\
+  Booked, slot ended & \ui{Done: waiting for attendance}\\
+  Completed, marks not released & \ui{Completed: marks pending}\\
+  Marks released (\code{visibleMarks}) & \ui{Marked: N / max}, also without a completed booking; while staff correct unlocked marks, the released total, marked as being corrected\\
+  No-show & \ui{Missed}, saying what happened and opening the staff request\\
+  \bottomrule
+\end{xltabular}
+
+Calendar, reschedule, cancel and the push prompt show only in the \ui{Booked} state; the server's own checks (\code{canCancelBooking}, \code{canReschedule}, \code{canChangeMarkedBooking}) are unchanged.
+
+\subsection{Form input rules}\label{sec:form-rules}
+
+Each rule is checked in the browser as you type and again by the service, so a value the form lets
+through is never refused for a reason the form didn't show (issue \#13).
+
+{\tablefont
+\begin{xltabular}{\linewidth}{@{}P{34mm} P{34mm} L@{}}
+  \toprule
+  \thead{Rule} & \thead{Where} & \thead{What}\\
+  \midrule
+  \endhead
+  \code{checkDemoWindow} & \src{src/domain/assignments.ts}, \code{createAssignment} & A new assignment's demo window must end after it starts and must not be over already. Not checked on edit: a running or finished assignment keeps its window.\\
+  \code{canScheduleBlock} & \src{src/domain/slots.ts}, \code{addAvailability} & New availability must start in the future: today's earlier hours and past days are refused (the planner also disables past days).\\
+  \code{hasMarkPrecision}, \code{checkTotalMarks} & \src{src/domain/evaluation.ts}, \code{validateScores}, \code{saveEvaluation} & Marks (rubric points, totals, max marks, rubric row points) have at most two decimals; inputs step by 0.01.\\
+  \code{checkReason} & \src{src/domain/text.ts} & Every reason or comment sent to a student or to staff (cancelling a slot or booking, declining a request, returning or unlocking marks, clearing marks, marking without a booking or early, overriding a total, a student's request) is at most 1000 characters (\code{REASON_MAX_LENGTH}); where it's required, it can't be blank.\\
+  Venue meeting link & \code{venueInput} & A web address starting with \code{http://} or \code{https://} with a host.\\
+  \bottomrule
+\end{xltabular}}
+
 \section{Staff tools \& student requests}
 
 {\tablefont
@@ -110,7 +148,7 @@ Each job records what it did, so running it twice sends nothing twice.
   \code{nudgeUnbookedStudents} & 48h before \code{windowEnd} (once) & ``Last chance to book'' to unbooked students\\
   \code{closeEndedAssignments} & \code{windowEnd} has passed & Assignment → \code{CLOSED}, waitlist cleared, audited with no actor\\
   \code{sendDailyAgendas} & 06:00--11:00 course time, once per local day & Email-only list of today's demos for each host (unless they opted out)\\
-  \code{queueDueReminders} & 24h / 1h before & Reminder to the student (unless they opted out of reminder emails)\\
+  \code{queueDueReminders} & 24h / 1h before; 08:00 on the demo day; 10 min before & Reminders to the student, each claimed once on the booking (\code{reminder24hAt}, \code{reminder1hAt}, \code{reminderMorningAt}, \code{reminder10mAt}). 24h and 1h: email (unless \code{emailReminders} is off) and bell, skipped when booked inside the window. Morning-of (\code{morningReminderDue}, \src{src/domain/reminders.ts}): email, bell and push unless \code{remindMorning} is off; skipped when the demo is under an hour away or was booked after 08:00 course time that day. 10 minutes (\code{lastReminderDue}): push only, with the meeting link, unless \code{remind10m} is off or it was booked within those 10 minutes\\
   \bottomrule
 \end{xltabular}}
 
@@ -236,7 +274,7 @@ platform accounts see no course at all.
 
 \section{Accounts}
 
-The account page (\route{/account}) shows only what applies to the user's roles: name, clock (\code{timeFormat}: 12 or 24 hour), password (checks the current one and signs out other devices), ``sign out other devices''; reminder emails (\code{emailReminders}) for students, the morning agenda (\code{emailAgenda}) for staff, and device notifications for both. Admins see none of the demo settings. Confirmation, change and marks emails can't be turned off.
+The account page (\route{/account}) shows only what applies to the user's roles: name, clock (\code{timeFormat}: 12 or 24 hour), password (checks the current one and signs out other devices), ``sign out other devices''; reminders for students (reminder emails, \code{emailReminders}; the morning-of reminder, \code{remindMorning}; the 10-minute push, \code{remind10m}), the morning agenda (\code{emailAgenda}) for staff, and device notifications for both. Admins see none of the demo settings. Confirmation, change and marks emails can't be turned off.
 
 {\tablefont
 \begin{xltabular}{\linewidth}{@{}P{30mm} L@{}}
@@ -293,7 +331,7 @@ How much people are told (\src{src/domain/notifications.ts}, ADR-018):
   \code{booking.cancelled_by_staff} & student & Staff cancelled their booking\\
   \code{slot.cancelled} & booked students & Staff cancelled the slot\\
   \code{slot.venue_changed} & booked students & Venue changed\\
-  \code{booking.reminder} & student & 24h and 1h before (worker)\\
+  \code{booking.reminder} & student & 24h and 1h before, the morning of the demo day, and 10 minutes before (push only) (worker)\\
   \code{booking.no_show} & student & Marked as no-show\\
   \code{booking.placed_by_staff} & student & Staff booked or moved them, with the previous time\\
   \code{booking.rebook_allowed} & student & Staff cleared a no-show\\
@@ -335,4 +373,4 @@ Times are stored in UTC. They're shown and entered in the \textbf{course timezon
 
 \section{Audit}
 
-Moderation-relevant changes go through \code{audit(tx, actor, …)}: courses, roster, assignments, availability, slot cancellation and venue changes, attendance, staff cancellations, evaluation transitions, and admin actions. Platform actions (access grants, feedback status) are recorded as \code{platform.*}, outside the admin audit log.
+Moderation-relevant changes go through \code{audit(tx, actor, …)}: courses, roster, assignments, availability, slot cancellation and venue changes, attendance, staff cancellations, evaluation transitions, and admin actions. Platform actions (access grants, feedback status) are recorded as \code{platform.*}, outside the admin audit log. Entries are never changed or deleted: the database refuses it (\cref{ch:crosscutting}).

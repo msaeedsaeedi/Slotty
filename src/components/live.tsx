@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatLeft, formatUntil } from "@/domain/demo-day";
+import { formatCountdown, formatLeft, formatUntil } from "@/domain/demo-day";
 
 /**
  * Keep a live page current: re-fetch server data every `everyMs` while the tab
@@ -26,11 +26,12 @@ export function LiveRefresh({ everyMs = 30_000 }: { everyMs?: number }) {
 }
 
 /**
- * "in 12 min" (mode "until") or "8 min left" (mode "left"), updated as time
+ * "in 12 min" (mode "until"), "8 min left" (mode "left") or "in 2 days" (mode "demo",
+ * `formatCountdown`), updated as time
  * passes. Starts from the server's `now` so the first render matches, and asks
  * for fresh data once the target time is reached (the demo started or ended).
  */
-export function Countdown({ to, now, mode, className }: { to: string; now: string; mode: "until" | "left"; className?: string }) {
+export function Countdown({ to, now, mode, className }: { to: string; now: string; mode: "until" | "left" | "demo"; className?: string }) {
   const router = useRouter();
   const target = new Date(to).getTime();
   const [current, setCurrent] = useState(() => new Date(now).getTime());
@@ -47,5 +48,5 @@ export function Countdown({ to, now, mode, className }: { to: string; now: strin
     return () => clearInterval(timer);
   }, [router, target]);
   const ms = target - current;
-  return <span className={className}>{mode === "until" ? formatUntil(ms) : formatLeft(ms)}</span>;
+  return <span className={className}>{mode === "until" ? formatUntil(ms) : mode === "demo" ? formatCountdown(ms) : formatLeft(ms)}</span>;
 }

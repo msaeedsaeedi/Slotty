@@ -164,7 +164,7 @@ export async function resetPassword(token: string, newPassword: string) {
 export async function getAccount(actor: Actor) {
   return db.user.findUniqueOrThrow({
     where: { id: actor.id },
-    select: { name: true, email: true, emailReminders: true, emailAgenda: true, timeFormat: true, shareUsageData: true, _count: { select: { sessions: true } } },
+    select: { name: true, email: true, emailReminders: true, emailAgenda: true, remindMorning: true, remind10m: true, timeFormat: true, shareUsageData: true, _count: { select: { sessions: true } } },
   });
 }
 
@@ -196,8 +196,12 @@ export async function changePassword(actor: Actor, input: { current: string; nex
 }
 
 /** Only the preferences given are changed (each role's form shows just its own). */
-export async function setEmailPreferences(actor: Actor, prefs: { emailReminders?: boolean; emailAgenda?: boolean }) {
-  await db.user.update({ where: { id: actor.id }, data: { emailReminders: prefs.emailReminders, emailAgenda: prefs.emailAgenda } });
+export async function setEmailPreferences(
+  actor: Actor,
+  prefs: { emailReminders?: boolean; emailAgenda?: boolean; remindMorning?: boolean; remind10m?: boolean },
+) {
+  const { emailReminders, emailAgenda, remindMorning, remind10m } = prefs;
+  await db.user.update({ where: { id: actor.id }, data: { emailReminders, emailAgenda, remindMorning, remind10m } });
 }
 
 export async function setTimeFormat(actor: Actor, timeFormat: "H12" | "H24") {

@@ -118,6 +118,15 @@ export function formatUntil(ms: number): string {
   return rest ? `in ${h} h ${rest} min` : `in ${h} h`;
 }
 
+/** "starting now", "in 25 min", "in 3 h 20 min", "tomorrow", "in 2 days": how soon a student's next demo is. */
+export function formatCountdown(ms: number): string {
+  if (ms < 60_000) return "starting now";
+  const hours = ms / 3_600_000;
+  if (hours < 24) return formatUntil(ms);
+  const days = Math.round(hours / 24);
+  return days <= 1 ? "tomorrow" : `in ${days} days`;
+}
+
 /** "12 min left", "ends now" — for the demo in progress. */
 export function formatLeft(ms: number): string {
   const min = Math.ceil(ms / 60_000);

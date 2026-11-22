@@ -9,12 +9,15 @@ export class DomainError extends Error {
   constructor(
     message: string,
     public readonly code: "FORBIDDEN" | "NOT_FOUND" | "INVALID" | "CONFLICT" = "INVALID",
+    /** The form field the message belongs to, so the form can show it next to that input. */
+    public readonly field?: string,
   ) {
     super(message);
     this.name = "DomainError";
   }
 }
 
-export function assertRule(result: RuleResult, code: DomainError["code"] = "INVALID"): void {
-  if (!result.ok) throw new DomainError(result.reason, code);
+/** Throw a DomainError when the rule denies; `field` places the message next to that form input. */
+export function assertRule(result: RuleResult, code: DomainError["code"] = "INVALID", field?: string): void {
+  if (!result.ok) throw new DomainError(result.reason, code, field);
 }

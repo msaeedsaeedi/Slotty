@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Textarea } from "@/components/ui/textarea";
 import { fmt, fmtRange } from "@/lib/time";
 import { requireUser } from "@/server/auth/session";
+import { REASON_MAX_LENGTH } from "@/domain/text";
 import { load } from "@/server/page-utils";
 import { getCourseForActor } from "@/server/services/courses";
 import { listRequests } from "@/server/services/requests";
@@ -84,9 +85,9 @@ export default async function RequestsPage({ params, searchParams }: PageProps<"
                 {!closed && (
                   <ActionForm action={resolveRequestAction} className="space-y-2">
                     <input type="hidden" name="requestId" value={r.id} />
-                    <Textarea name="response" rows={2} placeholder="Reply to the student (required when declining)" aria-label={`Reply to ${r.student.name}`} />
+                    <Textarea name="response" rows={2} required maxLength={REASON_MAX_LENGTH} placeholder="Reply to the student (required when declining)" aria-label={`Reply to ${r.student.name}`} />
                     <div className="flex gap-2">
-                      <SubmitButton size="sm" name="decision" value="RESOLVED">
+                      <SubmitButton size="sm" name="decision" value="RESOLVED" formNoValidate>
                         Mark handled
                       </SubmitButton>
                       <SubmitButton size="sm" variant="outline" name="decision" value="DECLINED">

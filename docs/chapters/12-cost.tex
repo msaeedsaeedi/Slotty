@@ -39,6 +39,13 @@ discount of about 70\,\%.
   above.
 \end{note}
 
+\begin{note}
+  The live notification bell (issue \#9) checks \route{/api/notifications/unread} every 30
+  seconds while a tab is visible. At 300 students with about an hour a day in the app that is
+  roughly 540\,000 requests a month, about \$0.55 on API Gateway, plus one indexed count query
+  each on RDS. It stays inside the lines above.
+\end{note}
+
 \section{Growth}
 Each step is a variable change in \src{infra/aws/app/variables.tf} (some also need an SCP
 change in \src{infra/aws/org/scp.tf}):

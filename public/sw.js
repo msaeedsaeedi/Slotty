@@ -88,13 +88,17 @@ self.addEventListener("push", (event) => {
     data = { title: "Slotty", body: event.data.text() };
   }
   event.waitUntil(
-    self.registration.showNotification(data.title || "Slotty", {
-      body: data.body,
-      icon: "/icons/192",
-      badge: "/icons/badge",
-      tag: data.tag,
-      data: { url: data.url || "/notifications" },
-    }),
+    Promise.all([
+      self.registration.showNotification(data.title || "Slotty", {
+        body: data.body,
+        icon: "/icons/192",
+        badge: "/icons/badge",
+        tag: data.tag,
+        data: { url: data.url || "/notifications" },
+      }),
+      // Open tabs update their bell now instead of at the next check.
+      self.clients.matchAll({ type: "window" }).then((windows) => windows.forEach((w) => w.postMessage({ type: "slotty:push" }))),
+    ]),
   );
 });
 

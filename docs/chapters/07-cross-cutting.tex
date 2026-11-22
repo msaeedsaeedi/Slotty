@@ -34,6 +34,21 @@ the next message says what changed.
   session. Behind a pooler the worker would fall back to polling every \envvar{WORKER_INTERVAL_MS}.
 \end{decision}
 
+\section{Live updates by polling}\label{sec:live-polling}
+Pages stay current without websockets or server-sent events: API Gateway's HTTP API ends a
+request after 30 seconds, and at this scale polling costs cents (\cref{ch:cost}).
+\begin{itemize}
+  \item \code{<LiveBell>} (\src{src/components/live-bell.tsx}) checks
+    \route{/api/notifications/unread} every 30 seconds while the tab is visible, straight away
+    when the tab regains focus, and when a push arrives (the service worker posts
+    \code{slotty:push} to open tabs). Only the badge changes, except on \route{/notifications},
+    \route{/dashboard} and \route{/bookings}, which reload their data when the count goes up.
+    A 401 stops the polling.
+  \item \code{<LiveRefresh>} reloads a whole page's data every 30 seconds on demo day
+    (\route{/today}), and \code{<Countdown>} ticks locally and reloads once its target passes.
+\end{itemize}
+Both use \code{router.refresh()}, which keeps scroll position and form input.
+
 \section{Access control}
 Every service operation receives an \code{Actor} and checks it before reading or writing
 (\src{src/server/services/access.ts}): \code{assertCourseRole}, \code{assertStaff},
@@ -46,6 +61,27 @@ Domain functions return a \code{RuleResult} (\src{src/domain/result.ts}); servic
 result into a \code{DomainError} with \code{assertRule}. Server Actions call services through
 \code{run()} (\src{src/server/action-utils.ts}), which shows a \code{DomainError}'s message to the
 user and hides anything else behind a generic error.
+
+\section{Form validation}\label{sec:form-validation}
+Forms allow only what the server accepts, and say why next to the field:
+\begin{itemize}
+  \item \textbf{One schema.} Form schemas live in \src{src/lib/form-schemas.ts}, which has no
+    server imports; services parse with them. \code{fieldProps(schema, field)}
+    (\src{src/lib/field-props.ts}) reads a field's limits and returns \code{required},
+    \code{min}, \code{max}, \code{step}, \code{minLength} and \code{maxLength} for the input, so
+    the browser enforces the server's numbers instead of a copy.
+  \item \textbf{Rules on both sides.} Business rules a form can check (\cref{sec:form-rules}) are
+    pure functions in \src{src/domain}, called as you type and again by the service.
+  \item \textbf{Messages next to the field.} \code{run()} returns \code{fieldErrors} keyed by the
+    input's name: a zod issue's last path segment, or the \code{field} of a \code{DomainError}
+    (\code{assertRule(result, code, field)}). \code{<FormField>} (\src{src/components/form-field.tsx})
+    shows the message checked as you type, or else the server's, under the input, with
+    \code{aria-invalid} and \code{aria-describedby}. The alert under the form still shows the
+    message too.
+\end{itemize}
+Date, time and number forms (assignment, slots, slot capacity, exceptions, marking) and the
+password confirmation use \code{<FormField>}; other text forms take their limits from
+\code{fieldProps} and keep the form-level message until the app revamp (issue \#58).
 
 \section{Concurrency}
 Booking is the contended path. Capacity is protected by locking the slot rows
@@ -62,6 +98,14 @@ data formats (CSV, form values) stay 24-hour.
 \section{Audit}
 Moderation-relevant changes are recorded with \code{audit(tx, actor, …)} in the same transaction
 as the change (\src{src/server/services/audit.ts}). Admins read them at \route{/admin/audit}.
+
+The log is append-only. A database trigger, \code{AuditLog_append_only}, refuses every
+\code{UPDATE} and \code{DELETE} on \code{AuditLog}, from the application, a migration or a
+console session alike. A user with audit entries can't be deleted either, because the
+foreign key's \code{SET NULL} would change the entries: anonymise the account instead (\#42).
+The trigger doesn't cover \code{TRUNCATE} (the tests use it to reset their database) or the
+table's owner disabling it; a least-privilege application role, separate from the migration
+role, will close those in a later release.
 
 \section{Usage analytics}\label{sec:usage-analytics}
 First-party only (ADR-015). In the signed-in layout, \code{<Analytics>} configures the tracker

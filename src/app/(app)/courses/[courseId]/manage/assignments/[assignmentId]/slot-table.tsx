@@ -6,7 +6,10 @@ import { ChevronDown, ChevronRight, MapPin, MoreHorizontal, Trash2, UserRound, X
 import { cancelSlotAction, changeVenueAction, deleteSlotsAction, reassignHostAction, updateSlotCapacityAction } from "@/app/actions/scheduling";
 import { staffCancelBookingAction } from "@/app/actions/bookings";
 import { ActionForm, SubmitButton } from "@/components/action-form";
+import { FormField } from "@/components/form-field";
 import { StatusBadge } from "@/components/status-badge";
+import { SLOT_CAPACITY_MAX } from "@/domain/slots";
+import { REASON_MAX_LENGTH } from "@/domain/text";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -283,10 +286,9 @@ export function SlotTable({
                 </DialogDescription>
               </DialogHeader>
               <input type="hidden" name="slotId" value={ask.slot.id} />
-              <div className="space-y-1.5">
-                <Label htmlFor="capacity">Students</Label>
-                <Input id="capacity" name="capacity" type="number" min={Math.max(1, ask.slot.bookings.length)} max={100} defaultValue={ask.slot.capacity} required autoFocus />
-              </div>
+              <FormField name="capacity" label="Students" hint={`${Math.max(1, ask.slot.bookings.length)} to ${SLOT_CAPACITY_MAX}`}>
+                <Input id="capacity" name="capacity" type="number" min={Math.max(1, ask.slot.bookings.length)} max={SLOT_CAPACITY_MAX} step={1} defaultValue={ask.slot.capacity} required autoFocus />
+              </FormField>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setAsk(null)}>
                   Close
@@ -309,7 +311,7 @@ export function SlotTable({
               <input type="hidden" name="slotId" value={ask.slot.id} />
               <div className="space-y-1.5">
                 <Label htmlFor="reason">Reason {ask.slot.bookings.length ? "(sent to the students)" : "(optional)"}</Label>
-                <Input id="reason" name="reason" required={ask.slot.bookings.length > 0} maxLength={500} autoFocus />
+                <Input id="reason" name="reason" required={ask.slot.bookings.length > 0} maxLength={REASON_MAX_LENGTH} autoFocus />
               </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setAsk(null)}>
@@ -330,7 +332,7 @@ export function SlotTable({
               <input type="hidden" name="bookingId" value={ask.booking.id} />
               <div className="space-y-1.5">
                 <Label htmlFor="booking-reason">Reason (sent to {ask.booking.name})</Label>
-                <Input id="booking-reason" name="reason" required maxLength={500} autoFocus />
+                <Input id="booking-reason" name="reason" required maxLength={REASON_MAX_LENGTH} autoFocus />
               </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setAsk(null)}>

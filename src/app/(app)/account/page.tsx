@@ -102,7 +102,7 @@ export default async function AccountPage() {
       {(student || staff) && (
         <Card>
           <CardHeader>
-            <CardTitle>Email</CardTitle>
+            <CardTitle>Email and reminders</CardTitle>
             <CardDescription>
               {student && "Booking confirmations, changes made by staff and released marks are always emailed. "}
               Everything also appears under Notifications.
@@ -113,7 +113,19 @@ export default async function AccountPage() {
               {student && (
                 <label className="flex items-center gap-2">
                   <input type="hidden" name="emailRemindersShown" value="1" />
-                  <input type="checkbox" name="emailReminders" defaultChecked={account.emailReminders} /> Reminders before my demos (a day before and an hour before)
+                  <input type="checkbox" name="emailReminders" defaultChecked={account.emailReminders} /> Reminder emails before my demos (a day before and an hour before)
+                </label>
+              )}
+              {student && (
+                <label className="flex items-center gap-2">
+                  <input type="hidden" name="remindMorningShown" value="1" />
+                  <input type="checkbox" name="remindMorning" defaultChecked={account.remindMorning} /> Reminder on the morning of a demo day, at 8:00 (email and push)
+                </label>
+              )}
+              {student && (
+                <label className="flex items-center gap-2">
+                  <input type="hidden" name="remind10mShown" value="1" />
+                  <input type="checkbox" name="remind10m" defaultChecked={account.remind10m} /> Reminder 10 minutes before my demo, with the meeting link (push, on devices with notifications on)
                 </label>
               )}
               {staff && (

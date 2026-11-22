@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { DomainError } from "@/domain/result";
-import { generateSlots, overlaps } from "@/domain/slots";
+import { assertRule, DomainError } from "@/domain/result";
+import { canScheduleBlock, generateSlots, overlaps, SLOT_CAPACITY_MAX } from "@/domain/slots";
+import { checkReason } from "@/domain/text";
 import { fmt, fmtRange } from "@/lib/time";
 import { db, type Tx } from "@/server/db";
 import { assertAssignmentRole, assertCourseRole, STAFF, type Actor } from "./access";
@@ -40,8 +41,9 @@ async function loadForScheduling(tx: Tx, actor: Actor, assignmentId: string) {
  * opens, unless it's already open. TAs add slots only for themselves;
  * instructors can schedule any staff member.
  */
-export async function addAvailability(actor: Actor, assignmentId: string, input: AvailabilityInput) {
+export async function addAvailability(actor: Actor, assignmentId: string, input: AvailabilityInput, now = new Date()) {
   const data = availabilityInput.parse("blocks" in input ? input : { taId: input.taId, venueId: input.venueId, blocks: [{ startsAt: input.startsAt, endsAt: input.endsAt }] });
+  for (const b of data.blocks) assertRule(canScheduleBlock({ startsAt: b.startsAt, now }), "INVALID", "startTime");
   return db.$transaction(async (tx) => {
     const { assignment, policy, role } = await loadForScheduling(tx, actor, assignmentId);
     const tz = assignment.course.timezone;
@@ -157,7 +159,7 @@ export async function cancelSlot(actor: Actor, slotId: string, reason: string) {
     if (slot.status === "CANCELLED") return;
     await tx.$queryRaw`SELECT id FROM "Slot" WHERE id = ${slotId} FOR UPDATE`;
     const booked = await tx.booking.findMany({ where: { slotId, status: "BOOKED" }, include: { student: { select: { name: true } } } });
-    if (booked.length > 0 && !reason.trim()) throw new DomainError("Give a reason — it's sent to the booked students.");
+    assertRule(checkReason(reason, { required: booked.length > 0, missing: "Give a reason — it's sent to the booked students." }), "INVALID", "reason");
     const marked = await tx.evaluation.findMany({
       where: { assignmentId: slot.assignmentId, studentId: { in: booked.map((b) => b.studentId) }, OR: [{ totalMarks: { not: null } }, { status: { not: "DRAFT" } }] },
       select: { studentId: true },
@@ -269,7 +271,9 @@ export async function reassignHost(actor: Actor, slotIds: string[], taId: string
 
 /** Change how many students one slot takes. Can't go below the students already booked. */
 export async function updateSlotCapacity(actor: Actor, slotId: string, capacity: number) {
-  if (!Number.isInteger(capacity) || capacity < 1 || capacity > 100) throw new DomainError("Capacity must be a whole number from 1 to 100.");
+  if (!Number.isInteger(capacity) || capacity < 1 || capacity > SLOT_CAPACITY_MAX) {
+    throw new DomainError(`Capacity must be a whole number from 1 to ${SLOT_CAPACITY_MAX}.`, "INVALID", "capacity");
+  }
   return db.$transaction(async (tx) => {
     const slot = await tx.slot.findUnique({ where: { id: slotId }, include: { assignment: { include: { course: true } } } });
     if (!slot) throw new DomainError("Slot not found.", "NOT_FOUND");
@@ -277,7 +281,7 @@ export async function updateSlotCapacity(actor: Actor, slotId: string, capacity:
     if (slot.status === "CANCELLED") throw new DomainError("This slot was cancelled.");
     await tx.$queryRaw`SELECT id FROM "Slot" WHERE id = ${slotId} FOR UPDATE`;
     const booked = await tx.booking.count({ where: { slotId, status: { in: [...ACTIVE_BOOKING] } } });
-    if (capacity < booked) throw new DomainError(`${booked} students are already booked into this slot, so capacity can't go below ${booked}.`, "CONFLICT");
+    if (capacity < booked) throw new DomainError(`${booked} students are already booked into this slot, so capacity can't go below ${booked}.`, "CONFLICT", "capacity");
     await tx.slot.update({ where: { id: slotId }, data: { capacity } });
     await audit(tx, actor, { action: "slot.capacity", entityType: "Slot", entityId: slotId, before: slot.capacity, after: capacity });
     if (capacity > slot.capacity) await notifyWaitlist(tx, slot.assignmentId);

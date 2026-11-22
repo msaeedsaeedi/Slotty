@@ -4,6 +4,8 @@ import { EmptyState } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { fieldProps } from "@/lib/field-props";
+import { venueInput } from "@/lib/form-schemas";
 import { requireUser } from "@/server/auth/session";
 import { load } from "@/server/page-utils";
 import { listVenues } from "@/server/services/courses";
@@ -49,15 +51,23 @@ export default async function VenuesPage({ params }: PageProps<"/courses/[course
             <input type="hidden" name="courseId" value={courseId} />
             <div className="space-y-2">
               <Label htmlFor="name">Name</Label>
-              <Input id="name" name="name" placeholder="Lab 3" required />
+              <Input id="name" name="name" placeholder="Lab 3" {...fieldProps(venueInput, "name")} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="location">Location</Label>
-              <Input id="location" name="location" placeholder="Engineering building, 2nd floor" />
+              <Input id="location" name="location" placeholder="Engineering building, 2nd floor" {...fieldProps(venueInput, "location")} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="meetingUrl">Meeting link (online)</Label>
-              <Input id="meetingUrl" name="meetingUrl" type="url" placeholder="https://meet.google.com/abc-defg-hij" />
+              <Input
+                id="meetingUrl"
+                name="meetingUrl"
+                type="url"
+                pattern="https?://.+"
+                title="A web address starting with http:// or https://"
+                placeholder="https://meet.google.com/abc-defg-hij"
+                {...fieldProps(venueInput, "meetingUrl")}
+              />
               <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 Paste a link you created.
                 <button type="button" disabled className="rounded-md border px-2 py-0.5 opacity-60" title="Coming soon">

@@ -2,6 +2,8 @@ import { createRequestAction } from "@/app/actions/bookings";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { StatusBadge } from "@/components/status-badge";
 import { Textarea } from "@/components/ui/textarea";
+import { fieldProps } from "@/lib/field-props";
+import { requestInput } from "@/lib/form-schemas";
 import { fmt } from "@/lib/time";
 
 export interface RequestRow {
@@ -70,7 +72,7 @@ export function RequestPanel({
             <input type="hidden" name="assignmentId" value={assignmentId} />
             <input type="hidden" name="kind" value={kind} />
             <p className="text-muted-foreground">{hint}</p>
-            <Textarea name="message" required minLength={5} maxLength={2000} rows={3} aria-label={title} />
+            <Textarea name="message" {...fieldProps(requestInput, "message")} rows={3} aria-label={title} />
             <SubmitButton size="sm" variant="outline">
               Send to course staff
             </SubmitButton>

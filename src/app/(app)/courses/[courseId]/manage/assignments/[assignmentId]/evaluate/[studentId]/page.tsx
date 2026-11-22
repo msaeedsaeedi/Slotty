@@ -13,6 +13,7 @@ import { requireUser } from "@/server/auth/session";
 import { load } from "@/server/page-utils";
 import { getStudentBookingControls } from "@/server/services/bookings";
 import { getMarkingSheet, getStudentRecord } from "@/server/services/evaluations";
+import { REASON_MAX_LENGTH } from "@/domain/text";
 import { MarkingSheet } from "../../mark/marking-sheet";
 import { BookingControls } from "./booking-controls";
 
@@ -95,7 +96,7 @@ export default async function StudentRecordPage({ params, searchParams }: PagePr
             {ev && ev.totalMarks !== null && (
               <ActionForm action={clearMarksAction} compact className="flex items-center gap-2" confirmLabel="Clear marks" confirm={`Clear ${student.name}'s marks? They're kept in the audit log, and the booking can then be moved or cancelled.`}>
                 <input type="hidden" name="evaluationId" value={ev.id} />
-                <Input name="reason" required placeholder="Why clear them?" aria-label="Reason for clearing the marks" className="h-7 w-44" />
+                <Input name="reason" required maxLength={REASON_MAX_LENGTH} placeholder="Why clear them?" aria-label="Reason for clearing the marks" className="h-7 w-44" />
                 <SubmitButton size="sm" variant="ghost">
                   Clear marks
                 </SubmitButton>
@@ -190,7 +191,7 @@ export default async function StudentRecordPage({ params, searchParams }: PagePr
               <ActionForm action={reviewAction} compact className="flex flex-1 gap-2">
                 <input type="hidden" name="evaluationId" value={ev.id} />
                 <input type="hidden" name="decision" value="return" />
-                <Input name="comment" placeholder="What should the TA change?" className="h-7 min-w-0 flex-1" aria-label="Comment for the TA" />
+                <Input name="comment" required maxLength={REASON_MAX_LENGTH} placeholder="What should the TA change?" className="h-7 min-w-0 flex-1" aria-label="Comment for the TA" />
                 <SubmitButton size="sm" variant="outline">
                   Return
                 </SubmitButton>
@@ -201,7 +202,7 @@ export default async function StudentRecordPage({ params, searchParams }: PagePr
           {canUnlock && (
             <ActionForm action={unlockAction} compact className="flex gap-2 border-t pt-3">
               <input type="hidden" name="evaluationId" value={ev.id} />
-              <Input name="reason" placeholder="Reason for unlocking" className="h-7" required aria-label="Reason for unlocking" />
+              <Input name="reason" placeholder="Reason for unlocking" className="h-7" required maxLength={REASON_MAX_LENGTH} aria-label="Reason for unlocking" />
               <SubmitButton size="sm" variant="outline">
                 Unlock to edit
               </SubmitButton>

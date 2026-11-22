@@ -6,7 +6,8 @@ import { addAvailabilityAction } from "@/app/actions/scheduling";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { generateSlots, overlaps } from "@/domain/slots";
+import { FormField } from "@/components/form-field";
+import { canScheduleBlock, generateSlots, overlaps } from "@/domain/slots";
 import { fmtTime, fromLocalInput, type Clock } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
@@ -60,9 +61,19 @@ export function AvailabilityPlanner({ courseId, assignmentId, timezone, timezone
     return m;
   }, [busyFor, timezone]);
 
+  // When the page was opened: enough to refuse hours already gone today (the server checks the exact time).
+  const [now] = useState(() => new Date());
   const timeError = from && to && to <= from ? "End time must be after the start time." : null;
+  const startedError = useMemo(() => {
+    if (!from) return null;
+    for (const d of picked) {
+      const rule = canScheduleBlock({ startsAt: fromLocalInput(`${d}T${from}`, timezone), now });
+      if (!rule.ok) return rule.reason;
+    }
+    return null;
+  }, [picked, from, timezone, now]);
   const preview = useMemo(() => {
-    if (timeError || !from || !to) return [];
+    if (timeError || startedError || !from || !to) return [];
     return days
       .filter((d) => picked.has(d.key))
       .map((d) => {
@@ -77,7 +88,7 @@ export function AvailabilityPlanner({ courseId, assignmentId, timezone, timezone
         const fresh = timings.filter((t) => !busyFor.some((b) => overlaps(b, t)));
         return { day: d, fresh, skipped: timings.length - fresh.length };
       });
-  }, [days, picked, from, to, timezone, policy, busyFor, timeError]);
+  }, [days, picked, from, to, timezone, policy, busyFor, timeError, startedError]);
   const total = preview.reduce((n, p) => n + p.fresh.length, 0);
   const unbooked = Math.max(0, coverage.students - coverage.booked);
   const needed = Math.max(0, unbooked - coverage.freePlaces);
@@ -182,16 +193,13 @@ export function AvailabilityPlanner({ courseId, assignmentId, timezone, timezone
       </fieldset>
 
       <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="startTime">From</Label>
+        <FormField name="startTime" label="From" error={startedError ?? undefined}>
           <Input id="startTime" name="startTime" type="time" value={from} onChange={(e) => setFrom(e.target.value)} required />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="endTime">To</Label>
-          <Input id="endTime" name="endTime" type="time" value={to} onChange={(e) => setTo(e.target.value)} required aria-invalid={Boolean(timeError)} />
-        </div>
+        </FormField>
+        <FormField name="endTime" label="To" error={timeError ?? undefined}>
+          <Input id="endTime" name="endTime" type="time" value={to} onChange={(e) => setTo(e.target.value)} required />
+        </FormField>
       </div>
-      {timeError && <p className="text-xs text-destructive">{timeError}</p>}
 
       <div className="space-y-1.5">
         <Label htmlFor="venueId">Where</Label>

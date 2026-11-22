@@ -225,7 +225,7 @@ Add one for every deliberate trade-off.
   {Departments want instructors to manage their own co-instructors, or self-service creation is
    abused.}
 
-\adr{020}{A public landing page at /, designed as a departure board}{2026-11-21}{Accepted}
+\adr{020}{A public landing page at /, designed as a departure board}{2026-11-21}{Accepted; public pages share its theme (ADR-028)}
   {\route{/} only redirected to \route{/login}, which had one line of description. Accounts are
    invite-only, so people arriving from an invite, a shared link or a search had no way to learn
    what Slotty does, what their part is, or how to get in, and users reported being confused. Two
@@ -401,13 +401,15 @@ Add one for every deliberate trade-off.
    CI's \emph{Release PR} job: right source, a new version in \src{package.json}, no tag for it
    yet. A push to \code{master} deploys; after \route{/health} reports the new version the
    workflow tags it and publishes the release with generated notes. A \emph{Back-merge} workflow
-   opens a pull request from \code{master} into \code{dev} and starts CI on it. The build role
+   opens a pull request from \code{master} into \code{dev}, whose CI runs once the maintainer
+   approves it. The build role
    trusts \code{master} and \code{v*} tags (kept for redeploys and emergency rollbacks); the
    \code{production} environment allows both. Rollback is normally a revert pull request into
    \code{master}.}
   {\code{master} equals production except while a deploy is running or has just failed, which
    the failed run shows; tags mean ``went live''. Each release is two pull requests (the version
-   bump on \code{dev}, then \code{dev} into \code{master}) plus the back-merge. GitHub lets
+   bump on \code{dev}, then \code{dev} into \code{master}) plus the back-merge, which needs one
+   approval click before its CI runs. GitHub lets
    neither workflows push to a protected branch nor exempt GitHub Actions in a personal
    repository, so the back-merge is a pull request, and the tag ruleset no longer restricts
    creating tags (moving and deleting them still is). Rejected: keeping releases as a separate
@@ -417,3 +419,32 @@ Add one for every deliberate trade-off.
   {The repository moves to an organisation (GitHub Actions can then bypass rulesets, so the
    back-merge could push directly), or a staging environment fits the budget (deploy \code{dev}
    there).}
+
+\adr{028}{Public pages share the landing page's theme}{2026-11-22}{Accepted; narrows ADR-020's ``looks unlike the app'' to the signed-in app}
+  {The landing page (ADR-020) has its own dark departure-board design, but the pages right after
+   it (sign-in, password reset, invite acceptance, privacy) used the app's plain grey components,
+   so a visitor who clicked \ui{Sign in} landed in what looked like a different product (issue
+   \#60).}
+  {Every signed-out page uses \code{PublicShell} (\src{src/components/public}): the landing
+   wrapper (\code{data-theme="slotty-landing"}), its fonts and footer, the hero's haze shader
+   (\code{HeroShader}) behind a header with the wordmark and the menu's quiet \ui{How it works}
+   pill, and on the sign-in pages the hero's faint split-flap mark behind the form panel.
+   \src{public.css} maps the app's shadcn colour tokens to the landing palette inside that
+   wrapper and restyles \code{Card} as the landing's board and \code{Input} as recessed pills
+   with a thin amber focus edge, so the forms keep the app's components and \code{ActionForm}
+   with unchanged behaviour, labels and limits. The submit button is \code{PublicSubmit}, the
+   hero's amber pill (\code{lp-btn-primary}) with the same pending and offline handling as
+   \code{SubmitButton}; errors use the red, success the green of ADR-020's three signal colours.
+   Headlines use the condensed landing type, centred. Each page offers as few choices as it can:
+   on sign-in, two fields, one large button, a full-width \ui{Forgot password?} under it, and the
+   invite explanation behind \ui{No account yet?}. Dark only, like the landing page; the shader
+   draws one still frame under reduced motion.}
+  {Two looks to keep apart: the signed-in app keeps its own theme until the app revamp (issue
+   \#58) decides how far the landing look goes. Overrides for sizes and fills the components set
+   with Tailwind utilities sit outside the CSS layers in \src{public.css}, so a component change
+   there needs a look at the public pages too. The shader runs on every public page (about 30
+   frames a second at half resolution, only while visible). Rejected: restyling the components
+   themselves (would change the app as well), separate form components for public pages (two
+   copies of the same behaviour), a light variant (the landing page is dark only), a plain
+   background (the pages felt empty next to the landing page).}
+  {The app revamp (\#58) adopts the landing look, so the mapping can move to the app's own tokens.}
