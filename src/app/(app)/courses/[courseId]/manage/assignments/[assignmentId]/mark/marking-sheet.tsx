@@ -40,6 +40,8 @@ export interface SheetRow {
     noBookingReason: string | null;
     earlyMarkReason: string | null;
     reviewComment: string | null;
+    /** When released marks waiting out their hold reach the student, in the course timezone (ADR-032). */
+    releasesOn: string | null;
     scores: { criterionId: string; points: number; comment: string | null }[];
   } | null;
 }
@@ -57,6 +59,8 @@ interface Props {
   hasInstructor: boolean;
   /** What this user submits is final (an instructor, or a course without one). */
   finalOnSubmit: boolean;
+  /** Releasing holds the marks this long before students see them (a TA in a course without an instructor). */
+  holdHours?: number | null;
   /** One student inside their student page: no day sheet, progress or next/back. */
   embedded?: boolean;
   mode: "day" | "todo" | "student";
@@ -135,7 +139,7 @@ function problems(d: Draft, criteria: Criterion[], maxMarks: number): Record<str
   return out;
 }
 
-export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, embedded, mode, isToday, title, timezoneLabel, initialBookingId, now: serverNow, links }: Props) {
+export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, holdHours = null, embedded, mode, isToday, title, timezoneLabel, initialBookingId, now: serverNow, links }: Props) {
   const online = useOnline();
   const [now, setNow] = useState(() => new Date(serverNow).getTime());
   const [drafts, setDrafts] = useState<Draft[]>(() => rows.map(draftOf));
@@ -487,11 +491,16 @@ export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, embedd
         )}
         {locked(current) && !embedded && (
           <p className="text-sm text-muted-foreground">
-            {st.evalStatus === "FINALIZED" ? "Marks are final and released to the student." : "Submitted — waiting for the instructor's review."} Open{" "}
+            {st.evalStatus === "FINALIZED"
+              ? "Marks are final and released to the student."
+              : row.evaluation?.releasesOn
+                ? `Released: the student sees them on ${row.evaluation.releasesOn}.`
+                : "Submitted — waiting for the instructor's review."}{" "}
+            Open{" "}
             <Link className="underline" href={`${links.details}/${row.student.id}`}>
               details
             </Link>{" "}
-            to see or unlock them.
+            {row.evaluation?.releasesOn && st.evalStatus === "SUBMITTED" ? "to withdraw them." : "to see or unlock them."}
           </p>
         )}
 
@@ -529,7 +538,13 @@ export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, embedd
             track="marking"
             compact
             className="flex flex-wrap items-center gap-3 border-t pt-3 text-sm"
-            confirm={finalOnSubmit ? `Release these marks (${totalOf(current) ?? "–"} / ${assignment.maxMarks})? The student is notified and they become final.` : undefined}
+            confirm={
+              finalOnSubmit
+                ? holdHours
+                  ? `Release these marks (${totalOf(current) ?? "–"} / ${assignment.maxMarks})? The student sees them in ${holdHours} hours and is notified then. You can withdraw them until then.`
+                  : `Release these marks (${totalOf(current) ?? "–"} / ${assignment.maxMarks})? The student is notified and they become final.`
+                : undefined
+            }
             confirmLabel="Release marks"
           >
             <input type="hidden" name="evaluationId" value={st.evaluationId ?? ""} />
@@ -537,7 +552,9 @@ export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, embedd
               {!canSubmitThis
                 ? "Marks save as you type. Score every row to submit."
                 : finalOnSubmit
-                  ? "The student sees the marks as soon as you release them."
+                  ? holdHours
+                    ? `The student sees the marks ${holdHours} hours after you release them.`
+                    : "The student sees the marks as soon as you release them."
                   : "The instructor reviews the marks before the student sees them."}
             </span>
             <SubmitButton disabled={!canSubmitThis || unsaved}>
@@ -604,7 +621,7 @@ export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, embedd
                       </td>
                     ))}
                     <td className="px-2 py-1.5 text-right font-medium tabular-nums">{total ?? <span className="text-muted-foreground">·</span>}</td>
-                    <td className="px-2 py-1.5 whitespace-nowrap">{marksLabel(state[i], complete(i))}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">{marksLabel(state[i], complete(i), Boolean(rows[i].evaluation?.releasesOn))}</td>
                   </tr>
                 );
               })}
@@ -621,7 +638,13 @@ export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, embedd
             track="marking"
             compact
             className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3 text-sm"
-            confirm={finalOnSubmit ? `Release ${ready.length} mark${ready.length === 1 ? "" : "s"}? Students are notified and the marks become final.` : undefined}
+            confirm={
+              finalOnSubmit
+                ? holdHours
+                  ? `Release ${ready.length} mark${ready.length === 1 ? "" : "s"}? Students see them in ${holdHours} hours and are notified then. You can withdraw them until then.`
+                  : `Release ${ready.length} mark${ready.length === 1 ? "" : "s"}? Students are notified and the marks become final.`
+                : undefined
+            }
             confirmLabel="Release marks"
           >
             {ready.map((id) => (
@@ -629,7 +652,11 @@ export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, embedd
             ))}
             <span className="flex-1">
               {ready.length} complete mark{ready.length === 1 ? "" : "s"} ready.{" "}
-              {finalOnSubmit ? "Students see them as soon as you release them." : "The instructor reviews them before students see them."}
+              {finalOnSubmit
+                ? holdHours
+                  ? `Students see them ${holdHours} hours after you release them.`
+                  : "Students see them as soon as you release them."
+                : "The instructor reviews them before students see them."}
             </span>
             <SubmitButton disabled={unsaved}>{finalOnSubmit ? `Release ${ready.length} mark${ready.length === 1 ? "" : "s"}` : `Submit ${ready.length} for review`}</SubmitButton>
           </ActionForm>
@@ -956,11 +983,12 @@ function attendanceLabel(status: RowState["bookingStatus"], phase: "past" | "liv
   return <span className="text-muted-foreground">Booked</span>;
 }
 
-function marksLabel(s: RowState, complete: boolean) {
+function marksLabel(s: RowState, complete: boolean, held: boolean) {
   if (s.save.kind === "error") return <span className="text-destructive">Not saved</span>;
   if (s.evalStatus === "FINALIZED") return <span className="text-emerald-700 dark:text-emerald-400">Final</span>;
-  if (s.evalStatus === "SUBMITTED") return <span className="text-emerald-700 dark:text-emerald-400">Submitted</span>;
+  if (s.evalStatus === "SUBMITTED") return <span className="text-emerald-700 dark:text-emerald-400">{held ? "Released (held)" : "Submitted"}</span>;
   if (s.evalStatus === "RETURNED") return <span className="text-amber-700 dark:text-amber-400">Returned</span>;
   if (s.evaluationId) return complete ? <span>Draft · complete</span> : <span className="text-amber-700 dark:text-amber-400">Draft</span>;
   return <span className="text-muted-foreground">—</span>;
 }
+

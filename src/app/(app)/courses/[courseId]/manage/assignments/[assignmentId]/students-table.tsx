@@ -23,6 +23,8 @@ export interface StudentRow {
   /** Marked without a booking (unusual; recorded with a reason). */
   noBooking: boolean;
   total: number | null;
+  /** Released marks waiting out their hold: when the student sees them (course timezone). */
+  releasesOn: string | null;
 }
 
 const FILTERS = {
@@ -39,7 +41,7 @@ const FILTER_LABELS: Record<Filter, string> = {
   all: "All",
   unbooked: "Not booked",
   toMark: "To mark",
-  review: "Awaiting review",
+  review: "Awaiting review or held",
   final: "Final",
 };
 
@@ -56,6 +58,7 @@ export function StudentsTable({
   markBase,
   exportHref,
   releases,
+  holdHours = null,
   initialFilter,
 }: {
   rows: StudentRow[];
@@ -65,6 +68,8 @@ export function StudentsTable({
   exportHref: string;
   /** Submitting releases marks straight to students (no instructor review). */
   releases: boolean;
+  /** Released marks reach students this many hours later (a TA in a course without an instructor). */
+  holdHours?: number | null;
   initialFilter?: string;
 }) {
   const [filter, setFilter] = useState<Filter>(initialFilter && initialFilter in FILTERS ? (initialFilter as Filter) : "all");
@@ -76,6 +81,11 @@ export function StudentsTable({
 
   return (
     <div className="space-y-3">
+      {holdHours && (
+        <p className="rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">
+          This course has no instructor, so marks you release reach students {holdHours} hours later. Until then you can withdraw them from the student&apos;s page.
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap rounded-lg border p-0.5 text-sm" role="group" aria-label="Filter students">
           {(Object.keys(FILTERS) as Filter[]).map((f) => (
@@ -100,7 +110,13 @@ export function StudentsTable({
             action={submitManyAction}
             compact
             onSuccess={() => setSelected(new Set())}
-            confirm={releases ? `Release ${selected.size} mark${selected.size === 1 ? "" : "s"}? Students are notified and the marks become final.` : undefined}
+            confirm={
+              releases
+                ? holdHours
+                  ? `Release ${selected.size} mark${selected.size === 1 ? "" : "s"}? Students see them in ${holdHours} hours and are notified then. You can withdraw them until then.`
+                  : `Release ${selected.size} mark${selected.size === 1 ? "" : "s"}? Students are notified and the marks become final.`
+                : undefined
+            }
             confirmLabel="Release marks"
           >
             {[...selected].map((id) => (
@@ -171,7 +187,13 @@ export function StudentsTable({
                   </td>
                   <td className="p-2">
                     <span className="flex flex-wrap gap-1">
-                      {r.evaluationStatus ? <StatusBadge status={r.evaluationStatus} /> : <span className="text-muted-foreground">—</span>}
+                      {r.releasesOn ? (
+                        <StatusBadge status="HELD" label={`Releases ${r.releasesOn}`} tone="info" />
+                      ) : r.evaluationStatus ? (
+                        <StatusBadge status={r.evaluationStatus} />
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                       {r.noBooking && <StatusBadge status="NO_BOOKING" label="No booking" tone="warning" />}
                     </span>
                   </td>
