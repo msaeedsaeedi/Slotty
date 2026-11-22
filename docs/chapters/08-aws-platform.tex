@@ -99,6 +99,8 @@ the NAT instance accepts only the app subnets. The VPC's default security group 
   managed NAT gateway (about \$33 plus traffic). It is a single instance with EC2 automatic
   recovery; while it is down, running tasks keep serving users but cannot send email or pull
   images. \tfvar{nat_mode = "gateway"} switches to a managed gateway (after lifting the SCP deny).
+  The AMI is pinned (\tfvar{nat_ami_id}): to upgrade, set a newer fck-nat AL2023 arm64 image's ID
+  and review the plan, which replaces the instance (about a minute without outbound traffic).
 \end{decision}
 
 \section{Compute}\label{sec:aws-compute}

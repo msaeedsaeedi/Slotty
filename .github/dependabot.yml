@@ -1,0 +1,47 @@
+# Weekly dependency updates (#40, ADR-034). Pull requests go to dev (the default branch), labelled
+# `chore` for the release notes, and pass the same CI as any other change. Minor and patch updates
+# are grouped per ecosystem to keep the queue short; majors come one by one (see #107).
+# Security updates are a repository setting (on since 2026-11-23): they open a fix PR as soon as an
+# advisory appears and reuse this file's labels; these weekly version updates keep everything else,
+# including image digests and action SHAs, current.
+version: 2
+updates:
+  - package-ecosystem: bun
+    directories: ["/", "/docker/migrate"]
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Asia/Karachi
+    open-pull-requests-limit: 5
+    labels: [chore]
+    commit-message:
+      prefix: deps
+    groups:
+      bun-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directories: ["/", "/docs/tooling"]
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Asia/Karachi
+    labels: [chore]
+    commit-message:
+      prefix: deps
+    groups:
+      docker-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directories: ["/", "/.github/actions/setup"]
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Asia/Karachi
+    labels: [chore]
+    commit-message:
+      prefix: deps
+    groups:
+      actions-minor-and-patch:
+        update-types: [minor, patch]

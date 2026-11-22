@@ -22,20 +22,6 @@ resource "aws_vpc_security_group_egress_rule" "nat_out" {
   ip_protocol       = "-1"
 }
 
-data "aws_ami" "fck_nat" {
-  count       = var.nat_mode == "instance" ? 1 : 0
-  most_recent = true
-  owners      = ["568608671756"]
-  filter {
-    name   = "name"
-    values = ["fck-nat-al2023-*-arm64-ebs"]
-  }
-  filter {
-    name   = "architecture"
-    values = ["arm64"]
-  }
-}
-
 # Session Manager on the NAT instance doubles as the bastion for RDS port forwarding.
 resource "aws_iam_role" "nat" {
   count = var.nat_mode == "instance" ? 1 : 0
@@ -60,7 +46,7 @@ resource "aws_iam_instance_profile" "nat" {
 
 resource "aws_instance" "nat" {
   count                       = var.nat_mode == "instance" ? 1 : 0
-  ami                         = data.aws_ami.fck_nat[0].id
+  ami                         = var.nat_ami_id
   instance_type               = "t4g.nano"
   subnet_id                   = aws_subnet.public[0].id
   vpc_security_group_ids      = [aws_security_group.nat.id]
@@ -83,11 +69,6 @@ resource "aws_instance" "nat" {
   }
 
   tags = { Name = "${local.name}-nat" }
-
-  lifecycle {
-    # A newer fck-nat AMI shouldn't replace the instance on every apply; taint it to upgrade.
-    ignore_changes = [ami]
-  }
 }
 
 resource "aws_route" "app_default_instance" {

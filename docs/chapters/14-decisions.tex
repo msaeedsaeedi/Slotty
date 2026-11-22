@@ -538,3 +538,22 @@ Add one for every deliberate trade-off.
    on the account page now (work for a feature that isn't offered).}
   {Calendar sync is designed and ships with its own token handling.}
 
+\adr{034}{Pinned build inputs, weekly updates, and an audit gate with named exceptions}{2026-11-23}{Accepted}
+  {Base images and GitHub Actions were pinned by tag, which their publishers can move; the migrate
+   image installed the Prisma CLI without a lockfile; the fck-nat AMI was whatever was newest at
+   apply time; and nothing told us when a dependency had a known vulnerability, until an audit found
+   critical advisories in the Next.js running in production (fixed by hotfix v1.0.0-beta.3.1, \#106).}
+  {Pin every build input (images by digest, actions by commit SHA, packages by lockfile with frozen
+   installs, the AMI by ID), let Dependabot propose updates weekly into \code{dev} (minor and patch
+   grouped, majors one at a time), and fail CI on any high or critical advisory in either lockfile.
+   An advisory that can't be fixed yet and isn't reachable is accepted by ID in the \code{audit}
+   script, with its reason in ch.~11 and when to drop it.}
+  {A changed upstream image or action can't slip into a build, and a new high advisory blocks merges
+   until it is fixed or explicitly accepted. The cost is a weekly trickle of update pull requests to
+   review and merge, and an exception list to keep honest. Moderate advisories are shown but don't
+   fail the build, because most sit in tooling (linters, test containers) and need upstream fixes.
+   Rejected: overriding transitive versions under tools to silence advisories (runs them on versions
+   they weren't released with), Renovate (another app to install for the same result), auditing only
+   production dependencies (the migrate image ships the Prisma CLI, a dev dependency).}
+  {The exception list grows instead of shrinking, or update pull requests pile up unmerged.}
+
