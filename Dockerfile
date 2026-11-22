@@ -34,7 +34,7 @@ RUN DATABASE_URL=postgres://build@localhost/build bun run build \
 FROM base AS migrate-deps
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app/migrate
-RUN printf '%s' '{"name":"slotty-migrate","private":true,"dependencies":{"prisma":"7.10.0","dotenv":"18.0.3"},"trustedDependencies":["prisma","@prisma/engines"]}' > package.json \
+RUN printf '%s' '{"name":"slotty-migrate","private":true,"dependencies":{"prisma":"7.10.1","dotenv":"18.0.10"},"trustedDependencies":["prisma","@prisma/engines"]}' > package.json \
  && bun install --production && rm -rf /root/.bun
 COPY prisma.config.ts ./
 COPY prisma ./prisma
