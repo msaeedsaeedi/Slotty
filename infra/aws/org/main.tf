@@ -38,7 +38,7 @@ variable "alert_email" {
 variable "budget_usd" {
   description = "Monthly cost budget for the Slotty account."
   type        = number
-  default     = 50
+  default     = 55
 }
 
 variable "allowed_region" {

@@ -12,11 +12,11 @@ This chapter gathers the controls described elsewhere into one view an auditor c
   Account isolation & Dedicated account in an Organization; SCPs deny other regions, large or expensive resources, root-user actions, leaving the Organization and tampering with CloudTrail & \cref{sec:aws-guardrails}\\
   Audit (cloud) & Organization CloudTrail with log-file validation, 90 days, in the management account & \src{infra/aws/org}\\
   Audit (app) & Moderation-relevant changes written in the same transaction as the change, including every change to marks (private notes only as edited), mark exports and each person a roster import adds or changes; append-only, enforced by a database trigger that refuses \code{UPDATE} and \code{DELETE} & \cref{ch:crosscutting}\\
-  Network & Tasks and database in private subnets; database subnets have no route out; security groups allow only the next hop; no SSH anywhere & \cref{ch:aws}\\
+  Network & Tasks and database in private subnets; database subnets have no route out; inbound, security groups allow only the next hop; outbound, tasks may only use HTTPS (443), Postgres to the database's security group, and for the worker SMTP submission (587) to SES; no SSH anywhere; ECS Exec off by default and logged to \code{/slotty/exec} when turned on for an incident & \src{infra/aws/app/network.tf}, \src{ecs.tf}\\
   Edge & TLS 1.2+ with HSTS; origin reachable only with CloudFront's secret header; API Gateway throttling & \cref{sec:aws-request-path}\\
-  Data at rest & RDS, EBS, S3 and SSM encrypted with AWS-managed keys & \src{infra/aws/app}\\
-  Data in transit & TLS everywhere; database connections verify the certificate and host name against the RDS CA & \cref{ch:aws}\\
-  Secrets & SSM SecureStrings readable only by the ECS execution role; none in the image or the repository; Terraform state private and encrypted & \src{infra/aws/app/secrets.tf}\\
+  Data at rest & RDS (and its snapshots), EBS, S3, SSM and ECR encrypted with AWS-managed or AWS-owned keys; the alerts topic (alarm details, bounced addresses) with a customer-managed KMS key, rotated yearly & \src{infra/aws/app}\\
+  Data in transit & TLS from browsers to CloudFront (TLS 1.2+) and CloudFront to API Gateway; plain HTTP from API Gateway to the web tasks inside the VPC (ADR-029); the database requires TLS (\code{rds.force_ssl}) and the app verifies its certificate and host name against the RDS CA; SMTP to SES requires TLS & \cref{ch:aws}\\
+  Secrets & SSM SecureStrings readable only by the ECS execution role, injected as task secrets, never plain environment; none in the image or the repository. Terraform state holds them in plain text (ADR-029): its bucket is in the management account, encrypted, versioned, and readable only by that account's administrator & \src{infra/aws/app/secrets.tf}\\
   Deploy identity & GitHub OIDC, no stored keys: a build role (ECR push) for this repository's master branch and a deploy role (ECS) for its \code{production} environment only; master requires a green, up-to-date pull request, and outside contributors' workflows need approval & \cref{ch:delivery}\\
   Email & SPF, DKIM and DMARC (\code{p=quarantine}); sending identity limited to the domain; the worker's SMTP connection requires TLS 1.2+ (STARTTLS required on port 587, implicit TLS on 465; only a server on the same machine, such as Mailpit, may speak plain text), so a downgrade fails the send instead of exposing credentials or message content & \src{infra/aws/app/ses.tf}, \src{src/server/smtp-options.ts}\\
   Mail fails closed & A deployment (production build, public \envvar{APP_URL}) refuses to start, web and worker, without \envvar{SMTP_HOST} and \envvar{MAIL_FROM} or with \envvar{ENABLE_DEV_MAIL}; email bodies (links, marks) are never written to logs; \route{/dev/mail} never shows on a public address & \src{src/server/startup-checks.ts}, appendix~B\\
@@ -59,7 +59,7 @@ This chapter gathers the controls described elsewhere into one view an auditor c
 \end{risk}
 \begin{risk}
   \textbf{SMTP uses long-lived IAM user credentials} (ADR-008), limited to sending from the
-  domain. Rotate them on a schedule.
+  domain. They are rotated every 90 days and after any suspected exposure (\cref{ch:ops}).
 \end{risk}
 
 \begin{todo}

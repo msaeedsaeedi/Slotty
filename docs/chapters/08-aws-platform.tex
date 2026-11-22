@@ -28,7 +28,7 @@ An AWS Organization separates Slotty from the other workloads of the management 
   SCP \code{slotty-region-lock} & Denies every action outside us-east-1, except global services (IAM, Organizations, Route 53, CloudFront, ACM, WAF, billing, support).\\
   SCP \code{slotty-cost-guardrails} & EC2 only \code{t4g.nano/micro/small}; RDS only \code{db.t4g.micro/small}; denies Aurora, EKS, SageMaker, Redshift, ElastiCache, OpenSearch, MSK, Bedrock, NAT gateways, and every long-term purchase (Savings Plans, reservations, domain registration).\\
   SCP \code{slotty-protect} & Denies leaving the Organization, closing the account, any root-user action, and stopping or changing CloudTrail.\\
-  Budget \code{slotty-prod-monthly} & \$50 a month, filtered to the account. Emails at 90\,\% and 100\,\% of actual spend and 100\,\% of forecast.\\
+  Budget \code{slotty-prod-monthly} & \$55 a month (ADR-030), filtered to the account. Emails at 90\,\% and 100\,\% of actual spend and 100\,\% of forecast.\\
   Cost anomaly monitor & Daily email when an anomaly's impact reaches \$5.\\
   Organization CloudTrail & Management events from every account, to an encrypted, private S3 bucket in the management account, kept 90 days, with log-file validation.\\
   State bucket & \code{slotty-tfstate-<mgmt account>}: versioned, encrypted, TLS-only, public access blocked; native S3 locking. Holds both stacks' state.\\
@@ -108,7 +108,7 @@ ECS on Fargate, ARM64 (Graviton), with Container Insights off to save cost.
   \toprule
   \thead{Task} & \thead{Size} & \thead{Behaviour}\\
   \midrule
-  web & 0.5 vCPU, 1 GB & Service, at least \tfvar{web_min} (2) tasks across both AZs, at most \tfvar{web_max} (4). The first task runs on regular Fargate, the rest on Fargate Spot. Scales on average CPU (target 60\,\%). Container health check on \route{/health/live}.\\
+  web & 0.5 vCPU, 1 GB & Service, at least \tfvar{web_min} (1) task, at most \tfvar{web_max} (4). The first task runs on regular Fargate; under load CPU autoscaling adds tasks on Fargate Spot across both AZs (ADR-030). ECS Exec is off (\tfvar{enable_exec}); turned on for an incident, every session is logged to \code{/slotty/exec}. Scales on average CPU (target 60\,\%). Container health check on \route{/health/live}.\\
   worker & 0.25 vCPU, 0.5 GB & Service, one task on Fargate Spot. Interruptions are safe: it drains on \code{SIGTERM} within 25\,s and delivery is at least once.\\
   migrate & 0.25 vCPU, 0.5 GB & One-off task run by CI before each rollout (\cref{ch:delivery}); also used for administrative one-offs such as creating the first admin.\\
   \bottomrule

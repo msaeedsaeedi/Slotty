@@ -3,7 +3,42 @@
 # missing" (missing data = breaching).
 
 resource "aws_sns_topic" "alerts" {
-  name = "${local.name}-alerts"
+  name              = "${local.name}-alerts"
+  kms_master_key_id = aws_kms_key.alerts.arn
+}
+
+# A customer-managed key for the alerts topic (#63): CloudWatch alarms and SES feedback can only
+# publish to an encrypted topic when the key policy lets them, which the AWS-managed aws/sns key
+# can't. About $1 a month (ch. 12).
+resource "aws_kms_key" "alerts" {
+  description             = "${local.name} alerts topic"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "AccountAdmin"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::${local.account_id}:root" }
+        Action    = "kms:*"
+        Resource  = "*"
+      },
+      {
+        Sid       = "PublishersEncrypt"
+        Effect    = "Allow"
+        Principal = { Service = ["cloudwatch.amazonaws.com", "ses.amazonaws.com"] }
+        Action    = ["kms:GenerateDataKey*", "kms:Decrypt"]
+        Resource  = "*"
+        Condition = { StringEquals = { "aws:SourceAccount" = local.account_id } }
+      },
+    ]
+  })
+}
+
+resource "aws_kms_alias" "alerts" {
+  name          = "alias/${local.name}-alerts"
+  target_key_id = aws_kms_key.alerts.key_id
 }
 
 resource "aws_sns_topic_subscription" "email" {

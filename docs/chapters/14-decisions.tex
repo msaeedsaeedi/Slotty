@@ -51,7 +51,7 @@ Add one for every deliberate trade-off.
    is restored.}
   {Demo-day downtime would cost more than Multi-AZ (\tfvar{db_multi_az}, about \$14 more).}
 
-\adr{005}{A dedicated account with guardrail SCPs}{2026-11-16}{Accepted}
+\adr{005}{A dedicated account with guardrail SCPs}{2026-11-16}{Accepted; budget raised to \$55 by ADR-030}
   {The existing AWS account hosts other workloads; Slotty needs its own bill, blast radius and
    hard limits on spending.}
   {An AWS Organization with a \code{slotty-prod} member account, SCPs (one region, small
@@ -448,3 +448,35 @@ Add one for every deliberate trade-off.
    copies of the same behaviour), a light variant (the landing page is dark only), a plain
    background (the pages felt empty next to the landing page).}
   {The app revamp (\#58) adopts the landing look, so the mapping can move to the app's own tokens.}
+
+\adr{029}{Accepted risks after the encryption review}{2026-11-22}{Accepted}
+  {The encryption review for issue \#63 checked every store and hop against the live account.
+   Most gaps were fixed (mail requires TLS, ECS Exec off and logged, task egress narrowed, the
+   alerts topic on its own KMS key); three were weighed instead.}
+  {\textbf{Plain HTTP inside the VPC:} API Gateway reaches the web tasks over HTTP through the
+   VPC link. The traffic stays in private subnets, behind TLS from the browser to CloudFront and
+   on to API Gateway. \textbf{Secrets in Terraform state:} the state file holds the database
+   password, the SMTP key and other secrets in plain text; its bucket is in the management
+   account, encrypted, versioned and readable only by that account's administrator.
+   \textbf{AWS-managed key for RDS:} storage and snapshots are encrypted with \code{aws/rds}.}
+  {Someone with network access inside the VPC could read requests between API Gateway and the
+   tasks; anyone with the management account's administrator could read every secret. Rejected:
+   TLS to the tasks (an ALB at about \$16 a month, or certificates managed in the tasks), write-only
+   Terraform attributes now (the SES SMTP password is an attribute of the access key and stays in
+   state regardless), a customer-managed RDS key now (needs a snapshot and restore).}
+  {Issue \#39 chooses a cross-account backup copy (needs a customer-managed RDS key), an ALB comes
+   in for other reasons (ADR-002), or Terraform state moves to a backend with write-only secrets.}
+
+\adr{030}{A \$55 budget and one always-on web task}{2026-11-22}{Accepted; raises the \$50 budget of ADR-005}
+  {Two web tasks ran around the clock (one on Fargate, one on Spot) for a pilot with low traffic,
+   and the security pass for \#63 needed small paid controls (a KMS key) that the \$50 budget left
+   no room for. A full cost review is \#65.}
+  {The budget is \$55 a month. \tfvar{web_min} is 1: one task on regular Fargate at all times,
+   with CPU autoscaling (target 60\,\%) adding Spot tasks up to \tfvar{web_max} (4) under load.}
+  {About \$4.60 a month less for compute and \$1 more for the KMS key: about \$44 a month in all
+   (ch.~12). With one task, a crash or host failure leaves no second task to serve until ECS
+   replaces it (about a minute); deploys still start the new task before stopping the old one.
+   Rejected: keeping two tasks (pays for idle capacity), Spot for the only task (an interruption
+   would take the site down).}
+  {Users notice outages from single-task restarts, or \#65's review finds a better shape.}
+

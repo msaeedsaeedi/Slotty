@@ -115,8 +115,27 @@ clears by itself. Nobody needs database access for either.
 Check \route{/admin/email}: failed and waiting messages show the SMTP error. A permission or
 credential error affects every message (\code{slotty-worker-failures} fires); a bounce or
 complaint arrives as an SNS email and the address is suppressed. Retry from the console after
-fixing the cause. Rotate the SMTP credentials with
-\code{terraform apply -replace=aws_iam_access_key.ses_smtp}, then redeploy.
+fixing the cause.
+
+\subsection{Rotating the SES SMTP credentials}
+Every 90 days, and after any suspected exposure. With the management account signed in
+(\code{aws sts get-caller-identity} shows 007576456316, not the slotty-prod role), in
+\src{infra/aws/app}: \code{terraform plan -replace=aws_iam_access_key.ses_smtp}, check it
+replaces only that key and updates \code{/slotty/SMTP\_USER} and \code{/slotty/SMTP\_PASS},
+apply it, then restart the worker so it reads the new values:
+\code{aws ecs update-service --profile slotty-prod --cluster slotty --service worker
+--force-new-deployment} and \code{aws ecs wait services-stable}. The old key is gone at the
+apply, so sends fail until the new worker starts; the outbox retries them. Confirm with a password
+reset to your own address and \route{/admin/email}. A 403 on \code{app.tfstate} means the login
+is in slotty-prod: \ui{Switch back} in the console and \code{aws login} again.
+
+\subsection{A shell in a running task (ECS Exec)}
+Off by default since the encryption review (issue \#63). For an incident, in \src{infra/aws/app}:
+\code{terraform apply -var enable\_exec=true}, then \code{aws ecs update-service --profile
+slotty-prod --cluster slotty --service web --force-new-deployment} (or \code{worker}) so new tasks
+start with the agent. Every session's commands and output go to \code{/slotty/exec} (90 days). A
+shell holds \code{DATABASE\_URL}: treat it as full database access. Afterwards apply again
+without the variable and redeploy, so Exec is off.
 
 \subsection{Support mail is not arriving}
 \code{support@slotty.msaeedsaeedi.com} is forwarded by Cloudflare Email Routing (ADR-021). Two
