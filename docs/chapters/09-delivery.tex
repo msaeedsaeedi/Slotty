@@ -23,7 +23,7 @@ jobs run in parallel, each with a time limit; a new push to a pull request cance
   \toprule
   \thead{Job} & \thead{Typical} & \thead{What it proves}\\
   \midrule
-  Typecheck, lint, unit tests & 0.5 min & \code{bun run typecheck}, \code{bun run lint}, \code{bun run test:unit}: the domain rules (\cref{ch:rules}).\\
+  Typecheck, lint, unit tests & 0.5 min & \code{bun run typecheck}, \code{bun run lint}, \code{bun run test:unit}: the domain rules (\cref{ch:rules}); then \code{bun run audit}, which fails on any high or critical advisory in either lockfile except the accepted ones (ADR-034).\\
   Integration tests & 1 min & \code{bun run test:int}: every service against a real PostgreSQL 17, including the booking race.\\
   End-to-end tests & 5 min & \code{bun run test:e2e}: Playwright drives a production build in Chromium through the user journeys (\cref{ch:journeys}). On failure the report, traces and screenshots are kept for 14 days.\\
   Docker images & 2--3 min & Pull requests only: both images still build, natively on ARM64, reading \code{master}'s layer cache. Nothing is pushed.\\
@@ -111,6 +111,18 @@ stages build once; layers are cached in GitHub's cache between runs.
 
 Tags are immutable, so a re-run of the same commit reuses its images instead of rebuilding.
 
+\subsection{Pinned inputs and updates}\label{sec:dependencies}
+Every input to a build is pinned, so the same commit builds the same images (ADR-034): the base
+images by digest (\src{Dockerfile}, \src{docs/tooling/Dockerfile}), GitHub Actions by commit SHA
+with the version in a comment, the app's packages by \src{bun.lock} and the migrate image's Prisma CLI
+by its own lockfile (\src{docker/migrate}), all installed with \code{--frozen-lockfile}, and the
+fck-nat AMI by ID (\tfvar{nat_ami_id}). Dependabot (\src{.github/dependabot.yml}) proposes updates
+every Monday for Bun packages, Docker images and actions, as pull requests into \code{dev} labelled
+\code{chore}, with minor and patch updates grouped; majors come one at a time. They pass the same CI
+as any change. Separately, the repository has Dependabot alerts and security updates on (repository
+settings): a new advisory for a dependency opens a fix pull request right away, not on Monday. The
+fck-nat AMI isn't covered by either: upgrade it by hand (\cref{ch:aws}).
+
 \subsection{Rollout}
 The rollout job runs in the \code{production} GitHub Environment (deployment history, and the
 identity the deploy role trusts), one at a time. \src{infra/aws/deploy.sh} does the work, and runs
@@ -186,7 +198,7 @@ The workflow reads its targets from repository variables (\code{AWS_BUILD_ROLE_A
 
 \section{Local checks}\label{sec:local-checks}
 \begin{lstlisting}[language=bash]
-bun run typecheck && bun run lint && bun run test && bun run test:e2e   # needs Docker running
+bun run typecheck && bun run lint && bun run audit && bun run test && bun run test:e2e   # needs Docker
 docker buildx bake                                                     # both images, locally
 \end{lstlisting}
 Testing a change against the production images happens in CI (the Docker job) and after the
