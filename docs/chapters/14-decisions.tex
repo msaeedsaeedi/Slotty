@@ -500,3 +500,22 @@ Add one for every deliberate trade-off.
    and filtering the field in each query (the next query would leak it again).}
   {Moderators need notes for disputes, or staff ask for notes shared between co-markers.}
 
+\adr{032}{A TA's release waits 24 hours when nobody reviews it}{2026-11-23}{Accepted; narrows ADR-025 for withdrawing held marks}
+  {In a course without an instructor, a TA's submit released marks to the student at once: nobody
+   else saw them first, and a mistake (or a mark lowered after a student's question) reached the
+   student before anyone could stop it.}
+  {Such a submit is held for 24 hours (\code{RELEASE_HOLD_HOURS}), as \code{SUBMITTED} with
+   \code{Evaluation.releaseAt}, and the worker releases it (\code{releaseHeldMarks}). Corrections
+   after unlocking are held too. The submitting TA can withdraw held marks; an admin can withdraw
+   them from the console with a reason, the one change admins make to course data. The hold is a
+   fixed constant, not a course setting. No new status: held marks look like marks awaiting review
+   to the previous release, so a rollback fails closed.}
+  {Students in those courses see marks a day later, and corrections a day later too (they keep
+   seeing the earlier marks meanwhile). A TA submitting on a grade deadline is a day late, so the
+   Students \& marks tab says so up front, and exports mark held marks ``held until''. A worker
+   outage delays releases but never brings them forward. Rejected: a new \code{HELD} status (the
+   previous release can't read it), releasing at the next morning (more rules for little gain),
+   letting co-TAs withdraw (any TA could block a colleague), corrections without a hold (a mark
+   lowered after a question would reach the student unchecked).}
+  {Courses need a different hold, or quiet hours for releases.}
+

@@ -61,6 +61,7 @@ model User {
   evaluations       Evaluation[]        @relation("EvaluationStudent")
   evaluated         Evaluation[]        @relation("EvaluationEvaluator")
   reviewed          Evaluation[]        @relation("EvaluationReviewer")
+  submitted         Evaluation[]        @relation("EvaluationSubmitter")
   evaluationNotes   EvaluationNote[]    @relation("EvaluationNoteAuthor")
   notifications     Notification[]
   auditLogs         AuditLog[]
@@ -433,6 +434,11 @@ model Evaluation {
   earlyMarkReason String?
   status          EvaluationStatus @default(DRAFT)
   submittedAt     DateTime?
+  /// Who submitted the marks last: the only TA who may withdraw them while they're held.
+  submittedById   String?
+  /// Held marks (ADR-032): a TA's submit in a course without an instructor stays SUBMITTED until
+  /// this time, then the worker releases it. Null when nothing is held.
+  releaseAt       DateTime?
   reviewedById    String?
   reviewedAt      DateTime?
   reviewComment   String?
@@ -443,15 +449,17 @@ model Evaluation {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
-  assignment Assignment        @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  student    User              @relation("EvaluationStudent", fields: [studentId], references: [id])
-  booking    Booking?          @relation(fields: [bookingId], references: [id], onDelete: SetNull)
-  evaluator  User              @relation("EvaluationEvaluator", fields: [evaluatorId], references: [id])
-  reviewedBy User?             @relation("EvaluationReviewer", fields: [reviewedById], references: [id])
-  scores     EvaluationScore[]
-  notes      EvaluationNote[]
+  assignment  Assignment        @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student     User              @relation("EvaluationStudent", fields: [studentId], references: [id])
+  booking     Booking?          @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  evaluator   User              @relation("EvaluationEvaluator", fields: [evaluatorId], references: [id])
+  reviewedBy  User?             @relation("EvaluationReviewer", fields: [reviewedById], references: [id])
+  submittedBy User?             @relation("EvaluationSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+  scores      EvaluationScore[]
+  notes       EvaluationNote[]
 
   @@unique([assignmentId, studentId])
+  @@index([status, releaseAt])
 }
 
 /// A staff member's private note on one evaluation (ADR-031). Readable only by its author and

@@ -114,7 +114,8 @@ export async function exportAssignmentCsv(actor: Actor, assignmentId: string): P
     booking ? { BOOKED: "pending", COMPLETED: "completed", NO_SHOW: "no-show", CANCELLED: "" }[booking.status] : "not booked",
     ...criteria.map((c) => (evaluation ? (scoreBy.get(`${evaluation.id}:${c.id}`) ?? "") : "")),
     evaluation?.totalMarks ?? "",
-    evaluation?.status.toLowerCase() ?? "not started",
+    // Held marks aren't final yet: an export says so, so nobody copies them on as final (ADR-032).
+    evaluation?.status === "SUBMITTED" && evaluation.releaseAt ? `held until ${fmtData(evaluation.releaseAt, tz, "yyyy-MM-dd HH:mm")}` : (evaluation?.status.toLowerCase() ?? "not started"),
     evaluation?.evaluator.name ?? "",
     evaluation?.feedback ?? "",
   ]);

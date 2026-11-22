@@ -4,7 +4,7 @@ import { adminAssignStaff, adminCreateCourse, adminInviteUser } from "@/server/s
 import { createAssignment, updateAssignment } from "@/server/services/assignments";
 import { bookSlot, cancelBooking, isMyBookingMarked, staffCancelBooking } from "@/server/services/bookings";
 import { addMember, createCourse, importRoster, removeMember, setCourseArchived, updateCourse } from "@/server/services/courses";
-import { clearMarks, getMyResult, saveDraft, submitEvaluations, unlockEvaluation } from "@/server/services/evaluations";
+import { clearMarks, getMyResult, saveDraft, submitEvaluations, unlockEvaluation, releaseHeldMarks } from "@/server/services/evaluations";
 import { addAvailability, cancelSlot } from "@/server/services/slots";
 import { enroll, inHours, makeUser, resetDb, setupCourse } from "./helpers";
 
@@ -251,6 +251,7 @@ describe("QA fixes (Nov 2026)", () => {
     // Draft marks stay hidden from the student.
     expect(await getMyResult(ann, assignment.id)).toBeNull();
     await submitEvaluations(ta, [draft.evaluationId]);
+    await releaseHeldMarks(inHours(25));
     expect(await getMyResult(ann, assignment.id)).toMatchObject({ totalMarks: 8, underReview: false });
 
     await unlockEvaluation(ta, draft.evaluationId, "Recount");
@@ -259,6 +260,9 @@ describe("QA fixes (Nov 2026)", () => {
     // Ann still sees what she was given, flagged as being corrected, not the new draft.
     expect(await getMyResult(ann, assignment.id)).toMatchObject({ totalMarks: 8, underReview: true, scores: [expect.objectContaining({ points: 5 }), expect.anything()] });
     await submitEvaluations(ta, [draft.evaluationId]);
+    // The correction is held too: Ann keeps seeing the earlier marks until it's released.
+    expect(await getMyResult(ann, assignment.id)).toMatchObject({ totalMarks: 8, underReview: true });
+    await releaseHeldMarks(inHours(25));
     expect(await getMyResult(ann, assignment.id)).toMatchObject({ totalMarks: 10, underReview: false });
     expect((await db.evaluation.findUniqueOrThrow({ where: { id: draft.evaluationId } })).released).toBeNull();
   });

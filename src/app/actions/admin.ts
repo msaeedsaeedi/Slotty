@@ -15,6 +15,7 @@ import {
   adminUpdateUser,
 } from "@/server/services/admin";
 import { markRead } from "@/server/services/inbox";
+import { adminWithdrawEvaluation } from "@/server/services/evaluations";
 
 export async function setDisabledAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return run(async () => {
@@ -107,5 +108,12 @@ export async function retryEmailsAction(_: ActionState, fd: FormData): Promise<A
 export async function markAllReadAction(): Promise<ActionState> {
   return run(async () => {
     await markRead(await requireUser());
+  });
+}
+
+export async function adminWithdrawMarksAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return run(async () => {
+    await adminWithdrawEvaluation(await requireUser(), str(fd, "evaluationId"), str(fd, "reason"));
+    return "Marks withdrawn. The TA has been told why.";
   });
 }

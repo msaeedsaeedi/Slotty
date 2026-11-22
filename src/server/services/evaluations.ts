@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
-import { canReadPrivateNote, canSubmit, canTransition, checkTotalMarks, computeTotal, nextStatus, validateScores, type EvaluationStatus } from "@/domain/evaluation";
+import { canReadPrivateNote, canSubmit, canTransition, canWithdraw, checkTotalMarks, computeTotal, nextStatus, releaseAtFor, submitRoute, validateScores, type EvaluationStatus } from "@/domain/evaluation";
 import { checkReason } from "@/domain/text";
 import { assertRule, DomainError } from "@/domain/result";
 import { visibleMarks, type VisibleMarks } from "@/domain/student-demo";
 import { dayRange, fmtData } from "@/lib/time";
 import { db, type Tx } from "@/server/db";
-import { assertAssignmentRole, assertCourseRole, assertCourseWritable, courseHasInstructor, STAFF, type Actor } from "./access";
+import { assertAdmin, assertAssignmentRole, assertCourseRole, assertCourseWritable, courseHasInstructor, STAFF, type Actor } from "./access";
 import { audit } from "./audit";
 import { notify, unseenEarlier } from "./notify";
 import { marksKey } from "@/domain/notifications";
@@ -352,6 +352,7 @@ export async function getMarkingSheet(
           noBookingReason: e.noBookingReason,
           earlyMarkReason: e.earlyMarkReason,
           reviewComment: e.reviewComment,
+          releaseAt: e.releaseAt,
           scores: e.scores.map((s) => ({ criterionId: s.criterionId, points: s.points, comment: s.comment })),
         },
       };
@@ -374,12 +375,13 @@ export async function markingSheetFocus(actor: Actor, assignmentId: string, book
 }
 
 /**
- * Submit evaluations. With an instructor in the course they go to SUBMITTED for
- * review; without one, the TA's submission is final.
+ * Submit evaluations (`submitRoute`, ADR-032). With an instructor in the course they go to
+ * SUBMITTED for review. Without one, a TA's marks are held for 24 hours (`releaseAt`) and the
+ * worker releases them (`releaseHeldMarks`); what an instructor submits is final at once.
  */
-export async function submitEvaluations(actor: Actor, evaluationIds: string[]) {
+export async function submitEvaluations(actor: Actor, evaluationIds: string[], now = new Date()) {
   return db.$transaction(async (tx) => {
-    const results: { id: string; status: string }[] = [];
+    const results: { id: string; status: string; releaseAt: Date | null }[] = [];
     for (const id of evaluationIds) {
       const { evaluation, role } = await loadForStaff(tx, actor, id);
       assertRule(canTransition(evaluation.status, "submit"));
@@ -394,20 +396,22 @@ export async function submitEvaluations(actor: Actor, evaluationIds: string[]) {
         const student = await tx.user.findUniqueOrThrow({ where: { id: evaluation.studentId } });
         throw new DomainError(`${student.name}: ${check.reason}`);
       }
-      // Instructors (and admins) review marks, so what they submit is final.
-      const needsReview = role !== "INSTRUCTOR" && (await courseHasInstructor(tx, evaluation.assignment.courseId));
-      const status = nextStatus(evaluation.status, "submit", { courseHasInstructor: needsReview });
+      const route = submitRoute(role === "INSTRUCTOR" ? "INSTRUCTOR" : "TA", await courseHasInstructor(tx, evaluation.assignment.courseId));
+      const status = nextStatus(evaluation.status, "submit", { route });
+      const releaseAt = route === "hold" ? releaseAtFor(now) : null;
       await tx.evaluation.update({
         where: { id },
         data: {
           status,
-          submittedAt: new Date(),
-          ...(status === "FINALIZED" ? { reviewedById: actor.id, reviewedAt: new Date(), released: Prisma.DbNull } : {}),
+          submittedAt: now,
+          submittedById: actor.id,
+          releaseAt,
+          ...(status === "FINALIZED" ? { reviewedById: actor.id, reviewedAt: now, released: Prisma.DbNull } : {}),
         },
       });
       if (status === "FINALIZED") await announceMarks(tx, evaluation);
-      await audit(tx, actor, { action: `evaluation.submit`, entityType: "Evaluation", entityId: id, after: { status } });
-      results.push({ id, status });
+      await audit(tx, actor, { action: `evaluation.submit`, entityType: "Evaluation", entityId: id, after: { status, ...(releaseAt ? { releaseAt: releaseAt.toISOString() } : {}) } });
+      results.push({ id, status, releaseAt });
     }
     return results;
   });
@@ -441,6 +445,104 @@ async function announceMarks(tx: Tx, evaluation: { id: string; studentId: string
 }
 
 /**
+ * Withdraw held marks before they reach the student (ADR-032): only the TA who submitted them.
+ * They go back to DRAFT; the student was never told, so nobody is notified.
+ */
+export async function withdrawEvaluation(actor: Actor, evaluationId: string, now = new Date()) {
+  return db.$transaction(async (tx) => {
+    const { evaluation } = await loadForStaff(tx, actor, evaluationId);
+    const check = canWithdraw(evaluation, { kind: "staff", id: actor.id }, now);
+    assertRule(check, evaluation.submittedById !== actor.id && evaluation.releaseAt ? "FORBIDDEN" : "CONFLICT");
+    await takeBack(tx, evaluationId, now);
+    await audit(tx, actor, { action: "evaluation.withdraw", entityType: "Evaluation", entityId: evaluationId, before: { releaseAt: evaluation.releaseAt!.toISOString() } });
+  });
+}
+
+/**
+ * An admin withdraws held marks from the console, with a reason (ADR-032): a narrow moderation
+ * exception to admins being read-only in courses (ADR-025). The submitting TA is told why.
+ */
+export async function adminWithdrawEvaluation(actor: Actor, evaluationId: string, reason: string, now = new Date()) {
+  assertAdmin(actor);
+  assertRule(checkReason(reason, { missing: "Say why the marks are being withdrawn; the TA sees it." }), "INVALID", "reason");
+  return db.$transaction(async (tx) => {
+    const evaluation = await tx.evaluation.findUnique({
+      where: { id: evaluationId },
+      include: { assignment: { select: { title: true, courseId: true } }, student: { select: { name: true } } },
+    });
+    if (!evaluation) throw new DomainError("Evaluation not found.", "NOT_FOUND");
+    assertRule(canWithdraw(evaluation, { kind: "admin" }, now), "CONFLICT");
+    await takeBack(tx, evaluationId, now);
+    await audit(tx, actor, {
+      action: "evaluation.withdraw",
+      entityType: "Evaluation",
+      entityId: evaluationId,
+      before: { releaseAt: evaluation.releaseAt!.toISOString(), submittedById: evaluation.submittedById },
+      after: { reason: reason.trim(), by: "admin" },
+    });
+    if (evaluation.submittedById) {
+      await notify(tx, [evaluation.submittedById], {
+        type: "evaluation.withdrawn",
+        title: `Marks withdrawn: ${evaluation.assignment.title}`,
+        body: `A Slotty admin withdrew ${evaluation.student.name}'s marks before they were released:\n"${reason.trim()}"`,
+        link: `/courses/${evaluation.assignment.courseId}/manage/assignments/${evaluation.assignmentId}/evaluate/${evaluation.studentId}`,
+      });
+    }
+  });
+}
+
+/** Every held release across courses, soonest first, for the admin console (ADR-032). */
+export async function adminListHeldMarks(actor: Actor) {
+  assertAdmin(actor);
+  return db.evaluation.findMany({
+    where: { status: "SUBMITTED", releaseAt: { not: null } },
+    select: {
+      id: true,
+      releaseAt: true,
+      totalMarks: true,
+      student: { select: { name: true, email: true } },
+      submittedBy: { select: { name: true } },
+      assignment: { select: { title: true, maxMarks: true, course: { select: { id: true, code: true, timezone: true } } } },
+    },
+    orderBy: { releaseAt: "asc" },
+    take: 200,
+  });
+}
+
+/** Held marks back to DRAFT, unless the release won the race. */
+async function takeBack(tx: Tx, evaluationId: string, now: Date) {
+  const taken = await tx.evaluation.updateMany({
+    where: { id: evaluationId, status: "SUBMITTED", releaseAt: { gt: now } },
+    data: { status: "DRAFT", releaseAt: null, submittedAt: null, submittedById: null },
+  });
+  if (taken.count === 0) throw new DomainError("These marks have already been released.", "CONFLICT");
+}
+
+/**
+ * Release held marks whose time has come (worker, every minute; ADR-032). Each one is claimed
+ * with a conditional update, so two runs or two workers never release or notify twice. The
+ * submitting TA is recorded as the one who released them, as when a submit was final at once.
+ */
+export async function releaseHeldMarks(now = new Date()): Promise<number> {
+  const due = await db.evaluation.findMany({ where: { status: "SUBMITTED", releaseAt: { lte: now } }, select: { id: true }, orderBy: { releaseAt: "asc" }, take: 200 });
+  let released = 0;
+  for (const { id } of due) {
+    await db.$transaction(async (tx) => {
+      const ev = await tx.evaluation.findUniqueOrThrow({ where: { id }, include: { assignment: { select: { title: true, courseId: true } } } });
+      const claimed = await tx.evaluation.updateMany({
+        where: { id, status: "SUBMITTED", releaseAt: { lte: now }, submittedById: ev.submittedById },
+        data: { status: "FINALIZED", releaseAt: null, reviewedById: ev.submittedById, reviewedAt: now, released: Prisma.DbNull },
+      });
+      if (claimed.count === 0) return;
+      await announceMarks(tx, ev);
+      await audit(tx, null, { action: "evaluation.release", entityType: "Evaluation", entityId: id, after: { status: "FINALIZED", submittedById: ev.submittedById } });
+      released++;
+    });
+  }
+  return released;
+}
+
+/**
  * Remove draft marks entirely (e.g. so a marked booking can be moved). Submitted
  * or final marks must be unlocked first. The old marks stay in the audit log.
  */
@@ -467,11 +569,13 @@ export async function reviewEvaluation(actor: Actor, evaluationId: string, decis
     const { evaluation, role } = await loadForStaff(tx, actor, evaluationId);
     if (role !== "INSTRUCTOR") throw new DomainError("Only instructors review submitted evaluations.", "FORBIDDEN");
     assertRule(checkReason(comment, { required: decision === "return", missing: "Tell the TA what needs to change." }), "INVALID", "comment");
-    const status = nextStatus(evaluation.status, decision, { courseHasInstructor: true });
-    await tx.evaluation.update({
-      where: { id: evaluationId },
-      data: { status, reviewedById: actor.id, reviewedAt: new Date(), reviewComment: comment?.trim() || null, ...(status === "FINALIZED" ? { released: Prisma.DbNull } : {}) },
+    const status = nextStatus(evaluation.status, decision);
+    // Conditional, so a held release by the worker (or a second reviewer) can't be finalized twice.
+    const reviewed = await tx.evaluation.updateMany({
+      where: { id: evaluationId, status: "SUBMITTED" },
+      data: { status, releaseAt: null, reviewedById: actor.id, reviewedAt: new Date(), reviewComment: comment?.trim() || null, ...(status === "FINALIZED" ? { released: Prisma.DbNull } : {}) },
     });
+    if (reviewed.count === 0) throw new DomainError("These marks were already released or returned.", "CONFLICT");
     if (decision === "finalize") {
       await announceMarks(tx, evaluation);
     } else {
@@ -497,7 +601,7 @@ export async function unlockEvaluation(actor: Actor, evaluationId: string, reaso
       throw new DomainError("Ask the course instructor to unlock this evaluation.", "FORBIDDEN");
     }
     assertRule(checkReason(reason, { missing: "Give a reason for unlocking." }), "INVALID", "reason");
-    const status = nextStatus(evaluation.status, "unlock", { courseHasInstructor: true });
+    const status = nextStatus(evaluation.status, "unlock");
     // Keep what the student was shown, so their result (and any marks question) stays visible during the correction.
     const released = studentView(await tx.evaluation.findUniqueOrThrow({ where: { id: evaluationId }, include: { scores: { include: { criterion: true } }, assignment: true } }));
     await tx.evaluation.update({ where: { id: evaluationId }, data: { status, reviewComment: reason.trim(), released: released as unknown as Prisma.InputJsonValue } });

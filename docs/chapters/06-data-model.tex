@@ -34,6 +34,7 @@ The schema has 29 models and 14 enums in \src{prisma/schema.prisma}; migrations 
 \begin{itemize}
   \item \code{Booking.freeCancel}: the student cancelled with no changes left, so it didn't spend one and locks them out of rebooking (\cref{sec:change-budget}).
   \item \code{Booking.replacedBy} (\code{BookingChange}: \code{RESCHEDULED}, \code{MOVED_BY_STAFF}): set on the old half of a reschedule or staff move; null for plain cancellations and older rows.
+  \item \code{Evaluation.releaseAt}, \code{Evaluation.submittedById} (issue \#35, ADR-032): held marks in a course without an instructor stay \code{SUBMITTED} until \code{releaseAt}; \code{submittedById} is the TA who may withdraw them. Indexed on (\code{status}, \code{releaseAt}) for the worker.
   \item \code{EvaluationNote} (issue \#36, ADR-031): private notes moved out of \code{Evaluation}. The old \code{Evaluation.privateNotes} column is still in the database for the previous release but no longer in the schema, so no query returns it; \code{prisma migrate dev} proposes dropping it, which waits for a later release.
   \item \code{Evaluation.released} (JSON): the marks the student was shown, kept while unlocked marks are corrected; cleared when they're released again.
   \item \code{Notification.groupKey}, \code{EmailOutbox.groupKey}: items about the same booking or marks, so a quick follow-up replaces unread items and unsent emails (ADR-018).
