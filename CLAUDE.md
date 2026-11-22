@@ -12,10 +12,12 @@ Slotty: demo scheduling and evaluation for university courses. System documentat
 
 ## Way of working
 - Work is planned in the **Slotty GitHub Project** (backlog, two-week sprints, release milestones; docs ch. 13). Build only issues in the current sprint; new ideas and findings become a Backlog issue, not code.
-- Branch off `dev` (the default branch) as `<type>/<issue>-<slug>`; open a pull request into `dev` from the template with `Closes #<issue>` and a release-notes label.
+- Branch off `dev` (the default branch) as `<type>/<issue>-<slug>`; open a pull request into `dev` from the template with `Closes #<issue>` and a release-notes label. GitHub deletes the branch when the PR merges (repository setting; `dev` and `master` are protected).
+- Conventional Commits for commit messages and PR titles: `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `ci`, `build`, `refactor`, `test`, `perf`, `revert`; `!` for breaking), issue in the footer (`Refs #N`/`Closes #N`). Release PRs are `chore(release): vX.Y.Z`.
 - GitOps (ADR-027): `master` is production. Merging into `dev` deploys nothing; merging a release PR (`dev` → `master`, with a new `package.json` version) deploys, then tags `vX.Y.Z` and publishes the release (`.github/workflows/deploy.yml`). Hotfixes are `hotfix/*` PRs into `master`; rollback is a revert PR into `master`. Merge the Back-merge PR it opens afterwards. Never open or merge a PR into `master` without the user's go-ahead.
 - Security weaknesses are tracked in private draft advisories with neutrally worded public issues; the repository is public.
 - Iterate on the design in conversation first; implement when the user says go.
+- When a milestone's release is live, plan before building: triage the backlog (new issues and findings) and agree the next milestone and sprint with the user, then start its first issue.
 
 ## Architecture rules
 - Business rules go in `src/domain/*` as pure functions returning `RuleResult`. Services call them with `assertRule`. Change the rule, its unit test and docs chapter 4 together.

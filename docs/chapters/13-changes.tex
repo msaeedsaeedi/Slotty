@@ -23,7 +23,9 @@ the repository's issues and pull requests.
   \item[Release] A sprint ends with a release of what was merged into \code{dev}: a release pull
     request into \code{master}, whose merge deploys, tags and publishes generated release notes
     (\cref{sec:releases}); the milestone closes, and anything unfinished moves to the next
-    sprint.
+    sprint. Then, before the next issue is started, the backlog is triaged (issues and findings
+    added since the last planning get a priority and size) and the next milestone and sprint are
+    planned.
   \item[Security] Vulnerabilities are reported and tracked privately (\src{SECURITY.md}, draft
     security advisories); the public issue for one names the work, not the weakness, until its
     fix is released.
@@ -37,7 +39,10 @@ the repository's issues and pull requests.
     and settle the open questions in conversation (or an issue) before writing code. A deliberate
     trade-off becomes a decision record (\cref{ch:decisions}).
   \item \textbf{Branch off \code{dev}} as \code{<type>/<issue>-<slug>} (for example
-    \code{fix/28-request-logging}) and implement under the architecture rules
+    \code{fix/28-request-logging}), commit with Conventional Commits messages
+    (\code{type(scope): summary}, types \code{feat}, \code{fix}, \code{docs}, \code{chore},
+    \code{ci}, \code{build}, \code{refactor}, \code{test}, \code{perf}, \code{revert}; a \code{!}
+    marks a breaking change; the issue goes in the footer), and implement under the architecture rules
     (\cref{ch:blocks}): business rules in \src{src/domain} with unit tests, services that check the
     actor, notifications through the outbox, audited moderation changes.
   \item \textbf{Run the checks}: \code{bun run typecheck}, \code{bun run lint},
@@ -45,8 +50,10 @@ the repository's issues and pull requests.
     CI runs all of them again; Docker is the only thing they need.
   \item \textbf{Update this document} in the same pull request (table below), add a change-log
     line (\cref{app:changelog}) and check \code{bun run docs:build}.
-  \item \textbf{Open a pull request} from the template, with \code{Closes \#<issue>} and a
-    release-notes label, into \code{dev}. It merges once \textbf{CI ok} is green and the branch is
+  \item \textbf{Open a pull request} from the template, titled like a commit
+    (\code{feat(marking): …}), with \code{Closes \#<issue>} and a release-notes label, into
+    \code{dev}. GitHub deletes the branch once it merges (\emph{Automatically delete head
+    branches}; the protected \code{dev} and \code{master} are never deleted). It merges once \textbf{CI ok} is green and the branch is
     up to date with \code{dev}. Merging does not deploy; the next release does
     (\cref{sec:releases}). Migrations must keep the previous release working, which is also what
     makes a rollback safe.
