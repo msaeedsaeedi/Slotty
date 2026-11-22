@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canSubmit, canTransition, computeTotal, nextStatus, validateScores } from "@/domain/evaluation";
+import { canReadPrivateNote, canSubmit, canTransition, computeTotal, nextStatus, validateScores } from "@/domain/evaluation";
 
 const criteria = [
   { id: "c1", label: "Functionality", maxPoints: 6 },
@@ -61,5 +61,24 @@ describe("scores", () => {
         maxMarks: 10,
       }).ok,
     ).toBe(true);
+  });
+});
+
+describe("private notes", () => {
+  const note = { authorId: "ta1" };
+  it("lets the author read their own note", () => {
+    expect(canReadPrivateNote(note, { id: "ta1", enrolledRole: "TA" }).ok).toBe(true);
+  });
+  it("lets enrolled instructors read every note, including ones without an author", () => {
+    expect(canReadPrivateNote(note, { id: "inst", enrolledRole: "INSTRUCTOR" }).ok).toBe(true);
+    expect(canReadPrivateNote({ authorId: null }, { id: "inst", enrolledRole: "INSTRUCTOR" }).ok).toBe(true);
+  });
+  it("hides a note from other TAs, and notes without an author from every TA", () => {
+    expect(canReadPrivateNote(note, { id: "ta2", enrolledRole: "TA" }).ok).toBe(false);
+    expect(canReadPrivateNote({ authorId: null }, { id: "ta1", enrolledRole: "TA" }).ok).toBe(false);
+  });
+  it("hides notes from admins (not enrolled) and students", () => {
+    expect(canReadPrivateNote(note, { id: "admin", enrolledRole: null }).ok).toBe(false);
+    expect(canReadPrivateNote(note, { id: "ta1", enrolledRole: "STUDENT" }).ok).toBe(false);
   });
 });

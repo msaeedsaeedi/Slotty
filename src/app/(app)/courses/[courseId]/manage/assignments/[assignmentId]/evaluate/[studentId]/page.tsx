@@ -4,6 +4,7 @@ import { AlertTriangle } from "lucide-react";
 import { clearMarksAction, reviewAction, unlockAction } from "@/app/actions/evaluations";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { PageHeader } from "@/components/page-header";
+import { PrivateNotes } from "@/components/private-notes";
 import { StatusBadge } from "@/components/status-badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,7 +30,7 @@ export default async function StudentRecordPage({ params, searchParams }: PagePr
   const user = await requireUser();
   const rec = await load(getStudentRecord(user, assignmentId, studentId));
   const controls = await getStudentBookingControls(user, assignmentId, studentId);
-  const { assignment, booking, evaluation: ev, student } = rec;
+  const { assignment, booking, evaluation: ev, student, notes } = rec;
   const tz = assignment.course.timezone;
   const back = typeof returnTo === "string" && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : `/courses/${courseId}/manage/assignments/${assignmentId}?tab=students`;
   const editable = !ev || ev.status === "DRAFT" || ev.status === "RETURNED";
@@ -169,11 +170,7 @@ export default async function StudentRecordPage({ params, searchParams }: PagePr
               <span className="font-medium">Feedback:</span> {ev.feedback}
             </p>
           )}
-          {ev?.privateNotes && (
-            <p className="text-muted-foreground">
-              <span className="font-medium">Private note:</span> {ev.privateNotes}
-            </p>
-          )}
+          <PrivateNotes notes={notes} />
           {ev && (
             <p className="text-xs text-muted-foreground">
               Marked by {ev.evaluator.name}

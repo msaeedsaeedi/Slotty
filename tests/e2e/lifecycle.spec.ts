@@ -62,11 +62,12 @@ test("TA runs the whole loop alone: roster → slots → booking → marking →
   await ta.getByLabel("Code quality").fill("3.5");
   await expect(ta.getByLabel("Total marks")).toHaveText("8.5");
   await ta.getByLabel("Feedback for the student").fill("Clear walkthrough");
-  await ta.getByLabel("Private note").fill("Needed hints on tests");
+  await ta.getByLabel("Your private note").fill("Needed hints on tests");
   await expect(ta.getByText("Draft saved")).toBeVisible();
   // A reload keeps everything that was typed.
   await ta.reload();
   await expect(ta.getByLabel("Feedback for the student")).toHaveValue("Clear walkthrough");
+  await expect(ta.getByLabel("Your private note")).toHaveValue("Needed hints on tests");
   await ta.getByRole("button", { name: "Release 1 mark" }).click();
   // Releasing is final for the student, so it asks first.
   await ta.getByRole("dialog").getByRole("button", { name: "Release marks" }).click();

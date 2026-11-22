@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
-import { canSubmit, canTransition, checkTotalMarks, computeTotal, nextStatus, validateScores, type EvaluationStatus } from "@/domain/evaluation";
+import { canReadPrivateNote, canSubmit, canTransition, checkTotalMarks, computeTotal, nextStatus, validateScores, type EvaluationStatus } from "@/domain/evaluation";
 import { checkReason } from "@/domain/text";
 import { assertRule, DomainError } from "@/domain/result";
 import { visibleMarks, type VisibleMarks } from "@/domain/student-demo";
@@ -25,8 +25,51 @@ export const evaluationInput = z.object({
   totalOverride: z.boolean().default(false),
   overrideNote: z.string().trim().max(1000).optional().transform((v) => v || null),
   feedback: z.string().trim().max(5000).optional().transform((v) => v || null),
-  privateNotes: z.string().trim().max(5000).optional().transform((v) => v || null),
+  /** The saver's own private note (ADR-031); left out, it stays as it is. */
+  privateNotes: z.string().trim().max(5000).optional().transform((v) => (v === undefined ? undefined : v || null)),
 });
+
+/** A private note as one viewer may see it (`readableNotes`). */
+export interface PrivateNote {
+  body: string;
+  /** Null for a note written before notes had an author. */
+  author: string | null;
+  mine: boolean;
+  updatedAt: Date;
+}
+
+/**
+ * The private notes the actor may read on these evaluations of one course, by evaluation id:
+ * their own, or every note for the course's enrolled instructors (`canReadPrivateNote`). Admins
+ * read courses as instructors but aren't enrolled, so they get none. This is the only place
+ * notes are read.
+ */
+export async function readableNotes(tx: Tx, actor: Actor, courseId: string, evaluationIds: string[]): Promise<Map<string, PrivateNote[]>> {
+  const byEvaluation = new Map<string, PrivateNote[]>();
+  if (evaluationIds.length === 0) return byEvaluation;
+  const enrollment = await tx.enrollment.findUnique({ where: { courseId_userId: { courseId, userId: actor.id } }, select: { role: true } });
+  const viewer = { id: actor.id, enrolledRole: enrollment?.role ?? null };
+  if (viewer.enrolledRole !== "INSTRUCTOR" && viewer.enrolledRole !== "TA") return byEvaluation;
+  const notes = await tx.evaluationNote.findMany({
+    where: {
+      evaluationId: { in: evaluationIds },
+      evaluation: { assignment: { courseId } },
+      ...(viewer.enrolledRole === "INSTRUCTOR" ? {} : { authorId: actor.id }),
+    },
+    include: { author: { select: { name: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  for (const n of notes) {
+    if (!canReadPrivateNote(n, viewer).ok) continue;
+    const list = byEvaluation.get(n.evaluationId) ?? [];
+    // The viewer's own note first, so the marking sheet finds it to edit.
+    const note = { body: n.body, author: n.author?.name ?? null, mine: n.authorId === actor.id, updatedAt: n.updatedAt };
+    if (note.mine) list.unshift(note);
+    else list.push(note);
+    byEvaluation.set(n.evaluationId, list);
+  }
+  return byEvaluation;
+}
 
 /** Staff view of one student's evaluation (created on first open). */
 export async function getOrCreateEvaluation(actor: Actor, assignmentId: string, studentId: string) {
@@ -68,7 +111,8 @@ export async function getStudentRecord(actor: Actor, assignmentId: string, stude
     }),
     courseHasInstructor(db, assignment.courseId),
   ]);
-  return { assignment, criteria, role, hasInstructor, student: enrollment.user, section: enrollment.section, booking, evaluation };
+  const notes = evaluation ? ((await readableNotes(db, actor, assignment.courseId, [evaluation.id])).get(evaluation.id) ?? []) : [];
+  return { assignment, criteria, role, hasInstructor, student: enrollment.user, section: enrollment.section, booking, evaluation, notes };
 }
 
 function loadEvaluation(tx: Tx, id: string) {
@@ -126,7 +170,7 @@ async function writeEvaluation(
 
   const before = await tx.evaluation.findUniqueOrThrow({
     where: { id: evaluation.id },
-    select: { totalMarks: true, totalOverride: true, overrideNote: true, feedback: true, privateNotes: true, scores: { select: { criterionId: true, points: true, comment: true } } },
+    select: { totalMarks: true, totalOverride: true, overrideNote: true, feedback: true, scores: { select: { criterionId: true, points: true, comment: true } } },
   });
 
   await tx.evaluationScore.deleteMany({ where: { evaluationId: evaluation.id } });
@@ -140,10 +184,10 @@ async function writeEvaluation(
       totalOverride: data.totalOverride,
       overrideNote: data.overrideNote,
       feedback: data.feedback,
-      privateNotes: data.privateNotes,
       evaluatorId: actor.id,
     },
   });
+  const privateNotesEdited = await writeOwnNote(tx, actor, evaluation.id, data.privateNotes);
 
   // Every change to marks is audited (drafts, autosaves, edits after unlock), but only when
   // something changed. Private notes are recorded as edited, never their text.
@@ -156,11 +200,25 @@ async function writeEvaluation(
   });
   const was = snapshot(before);
   const now = snapshot({ totalMarks: total, totalOverride: data.totalOverride, overrideNote: data.overrideNote ?? null, feedback: data.feedback ?? null, scores: data.scores.map((s) => ({ criterionId: s.criterionId, points: s.points, comment: s.comment ?? null })) });
-  const privateNotesEdited = (before.privateNotes ?? null) !== (data.privateNotes ?? null);
   if (JSON.stringify(was) !== JSON.stringify(now) || privateNotesEdited) {
     await audit(tx, actor, { action: "evaluation.write", entityType: "Evaluation", entityId: evaluation.id, before: was, after: { ...now, ...(privateNotesEdited ? { privateNotesEdited: true } : {}) } });
   }
   return total;
+}
+
+/**
+ * Set or clear the actor's own private note (ADR-031); nobody else's note is touched, so a TA
+ * who can't see a colleague's note can't overwrite it. Returns whether the note changed.
+ */
+async function writeOwnNote(tx: Tx, actor: Actor, evaluationId: string, body: string | null | undefined): Promise<boolean> {
+  if (body === undefined) return false;
+  const key = { evaluationId, authorId: actor.id };
+  const existing = await tx.evaluationNote.findFirst({ where: key, select: { id: true, body: true } });
+  if ((existing?.body ?? null) === body) return false;
+  if (body === null) await tx.evaluationNote.delete({ where: { id: existing!.id } });
+  else if (existing) await tx.evaluationNote.update({ where: { id: existing.id }, data: { body } });
+  else await tx.evaluationNote.create({ data: { ...key, body } });
+  return true;
 }
 
 /**
@@ -265,6 +323,7 @@ export async function getMarkingSheet(
     include: { scores: true, reviewedBy: { select: { name: true } } },
   });
   const evalBy = new Map(evaluations.map((e) => [e.studentId, e]));
+  const notesBy = await readableNotes(db, actor, assignment.courseId, evaluations.map((e) => e.id));
   return {
     assignment: { id: assignment.id, title: assignment.title, maxMarks: assignment.maxMarks, courseId: assignment.courseId, course: assignment.course },
     criteria,
@@ -289,7 +348,7 @@ export async function getMarkingSheet(
           totalOverride: e.totalOverride,
           overrideNote: e.overrideNote,
           feedback: e.feedback,
-          privateNotes: e.privateNotes,
+          notes: notesBy.get(e.id) ?? [],
           noBookingReason: e.noBookingReason,
           earlyMarkReason: e.earlyMarkReason,
           reviewComment: e.reviewComment,
@@ -489,7 +548,7 @@ export async function pendingReviewCount(actor: Actor, courseId: string) {
 
 export async function listReviewQueue(actor: Actor, courseId: string) {
   await assertCourseRole(db, actor, courseId, ["INSTRUCTOR"]);
-  return db.evaluation.findMany({
+  const queue = await db.evaluation.findMany({
     where: { status: "SUBMITTED", assignment: { courseId } },
     include: {
       student: { select: { id: true, name: true, email: true } },
@@ -500,6 +559,9 @@ export async function listReviewQueue(actor: Actor, courseId: string) {
     },
     orderBy: { submittedAt: "asc" },
   });
+  // Admins pass the instructor check (read-only) but aren't enrolled, so they see no notes.
+  const notesBy = await readableNotes(db, actor, courseId, queue.map((e) => e.id));
+  return queue.map((e) => ({ ...e, notes: notesBy.get(e.id) ?? [] }));
 }
 
 export interface StudentResult {

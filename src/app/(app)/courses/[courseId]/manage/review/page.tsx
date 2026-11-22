@@ -2,6 +2,7 @@ import Link from "next/link";
 import { finalizeManyAction, reviewAction } from "@/app/actions/evaluations";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { EmptyState } from "@/components/page-header";
+import { PrivateNotes } from "@/components/private-notes";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -79,11 +80,7 @@ export default async function ReviewPage({ params }: PageProps<"/courses/[course
                       <span className="font-medium">Feedback:</span> {e.feedback}
                     </p>
                   )}
-                  {e.privateNotes && (
-                    <p className="text-muted-foreground">
-                      <span className="font-medium">Private notes:</span> {e.privateNotes}
-                    </p>
-                  )}
+                  <PrivateNotes notes={e.notes} />
                   <div className="flex flex-wrap items-center gap-2 pt-1">
                     <ActionForm action={reviewAction} compact>
                       <input type="hidden" name="evaluationId" value={e.id} />
