@@ -23,7 +23,7 @@ export async function loginAction(_: ActionState, fd: FormData): Promise<ActionS
 
 export async function acceptInviteAction(_: ActionState, fd: FormData): Promise<ActionState> {
   const result = await run(async () => {
-    if (fd.get("password") !== fd.get("confirm")) throw new DomainError("Passwords don't match.");
+    if (fd.get("password") !== fd.get("confirm")) throw new DomainError("Passwords don't match.", "INVALID", "confirm");
     const user = await acceptInvite(str(fd, "token"), { name: str(fd, "name"), password: String(fd.get("password")) });
     await createSession(user.id);
   });
@@ -40,7 +40,7 @@ export async function forgotPasswordAction(_: ActionState, fd: FormData): Promis
 
 export async function resetPasswordAction(_: ActionState, fd: FormData): Promise<ActionState> {
   const result = await run(async () => {
-    if (fd.get("password") !== fd.get("confirm")) throw new DomainError("Passwords don't match.");
+    if (fd.get("password") !== fd.get("confirm")) throw new DomainError("Passwords don't match.", "INVALID", "confirm");
     const user = await resetPassword(str(fd, "token"), String(fd.get("password")));
     await createSession(user.id);
   });

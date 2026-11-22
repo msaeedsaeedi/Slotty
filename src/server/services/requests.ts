@@ -1,14 +1,13 @@
-import { z } from "zod";
-import { DomainError } from "@/domain/result";
+import type { z } from "zod";
+import { assertRule, DomainError } from "@/domain/result";
+import { checkReason } from "@/domain/text";
+import { requestInput } from "@/lib/form-schemas";
 import { db } from "@/server/db";
 import { assertAssignmentRole, assertCourseRole, assertCourseWritable, STAFF, type Actor } from "./access";
 import { audit } from "./audit";
 import { notify } from "./notify";
 
-export const requestInput = z.object({
-  kind: z.enum(["BOOKING_CHANGE", "MARK_QUERY"]),
-  message: z.string().trim().min(5, "Tell staff a bit more (at least a few words).").max(2000),
-});
+export { requestInput };
 
 const KIND_LABEL = { BOOKING_CHANGE: "booking change", MARK_QUERY: "question about marks" } as const;
 
@@ -59,7 +58,7 @@ export async function resolveRequest(actor: Actor, requestId: string, decision: 
     await assertCourseRole(tx, actor, request.assignment.courseId, STAFF);
     assertCourseWritable(actor, request.assignment.course);
     if (request.status !== "OPEN") throw new DomainError("This request has already been answered.");
-    if (decision === "DECLINED" && !response.trim()) throw new DomainError("Tell the student why.");
+    assertRule(checkReason(response, { required: decision === "DECLINED", missing: "Tell the student why." }), "INVALID", "response");
     await tx.studentRequest.update({
       where: { id: requestId },
       data: { status: decision, response: response.trim() || null, resolvedById: actor.id, resolvedAt: new Date() },

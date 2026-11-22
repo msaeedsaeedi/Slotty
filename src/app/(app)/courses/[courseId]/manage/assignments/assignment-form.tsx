@@ -2,14 +2,16 @@
 
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { ActionForm, SubmitButton } from "@/components/action-form";
+import { ActionForm, SubmitButton, useFieldError } from "@/components/action-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { FormField } from "@/components/form-field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { checkRubric } from "@/domain/evaluation";
+import { checkRubric, hasMarkPrecision, MARK_DECIMALS } from "@/domain/evaluation";
+import { fieldProps, type FieldProps } from "@/lib/field-props";
+import { assignmentFields, criterionInput, policyFields } from "@/lib/form-schemas";
 import { cn } from "@/lib/utils";
 import type { ActionState } from "@/server/action-utils";
 
@@ -41,15 +43,33 @@ type Values = Omit<AssignmentDefaults, "criteria" | "maxMarks" | "slotDurationMi
 const int = (v: string) => (/^\d+$/.test(v.trim()) ? Number(v) : NaN);
 const num = (v: string) => (v.trim() === "" ? NaN : Number(v));
 
-/** Same limits the server enforces, checked as you type. */
+/** Input limits read from the schemas the server parses with (fieldProps), so the two can't drift. */
+const L = {
+  title: fieldProps(assignmentFields, "title"),
+  description: fieldProps(assignmentFields, "description"),
+  maxMarks: fieldProps(assignmentFields, "maxMarks", { step: 0.01 }),
+  points: fieldProps(criterionInput, "maxPoints", { step: 0.01 }),
+  label: fieldProps(criterionInput, "label"),
+  slotDurationMin: fieldProps(policyFields, "slotDurationMin"),
+  bufferMin: fieldProps(policyFields, "bufferMin"),
+  capacityPerSlot: fieldProps(policyFields, "capacityPerSlot"),
+  freezeHours: fieldProps(policyFields, "freezeHours"),
+  maxReschedules: fieldProps(policyFields, "maxReschedules"),
+};
+const within = (n: number, p: FieldProps) => n >= (p.min ?? -Infinity) && n <= (p.max ?? Infinity);
+const range = (p: FieldProps, unit = "") => `${p.min} to ${p.max}${unit}.`;
+
+/** The server's limits (from the schemas), checked as you type. */
 function validate(v: Values, criteria: { label: string; maxPoints: string }[]) {
   const e: Partial<Record<keyof Values | "criteria", string>> = {};
   if (!v.title.trim()) e.title = "Give it a title.";
   const max = num(v.maxMarks);
-  if (!(max > 0) || max > 10_000) e.maxMarks = "A number above 0 (up to 10,000).";
+  if (!(max > 0) || !within(max, L.maxMarks)) e.maxMarks = `A number above 0 (up to ${L.maxMarks.max?.toLocaleString("en")}).`;
+  else if (!hasMarkPrecision(max)) e.maxMarks = `Use at most ${MARK_DECIMALS} decimals.`;
   const rows = criteria.filter((c) => c.label.trim() || c.maxPoints.trim());
   if (rows.some((c) => !c.label.trim())) e.criteria = "Each rubric row needs a name.";
-  else if (rows.some((c) => !(num(c.maxPoints) > 0))) e.criteria = "Each rubric row needs points above 0.";
+  else if (rows.some((c) => !(num(c.maxPoints) > 0) || !within(num(c.maxPoints), L.points))) e.criteria = "Each rubric row needs points above 0.";
+  else if (rows.some((c) => !hasMarkPrecision(num(c.maxPoints)))) e.criteria = `Rubric points: use at most ${MARK_DECIMALS} decimals.`;
   else if (max > 0 && rows.length) {
     const rubric = checkRubric(rows.map((c) => ({ maxPoints: num(c.maxPoints) })), max);
     if (!rubric.ok) e.criteria = rubric.reason;
@@ -57,17 +77,12 @@ function validate(v: Values, criteria: { label: string; maxPoints: string }[]) {
   if (!v.windowStart) e.windowStart = "When do demos start?";
   if (!v.windowEnd) e.windowEnd = "When do demos end?";
   else if (v.windowStart && v.windowEnd <= v.windowStart) e.windowEnd = "Must be after the start.";
-  const len = int(v.slotDurationMin);
-  if (!(len >= 5 && len <= 480)) e.slotDurationMin = "5 to 480 minutes.";
-  const brk = int(v.bufferMin);
-  if (!(brk >= 0 && brk <= 240)) e.bufferMin = "0 to 240 minutes.";
-  const cap = int(v.capacityPerSlot);
-  if (!(cap >= 1 && cap <= 100)) e.capacityPerSlot = "1 to 100 students.";
+  if (!within(int(v.slotDurationMin), L.slotDurationMin)) e.slotDurationMin = range(L.slotDurationMin, " minutes");
+  if (!within(int(v.bufferMin), L.bufferMin)) e.bufferMin = range(L.bufferMin, " minutes");
+  if (!within(int(v.capacityPerSlot), L.capacityPerSlot)) e.capacityPerSlot = range(L.capacityPerSlot, " students");
   if (v.bookingOpensAt && v.windowEnd && v.bookingOpensAt >= v.windowEnd) e.bookingOpensAt = "Must be before demos end.";
-  const freeze = int(v.freezeHours);
-  if (!(freeze >= 0 && freeze <= 336)) e.freezeHours = "0 to 336 hours (two weeks).";
-  const changes = int(v.maxReschedules);
-  if (!(changes >= 0 && changes <= 20)) e.maxReschedules = "0 to 20.";
+  if (!within(int(v.freezeHours), L.freezeHours)) e.freezeHours = `${range(L.freezeHours, " hours").slice(0, -1)} (two weeks).`;
+  if (!within(int(v.maxReschedules), L.maxReschedules)) e.maxReschedules = range(L.maxReschedules);
   return e;
 }
 
@@ -144,10 +159,10 @@ export function AssignmentForm({
           </CardHeader>
           <CardContent className="space-y-4">
             <Field label="Title" error={shown("title")}>
-              <Input {...field("title")} placeholder="Project 1 demo" required maxLength={200} />
+              <Input {...field("title")} {...L.title} placeholder="Project 1 demo" />
             </Field>
             <Field label="What students should prepare" hint="Optional. Shown on the booking page.">
-              <Textarea {...field("description")} rows={2} maxLength={5000} />
+              <Textarea {...field("description")} {...L.description} rows={2} />
             </Field>
           </CardContent>
         </Card>
@@ -159,15 +174,26 @@ export function AssignmentForm({
           </CardHeader>
           <CardContent className="space-y-3">
             <Field label="Max marks" error={shown("maxMarks")} className="w-40">
-              <Input {...field("maxMarks")} inputMode="decimal" required />
+              <Input {...field("maxMarks")} {...L.maxMarks} type="number" inputMode="decimal" />
             </Field>
             {rubricLocked && <p className="text-sm text-amber-700 dark:text-amber-400">Marking has started, so the rubric can no longer change.</p>}
             {criteria.length > 0 && (
               <div className="space-y-2">
                 {criteria.map((c, i) => (
                   <div key={i} className="flex gap-2">
-                    <Input aria-label="Criterion" placeholder="e.g. Functionality" value={c.label} disabled={rubricLocked} maxLength={120} onChange={(e) => update(i, { label: e.target.value })} />
-                    <Input aria-label="Points" inputMode="decimal" className="w-20 text-right" value={c.maxPoints} disabled={rubricLocked} onChange={(e) => update(i, { maxPoints: e.target.value })} />
+                    <Input aria-label="Criterion" placeholder="e.g. Functionality" value={c.label} disabled={rubricLocked} maxLength={L.label.maxLength} onChange={(e) => update(i, { label: e.target.value })} />
+                    <Input
+                      aria-label="Points"
+                      type="number"
+                      inputMode="decimal"
+                      min={L.points.min}
+                      max={L.points.max}
+                      step={L.points.step}
+                      className="w-24 text-right"
+                      value={c.maxPoints}
+                      disabled={rubricLocked}
+                      onChange={(e) => update(i, { maxPoints: e.target.value })}
+                    />
                     <Button type="button" variant="ghost" size="icon" aria-label="Remove row" disabled={rubricLocked} onClick={() => setCriteria((cs) => cs.filter((_, j) => j !== i))}>
                       <Trash2 />
                     </Button>
@@ -185,7 +211,7 @@ export function AssignmentForm({
                 </span>
               )}
             </div>
-            {(tried || criteria.some((c) => c.label || c.maxPoints)) && errors.criteria && <p className="text-sm text-destructive">{errors.criteria}</p>}
+            <CriteriaError error={(tried || criteria.some((c) => c.label || c.maxPoints)) ? errors.criteria : undefined} />
           </CardContent>
         </Card>
 
@@ -205,13 +231,13 @@ export function AssignmentForm({
             </div>
             <div className="grid grid-cols-3 gap-3">
               <Field label="Slot length" hint="minutes" error={shown("slotDurationMin")}>
-                <Input {...field("slotDurationMin")} inputMode="numeric" required />
+                <Input {...field("slotDurationMin")} {...L.slotDurationMin} type="number" inputMode="numeric" />
               </Field>
               <Field label="Break after" hint="minutes" error={shown("bufferMin")}>
-                <Input {...field("bufferMin")} inputMode="numeric" />
+                <Input {...field("bufferMin")} {...L.bufferMin} type="number" inputMode="numeric" />
               </Field>
               <Field label="Students each" hint="1 = one-to-one" error={shown("capacityPerSlot")}>
-                <Input {...field("capacityPerSlot")} inputMode="numeric" />
+                <Input {...field("capacityPerSlot")} {...L.capacityPerSlot} type="number" inputMode="numeric" />
               </Field>
             </div>
           </CardContent>
@@ -230,10 +256,10 @@ export function AssignmentForm({
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Lock changes (hours before the demo)" hint="Inside this time students can't book, cancel or move." error={shown("freezeHours")}>
-                <Input {...field("freezeHours")} inputMode="numeric" />
+                <Input {...field("freezeHours")} {...L.freezeHours} type="number" inputMode="numeric" />
               </Field>
               <Field label="Changes each student may make" hint="Moves and self-cancellations count; staff changes never do." error={shown("maxReschedules")}>
-                <Input {...field("maxReschedules")} inputMode="numeric" />
+                <Input {...field("maxReschedules")} {...L.maxReschedules} type="number" inputMode="numeric" />
               </Field>
             </div>
             <label className="flex items-center gap-2 text-sm">
@@ -274,12 +300,22 @@ export function AssignmentForm({
   );
 }
 
+/** The rubric's message: checked as you type, or the server's ("criteria") after a submit. */
+function CriteriaError({ error }: { error?: string }) {
+  const server = useFieldError("criteria");
+  const message = error ?? server;
+  return message ? (
+    <p className="text-sm text-destructive" role="alert">
+      {message}
+    </p>
+  ) : null;
+}
+
+/** A FormField named after its input's id (the form's field names), so server messages land here too. */
 function Field({ label, hint, error, className, children }: { label: string; hint?: string; error?: string; className?: string; children: React.ReactElement<{ id?: string }> }) {
   return (
-    <div className={cn("space-y-1.5", className)}>
-      <Label htmlFor={children.props.id}>{label}</Label>
+    <FormField name={children.props.id ?? ""} label={label} hint={hint} error={error} className={className}>
       {children}
-      {error ? <p className="text-xs text-destructive">{error}</p> : hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-    </div>
+    </FormField>
   );
 }

@@ -14,6 +14,8 @@ import {
 import { canChangeMarkedBooking } from "@/domain/evaluation";
 import { assertRule, DomainError } from "@/domain/result";
 import { overlaps } from "@/domain/slots";
+import { checkReason } from "@/domain/text";
+import { allowanceInput } from "@/lib/form-schemas";
 import { fmtRange, tzLabel } from "@/lib/time";
 import { db, type Tx } from "@/server/db";
 import { assertCourseRole, assertCourseWritable, STAFF, type Actor } from "./access";
@@ -322,7 +324,7 @@ export async function markAttendance(actor: Actor, bookingId: string, status: "B
 
 /** Staff can cancel any upcoming booking (no freeze rules), e.g. on request. */
 export async function staffCancelBooking(actor: Actor, bookingId: string, reason: string) {
-  if (!reason.trim()) throw new DomainError("Give a reason — it's sent to the student.");
+  assertRule(checkReason(reason, { missing: "Give a reason — it's sent to the student." }), "INVALID", "reason");
   return db.$transaction(async (tx) => {
     const booking = await loadBookingForStaff(tx, actor, bookingId);
     if (booking.status !== "BOOKED") throw new DomainError("Only upcoming bookings can be cancelled.");
@@ -437,11 +439,7 @@ export async function allowRebookAfterNoShow(actor: Actor, bookingId: string, no
   });
 }
 
-export const allowanceInput = z.object({
-  extraChanges: z.coerce.number().int().min(0, "Extra changes can't be negative.").max(20),
-  lateBooking: z.boolean(),
-  note: z.string().trim().max(500).optional().transform((v) => v || null),
-});
+export { allowanceInput };
 
 /** Grant (or clear) one student's exception to an assignment's booking rules. */
 export async function setAllowance(actor: Actor, assignmentId: string, studentId: string, input: z.input<typeof allowanceInput>) {

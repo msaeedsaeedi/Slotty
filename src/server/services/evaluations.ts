@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
-import { canSubmit, canTransition, computeTotal, nextStatus, validateScores, type EvaluationStatus } from "@/domain/evaluation";
+import { canSubmit, canTransition, checkTotalMarks, computeTotal, nextStatus, validateScores, type EvaluationStatus } from "@/domain/evaluation";
+import { checkReason } from "@/domain/text";
 import { assertRule, DomainError } from "@/domain/result";
 import { visibleMarks, type VisibleMarks } from "@/domain/student-demo";
 import { dayRange, fmtData } from "@/lib/time";
@@ -118,9 +119,9 @@ async function writeEvaluation(
 
   const useRubricSum = criteria.length > 0 && !data.totalOverride;
   const total = useRubricSum ? (data.scores.length ? computeTotal(data.scores) : null) : data.totalMarks;
-  if (total !== null && (total < 0 || total > maxMarks)) throw new DomainError(`Total must be between 0 and ${maxMarks}.`);
-  if (data.totalOverride && criteria.length > 0 && !data.overrideNote) {
-    throw new DomainError("Add a note explaining the total override.");
+  if (total !== null) assertRule(checkTotalMarks(total, maxMarks), "INVALID", "total");
+  if (data.totalOverride && criteria.length > 0) {
+    assertRule(checkReason(data.overrideNote, { missing: "Add a note explaining the total override." }), "INVALID", "overrideNote");
   }
 
   await tx.evaluationScore.deleteMany({ where: { evaluationId: evaluation.id } });
@@ -165,7 +166,7 @@ export async function saveDraft(
     let evaluation = await tx.evaluation.findUnique({ where: { assignmentId_studentId: { assignmentId, studentId } } });
     if (!evaluation) {
       const reason = input.noBookingReason?.trim();
-      if (!booking && !reason) throw new DomainError("This student has no demo booking. Say why you're marking them anyway — it's recorded.");
+      if (!booking) assertRule(checkReason(reason, { missing: "This student has no demo booking. Say why you're marking them anyway — it's recorded." }), "INVALID", "noBookingReason");
       evaluation = await tx.evaluation.create({
         data: { assignmentId, studentId, evaluatorId: actor.id, bookingId: booking?.id, noBookingReason: booking ? null : reason },
       });
@@ -178,7 +179,7 @@ export async function saveDraft(
     // Marking before the demo has happened is unusual: it needs a reason, kept with the marks.
     if (booking && booking.slot.startsAt > now && !evaluation.earlyMarkReason) {
       const reason = input.earlyMarkReason?.trim();
-      if (!reason) throw new DomainError("This demo hasn't started yet. Say why you're marking it early — it's recorded.");
+      assertRule(checkReason(reason, { missing: "This demo hasn't started yet. Say why you're marking it early — it's recorded." }), "INVALID", "earlyMarkReason");
       evaluation = await tx.evaluation.update({ where: { id: evaluation.id }, data: { earlyMarkReason: reason } });
       await audit(tx, actor, { action: "evaluation.early", entityType: "Evaluation", entityId: evaluation.id, after: { studentId, reason, demoAt: booking.slot.startsAt } });
     }
@@ -372,7 +373,7 @@ async function announceMarks(tx: Tx, evaluation: { id: string; studentId: string
  * or final marks must be unlocked first. The old marks stay in the audit log.
  */
 export async function clearMarks(actor: Actor, evaluationId: string, reason: string) {
-  if (!reason.trim()) throw new DomainError("Say why the marks are being cleared.");
+  assertRule(checkReason(reason, { missing: "Say why the marks are being cleared." }), "INVALID", "reason");
   return db.$transaction(async (tx) => {
     const { evaluation } = await loadForStaff(tx, actor, evaluationId);
     if (evaluation.status === "SUBMITTED" || evaluation.status === "FINALIZED") throw new DomainError("Unlock these marks before clearing them.", "CONFLICT");
@@ -393,7 +394,7 @@ export async function reviewEvaluation(actor: Actor, evaluationId: string, decis
   return db.$transaction(async (tx) => {
     const { evaluation, role } = await loadForStaff(tx, actor, evaluationId);
     if (role !== "INSTRUCTOR") throw new DomainError("Only instructors review submitted evaluations.", "FORBIDDEN");
-    if (decision === "return" && !comment?.trim()) throw new DomainError("Tell the TA what needs to change.");
+    assertRule(checkReason(comment, { required: decision === "return", missing: "Tell the TA what needs to change." }), "INVALID", "comment");
     const status = nextStatus(evaluation.status, decision, { courseHasInstructor: true });
     await tx.evaluation.update({
       where: { id: evaluationId },
@@ -423,7 +424,7 @@ export async function unlockEvaluation(actor: Actor, evaluationId: string, reaso
     if (role !== "INSTRUCTOR" && (await courseHasInstructor(tx, evaluation.assignment.courseId))) {
       throw new DomainError("Ask the course instructor to unlock this evaluation.", "FORBIDDEN");
     }
-    if (!reason.trim()) throw new DomainError("Give a reason for unlocking.");
+    assertRule(checkReason(reason, { missing: "Give a reason for unlocking." }), "INVALID", "reason");
     const status = nextStatus(evaluation.status, "unlock", { courseHasInstructor: true });
     // Keep what the student was shown, so their result (and any marks question) stays visible during the correction.
     const released = studentView(await tx.evaluation.findUniqueOrThrow({ where: { id: evaluationId }, include: { scores: { include: { criterion: true } }, assignment: true } }));

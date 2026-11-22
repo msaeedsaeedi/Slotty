@@ -23,7 +23,15 @@ test("TA runs the whole loop alone: roster → slots → booking → marking →
   student.on("dialog", (d) => d.accept());
   await open(student, new URL(inviteHref!).pathname);
   await student.getByLabel("New password").fill("nina-secret-1");
-  await student.getByLabel("Confirm password").fill("nina-secret-1");
+  // A mismatch shows next to the confirmation before anything is sent, and the form won't submit.
+  await student.getByLabel("Confirm password").fill("nina-secret-2");
+  const confirm = student.getByLabel("Confirm password");
+  await expect(confirm).toHaveAttribute("aria-invalid", "true");
+  await expect(student.locator(`#${await confirm.getAttribute("aria-describedby")}`)).toHaveText("Passwords don't match.");
+  await student.getByRole("button", { name: "Activate account" }).click();
+  await expect(student).toHaveURL(/\/invite\//);
+  await confirm.fill("nina-secret-1");
+  await expect(student.getByText("Passwords don't match.")).toHaveCount(0);
   await student.getByRole("button", { name: "Activate account" }).click();
   await expect(student).toHaveURL(/\/dashboard/);
 

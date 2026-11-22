@@ -3,6 +3,7 @@ import type { CourseRole } from "@/generated/prisma/client";
 import { assertRule, DomainError } from "@/domain/result";
 import { parseRoster, type RosterError, type RosterRow } from "@/domain/csv-roster";
 import { canChangeCourseData, canCreateCourse, canManageInstructors, canManageTAs, canTakeRole } from "@/domain/roles";
+import { venueInput } from "@/lib/form-schemas";
 import { fmtRange, isValidTimezone } from "@/lib/time";
 import { db, type Tx } from "@/server/db";
 import { assertCanJoinCourses, assertCourseManager, assertCourseRole, assertStaff, courseHasInstructor, courseRoleOf, type Actor } from "./access";
@@ -399,17 +400,7 @@ export async function resendInvite(actor: Actor, courseId: string, userId: strin
 
 // ─── Venues ───────────────────────────────────────────────────────────────────
 
-export const venueInput = z.object({
-  name: z.string().trim().min(1, "Venue name is required.").max(120),
-  location: z.string().trim().max(200).optional().transform((v) => v || null),
-  meetingUrl: z
-    .string()
-    .trim()
-    .max(500)
-    .optional()
-    .transform((v) => v || null)
-    .refine((v) => v === null || /^https?:\/\//.test(v), "Meeting link must start with http(s)://"),
-});
+export { venueInput };
 
 export async function listVenues(actor: Actor, courseId: string) {
   await assertCourseRole(db, actor, courseId, ["INSTRUCTOR", "TA", "STUDENT"]);
