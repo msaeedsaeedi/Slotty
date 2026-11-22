@@ -557,3 +557,22 @@ Add one for every deliberate trade-off.
    production dependencies (the migrate image ships the Prisma CLI, a dev dependency).}
   {The exception list grows instead of shrinking, or update pull requests pile up unmerged.}
 
+\adr{035}{CI checks pull requests only, and only what they change}{2026-11-23}{Accepted}
+  {CI took about 850 runner minutes in a week. Each change was checked up to four times (its pull
+   request, the push to \code{dev}, the release pull request and push to \code{master}, the
+   Back-merge pull request), every run started seven or eight jobs of about a minute each, and
+   GitHub bills each job rounded up to a whole minute (221 minutes of work were counted as 341).
+   Docs-only pull requests still ran every test and built the images.}
+  {CI runs on pull requests (and by hand), not on pushes: branch protection already makes a pull
+   request be up to date and green before it merges. A \emph{Changed paths} job decides what a pull
+   request needs: no tests when only \src{docs} changed, images only when the Dockerfile, bake
+   file, \src{docker}, \code{package.json}, \code{bun.lock} or \src{prisma} changed, the PDF only
+   when \src{docs} changed. Typecheck, lint, unit and integration tests are one job. Back-merge
+   pull requests run only that job: their content is \code{master}, already checked.}
+  {CI should take about a third of the minutes it did. A merged commit isn't checked again on its branch, so a red
+   \code{dev} or \code{master} can only come from merging around protection. A code change that
+   breaks the image build without touching its inputs is caught by the end-to-end job's production
+   build, or at the latest by Deploy. Rejected: a third-party paths filter action (another pinned
+   dependency for a few lines of shell).}
+  {Merges land on \code{dev} without the pull-request route, or the image build starts depending on
+   files outside its listed inputs.}
