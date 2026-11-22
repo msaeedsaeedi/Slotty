@@ -3,7 +3,7 @@ import { db } from "@/server/db";
 import { changePassword, signOutOtherSessions } from "@/server/services/accounts";
 import { closeEndedAssignments, nudgeUnbookedStudents, sendDailyAgendas } from "@/server/services/automations";
 import { allowRebookAfterNoShow, bookSlot, cancelBooking, markAttendance, setAllowance, staffPlaceStudent } from "@/server/services/bookings";
-import { bookingIcs, calendarFeed, rotateCalendarToken } from "@/server/services/calendar";
+import { bookingIcs } from "@/server/services/calendar";
 import { finalizeMany, getOrCreateEvaluation, saveEvaluation, submitEvaluations } from "@/server/services/evaluations";
 import { openNotification } from "@/server/services/inbox";
 import { createRequest, listRequests, resolveRequest } from "@/server/services/requests";
@@ -132,7 +132,7 @@ describe("hosts and slots (OP-06)", () => {
 });
 
 describe("calendar (OP-05)", () => {
-  it("exports a booking and serves a personal feed by token", async () => {
+  it("exports the student's own booking as an .ics file", async () => {
     const ta = await makeUser("Tara TA");
     const ann = await makeUser("Ann");
     const { course, slots } = await setupCourse(ta);
@@ -141,14 +141,6 @@ describe("calendar (OP-05)", () => {
     expect((await bookingIcs(ann, b!.id)).ics).toContain(`UID:booking-${b!.id}@slotty`);
     await expect(bookingIcs(ta, b!.id)).rejects.toThrow(/not found/);
 
-    const token = await rotateCalendarToken(ann);
-    expect(await calendarFeed(token)).toContain("SUMMARY:CS101 demo: Project demo");
-    const taFeed = await calendarFeed(await rotateCalendarToken(ta));
-    expect(taFeed).toContain("SUMMARY:CS101 demo: Ann");
-    expect(await calendarFeed("nope")).toBeNull();
-    const replaced = await rotateCalendarToken(ann);
-    expect(await calendarFeed(token)).toBeNull();
-    expect(await calendarFeed(replaced)).not.toBeNull();
   });
 });
 

@@ -6,6 +6,7 @@ Newest first. One line per revision of this document; the pull request has the d
   \toprule
   \thead{Date} & \thead{Change}\\
   \midrule
+  2026-11-23 & Session and token hygiene (issue \#44, ADR-033): the session cookie is \code{__Host-slotty_session}, always \code{Secure} (the old name is read until those sessions expire); the personal calendar feed is retired and its stored secrets cleared. Ch.~4, 6, 11 and 14 updated.\\
   2026-11-23 & Held releases (issue \#35, ADR-032): in a course without an instructor, marks a TA releases reach the student 24 hours later; the TA can withdraw them until then, and an admin from \route{/admin/marks} with a reason; the worker releases them (\code{releaseHeldMarks}); exports say ``held until''. Ch.~3, 4, 6 and 14 and the evaluation-state figure updated.\\
   2026-11-22 & Private notes per author (issue \#36, ADR-031): notes move to \code{EvaluationNote}, one per evaluation and author; only the author and the course's enrolled instructors read them (not other TAs or admins), and saving changes only your own. Existing notes are kept for instructors only. Ch.~3, 4, 6, 11 and 14 updated.\\
   2026-11-22 & Release v1.0.0-beta.3: audit coverage for marks, exports and imports (\#32), marks kept out of emails and push with message retention (\#33), and infrastructure hardening with a \$55 budget (\#63, ADR-029, ADR-030).\\

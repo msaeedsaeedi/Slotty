@@ -32,8 +32,9 @@ model User {
   /// line (`bun run platform:grant`), never from the admin console.
   platformAccess Boolean    @default(false)
   status         UserStatus @default(INVITED)
-  /// Secret for the personal iCal feed (/calendar/<token>); null until created.
-  calendarToken  String?    @unique
+  // The column "calendarToken" (the retired personal iCal feed, ADR-033) still exists in the
+  // database, cleared, for the previous release; it is no longer modeled. `prisma migrate dev`
+  // proposes dropping it: leave that out until the contract release.
   /// Email preferences (in-app notifications are always kept).
   emailReminders Boolean    @default(true)
   emailAgenda    Boolean    @default(true)

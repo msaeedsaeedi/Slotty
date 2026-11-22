@@ -519,3 +519,22 @@ Add one for every deliberate trade-off.
    lowered after a question would reach the student unchecked).}
   {Courses need a different hold, or quiet hours for releases.}
 
+\adr{033}{A \_\_Host- session cookie, and the personal calendar feed retired}{2026-11-23}{Accepted}
+  {The session cookie's \code{Secure} flag depended on \code{NODE_ENV}, and nothing stopped a
+   subdomain or a plain-HTTP response from setting a cookie with the same name. The personal
+   calendar feed (\route{/calendar/<token>}) still answered for links created before calendar sync
+   was hidden: the secret was stored in plain text, never expired, and nobody could see, replace or
+   revoke it, while it gave a person's demos (for staff, the students they host) to anyone holding
+   the link.}
+  {The cookie is \code{__Host-slotty_session}, always \code{Secure}, \code{Path=/}, no Domain;
+   the old \code{slotty_session} cookie is still read until those sessions expire, and signing in
+   or out clears it. The feed route is removed, a migration clears every stored feed secret, and
+   the column is dropped later. Rotation, revocation, expiry and hashed secrets belong in the
+   calendar sync design (ch.~15), not in a hidden feature.}
+  {Browsers refuse the session cookie over plain HTTP and from other hosts. Anyone subscribed to a
+   feed stops getting updates; \ui{Add to calendar} on each booking is unchanged. After a rollback,
+   people who signed in on this release sign in again (the previous release reads only the old
+   cookie), and the feed stays dead because the secrets are gone. Rejected: rotation and revocation
+   on the account page now (work for a feature that isn't offered).}
+  {Calendar sync is designed and ships with its own token handling.}
+
