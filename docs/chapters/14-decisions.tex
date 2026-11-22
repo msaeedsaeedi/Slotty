@@ -544,8 +544,8 @@ Add one for every deliberate trade-off.
    apply time; and nothing told us when a dependency had a known vulnerability, until an audit found
    critical advisories in the Next.js running in production (fixed by hotfix v1.0.0-beta.3.1, \#106).}
   {Pin every build input (images by digest, actions by commit SHA, packages by lockfile with frozen
-   installs, the AMI by ID), let Dependabot propose updates weekly into \code{dev} (minor and patch
-   grouped, majors one at a time), and fail CI on any high or critical advisory in either lockfile.
+   installs, the AMI by ID), let Dependabot propose minor and patch updates weekly into \code{dev}
+   (grouped; majors are planned by hand, and Bun, pinned in three places, too), and fail CI on any high or critical advisory in either lockfile.
    An advisory that can't be fixed yet and isn't reachable is accepted by ID in the \code{audit}
    script, with its reason in ch.~11 and when to drop it.}
   {A changed upstream image or action can't slip into a build, and a new high advisory blocks merges

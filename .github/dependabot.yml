@@ -1,6 +1,8 @@
 # Weekly dependency updates (#40, ADR-034). Pull requests go to dev (the default branch), labelled
 # `chore` for the release notes, and pass the same CI as any other change. Minor and patch updates
-# are grouped per ecosystem to keep the queue short; majors come one by one (see #107).
+# are grouped per ecosystem to keep the queue short. Major versions are never proposed here: they're
+# planned one by one in #107. (Update-type ignores apply to version updates only, so a security fix
+# that needs a major version still arrives as a security update.)
 # Security updates are a repository setting (on since 2026-11-23): they open a fix PR as soon as an
 # advisory appears and reuse this file's labels; these weekly version updates keep everything else,
 # including image digests and action SHAs, current.
@@ -19,6 +21,9 @@ updates:
     groups:
       bun-minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: docker
     directories: ["/", "/docs/tooling"]
@@ -32,6 +37,12 @@ updates:
     groups:
       docker-minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+      # Bun is pinned in three places (here, package.json's packageManager, CI's BUN_VERSION) and
+      # Dependabot only sees this one, so Bun is upgraded by hand in all three at once.
+      - dependency-name: oven/bun
 
   - package-ecosystem: github-actions
     directories: ["/", "/.github/actions/setup"]
@@ -45,3 +56,6 @@ updates:
     groups:
       actions-minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
