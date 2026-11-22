@@ -1,25 +1,23 @@
-# Checks every pull request (required by dev's and master's protection: the "CI ok" job) and every
-# push to dev and master. Jobs run in parallel; each database is a throwaway Postgres
-# (Testcontainers). PRs into master are releases and must also pass "Release PR" (ADR-027).
-# Deploying is .github/workflows/deploy.yml, which doesn't wait for this: protection makes a PR be
-# up to date and green before it merges, so master is what CI already tested. On the Back-merge
-# workflow's PRs it runs once a maintainer approves it (GitHub's rule for PRs opened by a
-# workflow).
+# Checks every pull request (required by dev's and master's protection: the "CI ok" job). Pushes
+# aren't checked again: protection makes a PR be up to date and green before it merges, so dev and
+# master hold only what CI already tested (deploy.yml doesn't wait for CI either). A "changes" job
+# decides what a PR needs: docs-only PRs skip the tests, the images build only when what goes into
+# them changed, and Back-merge PRs (master, already tested, back into dev) run only the fast checks.
+# PRs into master are releases and must also pass "Release PR" (ADR-027). On the Back-merge
+# workflow's PRs CI runs once a maintainer approves it (GitHub's rule for PRs opened by a workflow).
 name: CI
 
 on:
   pull_request:
-  push:
-    branches: [master, dev]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# A new push to a PR cancels its older run; master runs always finish.
+# A new push to a PR cancels its older run.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 env:
   # `prisma generate` (postinstall) loads its config, which needs a URL; nothing connects.
@@ -27,32 +25,62 @@ env:
   BUN_VERSION: 1.3.14
 
 jobs:
-  static:
-    name: Typecheck, lint, unit tests
+  changes:
+    # What this PR touches. A manual run (workflow_dispatch) checks everything.
+    name: Changed paths
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 2
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+      image: ${{ steps.diff.outputs.image }}
+      docs: ${{ steps.diff.outputs.docs }}
+      full: ${{ steps.diff.outputs.full }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          # Back-merge PRs bring master, which CI already tested, into dev: fast checks only.
+          case $HEAD_REF in back-merge/*) full=false ;; *) full=true ;; esac
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+          if [ -z "$BASE" ]; then
+            printf 'code=true\nimage=true\ndocs=true\n' >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          git fetch -q --depth=1 origin "$BASE"
+          files=$(git diff --name-only "$BASE" HEAD)
+          echo "$files"
+          has() { grep -qE "$1" <<<"$files" && echo true || echo false; }
+          {
+            echo "code=$(grep -qv '^docs/' <<<"$files" && echo true || echo false)"
+            echo "image=$(has '^(Dockerfile|\.dockerignore|docker-bake\.hcl|docker/|package\.json|bun\.lock|prisma/)')"
+            echo "docs=$(has '^docs/')"
+          } >> "$GITHUB_OUTPUT"
+
+  checks:
+    # One job, so dependencies install once and the minute rounding is paid once.
+    name: Typecheck, lint, unit and integration tests
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
       - run: bun run typecheck
       - run: bun run lint
       - run: bun run test:unit
+      - run: bun run test:int
       # Fails on any high or critical advisory in either lockfile (root and the migrate image's),
       # except the accepted ones listed in the `audit` script (ADR-034, docs ch. 11).
       - name: Dependency audit
         run: bun run audit
 
-  integration:
-    name: Integration tests
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup
-      - run: bun run test:int
-
   e2e:
     name: End-to-end tests
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.full == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -93,7 +121,8 @@ jobs:
     # Proves the Dockerfile still builds (both targets) before it can merge. Pushing happens
     # only in deploy.yml, on master. Native ARM64, like Fargate.
     name: Docker images
-    if: github.event_name == 'pull_request'
+    needs: changes
+    if: needs.changes.outputs.image == 'true' && needs.changes.outputs.full == 'true'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
     steps:
@@ -113,26 +142,15 @@ jobs:
     # Builds the system documentation when docs/ changed (a document that doesn't build fails like
     # code that doesn't compile) and keeps the PDF as an artifact.
     name: Documentation
+    needs: changes
+    if: needs.changes.outputs.docs == 'true' && needs.changes.outputs.full == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Did docs/ change?
-        id: changed
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          if [ -n "$BASE" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ] \
-             && git fetch -q --depth=1 origin "$BASE" && git diff --quiet "$BASE" HEAD -- docs/; then
-            echo "docs=false" >> "$GITHUB_OUTPUT"; echo "docs/ unchanged; nothing to build."
-          else
-            echo "docs=true" >> "$GITHUB_OUTPUT"
-          fi
       - name: Build the PDF (pinned TeX Live image)
-        if: steps.changed.outputs.docs == 'true'
         run: docs/tooling/build.sh
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: steps.changed.outputs.docs == 'true'
         with:
           name: slotty-docs-${{ github.sha }}
           path: docs/build/slotty.pdf
@@ -173,7 +191,7 @@ jobs:
   ok:
     name: CI ok
     if: always()
-    needs: [static, integration, e2e, image, docs, release-pr]
+    needs: [changes, checks, e2e, image, docs, release-pr]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
