@@ -343,8 +343,8 @@ How much people are told (\src{src/domain/notifications.ts}, ADR-018):
   \code{assignment.book_soon} & unbooked students & 48h before the demo window ends\\
   \code{agenda.daily} & host (email only) & Morning list of today's demos\\
   \code{evaluation.returned} & evaluator (TA) & Instructor returned an evaluation\\
-  \code{evaluation.finalized} & student & Marks released; the body has the total, each rubric row and the feedback\\
-  \code{evaluation.updated} & student & Corrected marks released after an unlock, with the old total (only once the first release was seen)\\
+  \code{evaluation.finalized} & student & Marks released; the message only says so and links to the assignment page. Marks, scores and feedback are never in the email, push or outbox\\
+  \code{evaluation.updated} & student & Corrected marks released after an unlock, again without the marks (only once the first release was seen)\\
   \bottomrule
 \end{xltabular}}
 
@@ -373,4 +373,4 @@ Times are stored in UTC. They're shown and entered in the \textbf{course timezon
 
 \section{Audit}
 
-Moderation-relevant changes go through \code{audit(tx, actor, …)}: courses, roster, assignments, availability, slot cancellation and venue changes, attendance, staff cancellations, evaluation transitions, and admin actions. Platform actions (access grants, feedback status) are recorded as \code{platform.*}, outside the admin audit log. Entries are never changed or deleted: the database refuses it (\cref{ch:crosscutting}).
+Moderation-relevant changes go through \code{audit(tx, actor, …)}: courses, roster (each person added or changed, by account id, with their role and section before and after), assignments, availability, slot cancellation and venue changes, attendance, staff cancellations, every change to marks (\code{evaluation.write}: scores, total, override and feedback before and after, for drafts, autosaves and edits after unlocking, but only when something changed; private notes are recorded as edited, never their text), evaluation transitions, mark exports (\code{report.export}: who exported which assignment), and admin actions. Platform actions (access grants, feedback status) are recorded as \code{platform.*}, outside the admin audit log. Entries are never changed or deleted: the database refuses it (\cref{ch:crosscutting}).

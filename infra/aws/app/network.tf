@@ -139,12 +139,41 @@ resource "aws_security_group" "worker" {
   vpc_id      = aws_vpc.main.id
 }
 
-# Tasks reach RDS, AWS APIs (ECR, SSM, logs), SES SMTP and push services.
-resource "aws_vpc_security_group_egress_rule" "tasks_out" {
-  for_each          = { web = aws_security_group.web.id, worker = aws_security_group.worker.id }
+# Task egress, only what the tasks use (#63). Security groups don't filter the VPC's DNS
+# resolver or the task metadata endpoint, so neither needs a rule.
+#   web, worker: HTTPS (ECR, SSM, CloudWatch Logs through the NAT; push services) and Postgres to RDS.
+#   worker only: SMTP submission (587) to SES.
+locals {
+  task_sgs = { web = aws_security_group.web.id, worker = aws_security_group.worker.id }
+}
+
+resource "aws_vpc_security_group_egress_rule" "tasks_https" {
+  for_each          = local.task_sgs
   security_group_id = each.value
+  description       = "HTTPS: AWS APIs and push services"
   cidr_ipv4         = "0.0.0.0/0"
-  ip_protocol       = "-1"
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+}
+
+resource "aws_vpc_security_group_egress_rule" "tasks_db" {
+  for_each                     = local.task_sgs
+  security_group_id            = each.value
+  description                  = "Postgres"
+  referenced_security_group_id = aws_security_group.db.id
+  ip_protocol                  = "tcp"
+  from_port                    = 5432
+  to_port                      = 5432
+}
+
+resource "aws_vpc_security_group_egress_rule" "worker_smtp" {
+  security_group_id = aws_security_group.worker.id
+  description       = "SMTP submission to SES"
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "tcp"
+  from_port         = 587
+  to_port           = 587
 }
 
 resource "aws_security_group" "db" {

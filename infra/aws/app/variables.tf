@@ -45,9 +45,9 @@ variable "web_memory" {
 }
 
 variable "web_min" {
-  description = "Minimum web tasks. 2 = one per AZ (the first on regular Fargate, the rest on Spot)."
+  description = "Minimum web tasks. 1 on regular Fargate at low traffic; CPU autoscaling adds Spot tasks up to web_max under load (ADR-030)."
   type        = number
-  default     = 2
+  default     = 1
 }
 
 variable "web_max" {
@@ -113,9 +113,9 @@ variable "enable_guardduty" {
 }
 
 variable "enable_exec" {
-  description = "Allow `aws ecs execute-command` into running tasks."
+  description = "Allow `aws ecs execute-command` into running tasks. Off by default: turn on for an incident (`-var enable_exec=true`, then a redeploy); every session is logged to /slotty/exec."
   type        = bool
-  default     = true
+  default     = false
 }
 
 # ── Web Push. Generate once: bunx web-push generate-vapid-keys. Empty = push off. ──

@@ -70,7 +70,7 @@ items that need the person. Still to do from the QA report of 18 Nov 2026:
 
 \section[Hosting (AWS, \texttt{infra/aws})]{Hosting (AWS, \code{infra/aws})}
 
-Bootstrap tier, about \$47/month against a \$50 budget. Next steps, in the order they're worth paying for:
+Bootstrap tier, about \$44/month against a \$55 budget (ADR-030). Next steps, in the order they're worth paying for:
 \begin{itemize}
   \item \textbf{WAF} (\textasciitilde{}\$10/mo) or CloudFront's flat-rate plan once traffic is real; today API Gateway throttling is the only rate limit.
   \item \textbf{Multi-AZ RDS} (\code{db_multi_az}, \textasciitilde{}+\$14/mo) when a few minutes of downtime during an AZ outage stops being acceptable.

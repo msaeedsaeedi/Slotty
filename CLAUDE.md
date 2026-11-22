@@ -37,7 +37,7 @@ Slotty: demo scheduling and evaluation for university courses. System documentat
 
 ## Decided (don't re-ask; propose a superseding ADR instead)
 - AWS architecture and its trade-offs are ADR-001… in docs chapter 14 (`docs/chapters/14-decisions.tex`).
-- Budget is $50/month for slotty-prod, enforced by SCPs and AWS Budgets; estimate cost changes in docs chapter 12.
+- Budget is $55/month for slotty-prod (ADR-030), enforced by SCPs and AWS Budgets; estimate cost changes in docs chapter 12.
 - No RDS Proxy or transaction-mode pooler: the worker needs LISTEN/NOTIFY.
 
 ## Never

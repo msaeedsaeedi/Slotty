@@ -124,6 +124,11 @@ async function writeEvaluation(
     assertRule(checkReason(data.overrideNote, { missing: "Add a note explaining the total override." }), "INVALID", "overrideNote");
   }
 
+  const before = await tx.evaluation.findUniqueOrThrow({
+    where: { id: evaluation.id },
+    select: { totalMarks: true, totalOverride: true, overrideNote: true, feedback: true, privateNotes: true, scores: { select: { criterionId: true, points: true, comment: true } } },
+  });
+
   await tx.evaluationScore.deleteMany({ where: { evaluationId: evaluation.id } });
   if (data.scores.length) {
     await tx.evaluationScore.createMany({ data: data.scores.map((s) => ({ ...s, evaluationId: evaluation.id })) });
@@ -139,6 +144,22 @@ async function writeEvaluation(
       evaluatorId: actor.id,
     },
   });
+
+  // Every change to marks is audited (drafts, autosaves, edits after unlock), but only when
+  // something changed. Private notes are recorded as edited, never their text.
+  const snapshot = (e: { totalMarks: number | null; totalOverride: boolean; overrideNote: string | null; feedback: string | null; scores: { criterionId: string; points: number; comment: string | null }[] }) => ({
+    total: e.totalMarks,
+    totalOverride: e.totalOverride,
+    overrideNote: e.overrideNote ?? null,
+    feedback: e.feedback ?? null,
+    scores: Object.fromEntries([...e.scores].sort((a, b) => a.criterionId.localeCompare(b.criterionId)).map((s) => [s.criterionId, { points: s.points, comment: s.comment ?? null }])),
+  });
+  const was = snapshot(before);
+  const now = snapshot({ totalMarks: total, totalOverride: data.totalOverride, overrideNote: data.overrideNote ?? null, feedback: data.feedback ?? null, scores: data.scores.map((s) => ({ criterionId: s.criterionId, points: s.points, comment: s.comment ?? null })) });
+  const privateNotesEdited = (before.privateNotes ?? null) !== (data.privateNotes ?? null);
+  if (JSON.stringify(was) !== JSON.stringify(now) || privateNotesEdited) {
+    await audit(tx, actor, { action: "evaluation.write", entityType: "Evaluation", entityId: evaluation.id, before: was, after: { ...now, ...(privateNotesEdited ? { privateNotesEdited: true } : {}) } });
+  }
   return total;
 }
 
@@ -334,33 +355,25 @@ export async function submitEvaluations(actor: Actor, evaluationIds: string[]) {
 }
 
 /**
- * Tell the student their marks, with the full breakdown so the email stands on
- * its own. Marks released again after a correction say so and show the change.
+ * Tell the student their marks are out. The email and push say only that, with a link: marks,
+ * rubric scores and feedback stay in Slotty, behind sign-in, and never sit in an inbox, a lock
+ * screen or the outbox (#33). Marks released again after a correction say so.
  */
 async function announceMarks(tx: Tx, evaluation: { id: string; studentId: string; assignmentId: string; assignment: { title: string; courseId: string } }) {
   const ev = await tx.evaluation.findUniqueOrThrow({
     where: { id: evaluation.id },
-    include: { scores: { include: { criterion: true } }, assignment: { include: { course: { select: { code: true } } } } },
+    include: { assignment: { include: { course: { select: { code: true } } } } },
   });
   const lastUnlock = await tx.auditLog.findFirst({ where: { action: "evaluation.unlock", entityId: ev.id }, orderBy: { createdAt: "desc" } });
   // A correction made before the student saw the first release is just the release: one item, final marks.
   const unlock = lastUnlock && !(await unseenEarlier(tx, ev.studentId, marksKey(ev.id))) ? lastUnlock : null;
-  const before = (unlock?.before as { totalMarks?: number | null } | null)?.totalMarks;
-  const { title, maxMarks, course } = ev.assignment;
-  const rubric = ev.scores
-    .sort((a, b) => a.criterion.order - b.criterion.order)
-    .map((s) => `• ${s.criterion.label}: ${s.points}/${s.criterion.maxPoints}${s.comment ? ` — ${s.comment}` : ""}`);
-  const summary = [
-    `Total: ${ev.totalMarks ?? "–"} / ${maxMarks}${unlock && before != null && before !== ev.totalMarks ? ` (was ${before})` : ""}`,
-    ...(rubric.length ? ["", ...rubric] : []),
-    ...(ev.feedback ? ["", `Feedback: ${ev.feedback}`] : []),
-  ].join("\n");
+  const { title, course } = ev.assignment;
   await notify(tx, [ev.studentId], {
     type: unlock ? "evaluation.updated" : "evaluation.finalized",
     title: unlock ? `Marks updated: ${title}` : `Marks released: ${title}`,
     body: unlock
-      ? `Your marks for ${course.code} — ${title} were corrected.\n\n${summary}`
-      : `Your ${course.code} demo for ${title} has been marked.\n\n${summary}`,
+      ? `Your marks for ${course.code} — ${title} were corrected. Open Slotty to see them.`
+      : `Your marks for ${course.code} — ${title} are released. Open Slotty to see them and the feedback.`,
     link: `/courses/${ev.assignment.courseId}/assignments/${ev.assignmentId}`,
     groupKey: marksKey(ev.id),
     // Held briefly so a quick correction replaces it instead of sending two emails.
