@@ -157,7 +157,7 @@ Each job records what it did, so running it twice sends nothing twice.
 
 \begin{itemize}
   \item \ui{Add to calendar} on a booking: Google Calendar and Outlook links that open with the demo filled in, or \route{/bookings/<id>/calendar} as an \code{.ics} file (the student's own, signed in). Each adds a copy; when the booking changes the student is emailed and can add the new time.
-  \item Automatic sync is \ui{coming soon} (see the roadmap). \route{/calendar/<token>} (a personal feed) still answers for links created earlier, but the account page no longer offers it.
+  \item Automatic sync is \ui{coming soon} (see the roadmap). The personal feed (\route{/calendar/<token>}) is retired (ADR-033): every link answers 404 and the stored feed secrets were cleared, because nobody could see, replace or revoke them.
 \end{itemize}
 
 \section{PWA}
@@ -289,7 +289,7 @@ The account page (\route{/account}) shows only what applies to the user's roles:
   \endhead
   Invite link & 14 days. Re-inviting invalidates older links.\\
   Password reset link & 2 hours. A new request voids any earlier unused link. Resetting ends every session and lifts any sign-in wait.\\
-  Session & 30 days, stored in the DB. Disabled users are signed out.\\
+  Session & 30 days, stored in the DB (the browser holds only a random token, hashed in the DB). The cookie is \code{__Host-slotty_session}: always \code{Secure}, \code{HttpOnly}, \code{SameSite=Lax}, for the whole site and this host only (ADR-033); the older \code{slotty_session} cookie is still read until those sessions expire. Disabled users are signed out.\\
   Unknown email on reset & Silent success, so nobody can probe which emails exist.\\
   Failed sign-ins & Counted per typed email (known or not, so the limit reveals nothing) for an hour: 5 are free, then each one doubles the wait from 30 seconds, up to 15 minutes. While waiting, even the right password is refused. A successful sign-in clears the count. Wrong current passwords on \route{/account} count too.\\
   Sign-ins per network & 50 failures in 15 minutes from one address, across all accounts, refuses that network for 15 minutes. Generous because a campus shares one address.\\

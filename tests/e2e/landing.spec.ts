@@ -77,3 +77,30 @@ test("only the public pages are open to search engines", async ({ request }) => 
   expect(robots).toContain("Allow: /privacy");
   expect(robots).toContain("Disallow: /");
 });
+
+test("the session cookie is __Host-, Secure and HttpOnly, an older cookie still works, and signing out clears both (ADR-033)", async ({ browser, baseURL }) => {
+  const ta = await login(browser, "ta@e2e.test");
+  const cookies = await ta.context().cookies();
+  const session = cookies.find((c) => c.name === "__Host-slotty_session");
+  expect(session).toMatchObject({ secure: true, httpOnly: true, path: "/", sameSite: "Lax" });
+  expect(cookies.some((c) => c.name === "slotty_session")).toBe(false);
+
+  // A browser still holding the pre-ADR-033 cookie stays signed in.
+  const legacy = await browser.newContext();
+  await legacy.addCookies([{ name: "slotty_session", value: session!.value, url: baseURL! }]);
+  const page = await legacy.newPage();
+  await open(page, "/dashboard");
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  // Signing out ends the session and clears the cookie, whichever name it had.
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/(login)?$/);
+  expect((await legacy.cookies()).some((c) => c.name.endsWith("slotty_session"))).toBe(false);
+  await open(ta, "/dashboard");
+  await expect(ta).toHaveURL(/\/login/);
+  await legacy.close();
+});
+
+test("the retired personal calendar feed answers 404 for any link (ADR-033)", async ({ request }) => {
+  expect((await request.get("/calendar/0123456789abcdef.ics")).status()).toBe(404);
+});

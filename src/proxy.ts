@@ -10,7 +10,7 @@ import { NextResponse, type NextRequest } from "next/server";
  * Next's Server Actions origin check. Verified requests did come through CloudFront for APP_URL,
  * so the forwarded host and protocol are set back to it.
  *
- * ORIGIN_VERIFY_SECRET unset (dev, VPS): no check.
+ * ORIGIN_VERIFY_SECRET unset (local development and tests): no check.
  */
 const digest = (value: string) => createHash("sha256").update(value).digest();
 
