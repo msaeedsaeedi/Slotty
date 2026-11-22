@@ -1,9 +1,11 @@
 import { currentClock } from "@/lib/time";
+import { RELEASE_HOLD_HOURS } from "@/domain/evaluation";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
-import { clearMarksAction, reviewAction, unlockAction } from "@/app/actions/evaluations";
+import { clearMarksAction, reviewAction, unlockAction, withdrawAction } from "@/app/actions/evaluations";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { PageHeader } from "@/components/page-header";
+import { PrivateNotes } from "@/components/private-notes";
 import { StatusBadge } from "@/components/status-badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,7 +31,7 @@ export default async function StudentRecordPage({ params, searchParams }: PagePr
   const user = await requireUser();
   const rec = await load(getStudentRecord(user, assignmentId, studentId));
   const controls = await getStudentBookingControls(user, assignmentId, studentId);
-  const { assignment, booking, evaluation: ev, student } = rec;
+  const { assignment, booking, evaluation: ev, student, notes } = rec;
   const tz = assignment.course.timezone;
   const back = typeof returnTo === "string" && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : `/courses/${courseId}/manage/assignments/${assignmentId}?tab=students`;
   const editable = !ev || ev.status === "DRAFT" || ev.status === "RETURNED";
@@ -121,11 +123,12 @@ export default async function StudentRecordPage({ params, searchParams }: PagePr
                   venue: row.booking.venue,
                   host: row.booking.host,
                 },
-                evaluation: row.evaluation,
+                evaluation: row.evaluation && { ...row.evaluation, releasesOn: row.evaluation.releaseAt ? fmt(row.evaluation.releaseAt, tz) : null },
               },
             ]}
             hasInstructor={sheet.hasInstructor}
             finalOnSubmit={!sheet.hasInstructor || sheet.role === "INSTRUCTOR"}
+            holdHours={!sheet.hasInstructor && sheet.role !== "INSTRUCTOR" ? RELEASE_HOLD_HOURS : null}
             mode="student"
             isToday={false}
             title={student.name}
@@ -169,11 +172,7 @@ export default async function StudentRecordPage({ params, searchParams }: PagePr
               <span className="font-medium">Feedback:</span> {ev.feedback}
             </p>
           )}
-          {ev?.privateNotes && (
-            <p className="text-muted-foreground">
-              <span className="font-medium">Private note:</span> {ev.privateNotes}
-            </p>
-          )}
+          <PrivateNotes notes={notes} />
           {ev && (
             <p className="text-xs text-muted-foreground">
               Marked by {ev.evaluator.name}
@@ -181,6 +180,25 @@ export default async function StudentRecordPage({ params, searchParams }: PagePr
             </p>
           )}
 
+          {ev?.status === "SUBMITTED" && ev.releaseAt && (
+            <p className="border-t pt-3 text-muted-foreground">
+              Released{ev.submittedById === user.id ? " by you" : ""}: the student sees these marks on {fmt(ev.releaseAt, tz)}
+              {rec.role === "INSTRUCTOR" ? ", unless you finalize or return them first." : "."}
+            </p>
+          )}
+          {ev?.status === "SUBMITTED" && ev.releaseAt && ev.submittedById === user.id && !assignment.course.archived && (
+            <ActionForm
+              action={withdrawAction}
+              compact
+              confirm="Withdraw these marks? They become a draft again and the student never sees this version."
+              confirmLabel="Withdraw"
+            >
+              <input type="hidden" name="evaluationId" value={ev.id} />
+              <SubmitButton size="sm" variant="outline">
+                Withdraw
+              </SubmitButton>
+            </ActionForm>
+          )}
           {ev?.status === "SUBMITTED" && rec.role === "INSTRUCTOR" && (
             <div className="flex flex-wrap gap-2 border-t pt-3">
               <ActionForm action={reviewAction} compact>
@@ -198,7 +216,7 @@ export default async function StudentRecordPage({ params, searchParams }: PagePr
               </ActionForm>
             </div>
           )}
-          {ev?.status === "SUBMITTED" && rec.role !== "INSTRUCTOR" && <p className="border-t pt-3 text-muted-foreground">Waiting for the instructor to review.</p>}
+          {ev?.status === "SUBMITTED" && !ev.releaseAt && rec.role !== "INSTRUCTOR" && <p className="border-t pt-3 text-muted-foreground">Waiting for the instructor to review.</p>}
           {canUnlock && (
             <ActionForm action={unlockAction} compact className="flex gap-2 border-t pt-3">
               <input type="hidden" name="evaluationId" value={ev.id} />

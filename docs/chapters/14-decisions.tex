@@ -480,3 +480,99 @@ Add one for every deliberate trade-off.
    would take the site down).}
   {Users notice outages from single-task restarts, or \#65's review finds a better shape.}
 
+\adr{031}{Private notes belong to their author; admins don't read them}{2026-11-22}{Accepted}
+  {\code{Evaluation.privateNotes} was one field per evaluation, readable by every TA and
+   instructor in the course and by every admin, and returned by any query that loaded a whole
+   evaluation. Every save overwrote it, and \code{evaluatorId} with the last saver, so a note had
+   no author. Notes are a marker's own memory of a demo, sometimes about the student as a person.}
+  {Each staff member keeps one private note per evaluation in \code{EvaluationNote} (author,
+   text). Only its author and the course's \emph{enrolled} instructors read it
+   (\code{canReadPrivateNote}): not other TAs, and not admins, although admins read courses as
+   instructors (ADR-025). Saving changes only the saver's own note. Notes are loaded on their own
+   (\code{readableNotes}), never through \code{Evaluation}. Existing notes were copied in without
+   an author and are for instructors only. The old column stays, unmodeled, until a later release
+   drops it (expand, then contract).}
+  {A TA's note can't be read or wiped by a colleague, and no new evaluation query can leak notes
+   by accident. Admins can't see notes when moderating a dispute: the instructor has to. In a course
+   without an instructor, co-TAs no longer see each other's notes. After a rollback the previous
+   release shows only the old notes until it rolls forward again; nothing is lost. Rejected: an
+   author column on the single field (a TA who can't see a colleague's note would wipe it on save),
+   and filtering the field in each query (the next query would leak it again).}
+  {Moderators need notes for disputes, or staff ask for notes shared between co-markers.}
+
+\adr{032}{A TA's release waits 24 hours when nobody reviews it}{2026-11-23}{Accepted; narrows ADR-025 for withdrawing held marks}
+  {In a course without an instructor, a TA's submit released marks to the student at once: nobody
+   else saw them first, and a mistake (or a mark lowered after a student's question) reached the
+   student before anyone could stop it.}
+  {Such a submit is held for 24 hours (\code{RELEASE_HOLD_HOURS}), as \code{SUBMITTED} with
+   \code{Evaluation.releaseAt}, and the worker releases it (\code{releaseHeldMarks}). Corrections
+   after unlocking are held too. The submitting TA can withdraw held marks; an admin can withdraw
+   them from the console with a reason, the one change admins make to course data. The hold is a
+   fixed constant, not a course setting. No new status: held marks look like marks awaiting review
+   to the previous release, so a rollback fails closed.}
+  {Students in those courses see marks a day later, and corrections a day later too (they keep
+   seeing the earlier marks meanwhile). A TA submitting on a grade deadline is a day late, so the
+   Students \& marks tab says so up front, and exports mark held marks ``held until''. A worker
+   outage delays releases but never brings them forward. Rejected: a new \code{HELD} status (the
+   previous release can't read it), releasing at the next morning (more rules for little gain),
+   letting co-TAs withdraw (any TA could block a colleague), corrections without a hold (a mark
+   lowered after a question would reach the student unchecked).}
+  {Courses need a different hold, or quiet hours for releases.}
+
+\adr{033}{A \_\_Host- session cookie, and the personal calendar feed retired}{2026-11-23}{Accepted}
+  {The session cookie's \code{Secure} flag depended on \code{NODE_ENV}, and nothing stopped a
+   subdomain or a plain-HTTP response from setting a cookie with the same name. The personal
+   calendar feed (\route{/calendar/<token>}) still answered for links created before calendar sync
+   was hidden: the secret was stored in plain text, never expired, and nobody could see, replace or
+   revoke it, while it gave a person's demos (for staff, the students they host) to anyone holding
+   the link.}
+  {The cookie is \code{__Host-slotty_session}, always \code{Secure}, \code{Path=/}, no Domain;
+   the old \code{slotty_session} cookie is still read until those sessions expire, and signing in
+   or out clears it. The feed route is removed, a migration clears every stored feed secret, and
+   the column is dropped later. Rotation, revocation, expiry and hashed secrets belong in the
+   calendar sync design (ch.~15), not in a hidden feature.}
+  {Browsers refuse the session cookie over plain HTTP and from other hosts. Anyone subscribed to a
+   feed stops getting updates; \ui{Add to calendar} on each booking is unchanged. After a rollback,
+   people who signed in on this release sign in again (the previous release reads only the old
+   cookie), and the feed stays dead because the secrets are gone. Rejected: rotation and revocation
+   on the account page now (work for a feature that isn't offered).}
+  {Calendar sync is designed and ships with its own token handling.}
+
+\adr{034}{Pinned build inputs, weekly updates, and an audit gate with named exceptions}{2026-11-23}{Accepted}
+  {Base images and GitHub Actions were pinned by tag, which their publishers can move; the migrate
+   image installed the Prisma CLI without a lockfile; the fck-nat AMI was whatever was newest at
+   apply time; and nothing told us when a dependency had a known vulnerability, until an audit found
+   critical advisories in the Next.js running in production (fixed by hotfix v1.0.0-beta.3.1, \#106).}
+  {Pin every build input (images by digest, actions by commit SHA, packages by lockfile with frozen
+   installs, the AMI by ID), let Dependabot propose minor and patch updates weekly into \code{dev}
+   (grouped; majors are planned by hand, and Bun, pinned in three places, too), and fail CI on any high or critical advisory in either lockfile.
+   An advisory that can't be fixed yet and isn't reachable is accepted by ID in the \code{audit}
+   script, with its reason in ch.~11 and when to drop it.}
+  {A changed upstream image or action can't slip into a build, and a new high advisory blocks merges
+   until it is fixed or explicitly accepted. The cost is a weekly trickle of update pull requests to
+   review and merge, and an exception list to keep honest. Moderate advisories are shown but don't
+   fail the build, because most sit in tooling (linters, test containers) and need upstream fixes.
+   Rejected: overriding transitive versions under tools to silence advisories (runs them on versions
+   they weren't released with), Renovate (another app to install for the same result), auditing only
+   production dependencies (the migrate image ships the Prisma CLI, a dev dependency).}
+  {The exception list grows instead of shrinking, or update pull requests pile up unmerged.}
+
+\adr{035}{CI checks pull requests only, and only what they change}{2026-11-23}{Accepted}
+  {CI took about 850 runner minutes in a week. Each change was checked up to four times (its pull
+   request, the push to \code{dev}, the release pull request and push to \code{master}, the
+   Back-merge pull request), every run started seven or eight jobs of about a minute each, and
+   GitHub bills each job rounded up to a whole minute (221 minutes of work were counted as 341).
+   Docs-only pull requests still ran every test and built the images.}
+  {CI runs on pull requests (and by hand), not on pushes: branch protection already makes a pull
+   request be up to date and green before it merges. A \emph{Changed paths} job decides what a pull
+   request needs: no tests when only \src{docs} changed, images only when the Dockerfile, bake
+   file, \src{docker}, \code{package.json}, \code{bun.lock} or \src{prisma} changed, the PDF only
+   when \src{docs} changed. Typecheck, lint, unit and integration tests are one job. Back-merge
+   pull requests run only that job: their content is \code{master}, already checked.}
+  {CI should take about a third of the minutes it did. A merged commit isn't checked again on its branch, so a red
+   \code{dev} or \code{master} can only come from merging around protection. A code change that
+   breaks the image build without touching its inputs is caught by the end-to-end job's production
+   build, or at the latest by Deploy. Rejected: a third-party paths filter action (another pinned
+   dependency for a few lines of shell).}
+  {Merges land on \code{dev} without the pull-request route, or the image build starts depending on
+   files outside its listed inputs.}

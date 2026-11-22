@@ -1,7 +1,47 @@
 import { allow, deny, type RuleResult } from "./result";
 
 export type EvaluationStatus = "DRAFT" | "SUBMITTED" | "RETURNED" | "FINALIZED";
-export type EvaluationAction = "save" | "submit" | "finalize" | "return" | "unlock";
+export type EvaluationAction = "save" | "submit" | "finalize" | "return" | "unlock" | "withdraw" | "release";
+
+/** How long a TA's marks wait before students see them in a course without an instructor (ADR-032). */
+export const RELEASE_HOLD_HOURS = 24;
+
+/**
+ * Where a submit goes (ADR-032): to the instructor for review; held for `RELEASE_HOLD_HOURS`
+ * when a TA submits in a course without an instructor; or final straight away when an
+ * instructor submits, since they are the reviewer.
+ */
+export type SubmitRoute = "review" | "hold" | "final";
+
+export function submitRoute(submitter: "INSTRUCTOR" | "TA", courseHasInstructor: boolean): SubmitRoute {
+  if (submitter === "INSTRUCTOR") return "final";
+  return courseHasInstructor ? "review" : "hold";
+}
+
+/** When held marks reach the student. */
+export function releaseAtFor(submittedAt: Date): Date {
+  return new Date(submittedAt.getTime() + RELEASE_HOLD_HOURS * 3_600_000);
+}
+
+/** Held marks: submitted with a release time, waiting for the worker (no reviewer involved). */
+export function isHeld(evaluation: { status: EvaluationStatus; releaseAt: Date | null }): boolean {
+  return evaluation.status === "SUBMITTED" && evaluation.releaseAt !== null;
+}
+
+/**
+ * Who may withdraw held marks before they reach the student: the TA who submitted them, or an
+ * admin from the admin console (`by: "admin"`, a moderation exception to ADR-025). Not other TAs.
+ */
+export function canWithdraw(
+  evaluation: { status: EvaluationStatus; releaseAt: Date | null; submittedById: string | null },
+  by: { kind: "staff"; id: string } | { kind: "admin" },
+  now: Date,
+): RuleResult {
+  if (!isHeld(evaluation)) return deny("Only marks waiting to be released can be withdrawn.");
+  if (evaluation.releaseAt! <= now) return deny("These marks have already been released.");
+  if (by.kind === "staff" && evaluation.submittedById !== by.id) return deny("Only the TA who submitted these marks can withdraw them.");
+  return allow;
+}
 
 export interface Criterion {
   id: string;
@@ -14,22 +54,21 @@ export interface Score {
   points: number;
 }
 
-/** Status reached after each action; `submit` depends on whether the course has an instructor. */
-export function nextStatus(
-  from: EvaluationStatus,
-  action: EvaluationAction,
-  opts: { courseHasInstructor: boolean },
-): EvaluationStatus {
+/** Status reached after each action; `submit` depends on its route (`submitRoute`). */
+export function nextStatus(from: EvaluationStatus, action: EvaluationAction, opts: { route?: SubmitRoute } = {}): EvaluationStatus {
   const check = canTransition(from, action);
   if (!check.ok) throw new Error(check.reason);
   switch (action) {
     case "save":
       return from;
     case "submit":
-      // A TA running a course alone has nobody to review — submitting finalizes.
-      return opts.courseHasInstructor ? "SUBMITTED" : "FINALIZED";
+      // Held marks stay SUBMITTED until the worker releases them, so a rollback fails closed.
+      return opts.route === "final" ? "FINALIZED" : "SUBMITTED";
     case "finalize":
+    case "release":
       return "FINALIZED";
+    case "withdraw":
+      return "DRAFT";
     case "return":
     case "unlock":
       return "RETURNED";
@@ -43,6 +82,8 @@ export function canTransition(from: EvaluationStatus, action: EvaluationAction):
     finalize: ["SUBMITTED"],
     return: ["SUBMITTED"],
     unlock: ["FINALIZED"],
+    withdraw: ["SUBMITTED"],
+    release: ["SUBMITTED"],
   };
   if (allowed[action].includes(from)) return allow;
   const messages: Record<EvaluationAction, string> = {
@@ -51,6 +92,8 @@ export function canTransition(from: EvaluationStatus, action: EvaluationAction):
     finalize: "Only submitted evaluations can be finalized.",
     return: "Only submitted evaluations can be returned.",
     unlock: "Only finalized evaluations can be unlocked.",
+    withdraw: "Only marks waiting to be released can be withdrawn.",
+    release: "Only submitted marks can be released.",
   };
   return deny(messages[action]);
 }
@@ -136,4 +179,16 @@ export function canChangeMarkedBooking(evaluation: { status: EvaluationStatus; t
     return deny("their marks are already submitted. Unlock and clear the marks on their student page first.");
   }
   return deny("they already have marks for this demo. Clear the marks on their student page first.");
+}
+
+/**
+ * Who may read a private note on an evaluation (ADR-031): its author, and the course's enrolled
+ * instructors. `enrolledRole` is the viewer's own enrollment in the course, not the role an
+ * admin is read as (`courseRoleOf`), so admins never read notes. A note without an author
+ * (written before notes had one) is for the instructors only.
+ */
+export function canReadPrivateNote(note: { authorId: string | null }, viewer: { id: string; enrolledRole: "INSTRUCTOR" | "TA" | "STUDENT" | null }): RuleResult {
+  if (viewer.enrolledRole === "INSTRUCTOR") return allow;
+  if (viewer.enrolledRole === "TA" && note.authorId === viewer.id) return allow;
+  return deny("Private notes are for their author and the course instructors only.");
 }

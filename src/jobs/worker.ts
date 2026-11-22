@@ -26,6 +26,7 @@ import { isPushConfigured } from "@/server/push-config";
 import { rollupAndPrune } from "@/server/services/analytics";
 import { pruneAuthAttempts } from "@/server/auth/limits";
 import { announceOpenedBookings, closeEndedAssignments, nudgeUnbookedStudents, sendDailyAgendas } from "@/server/services/automations";
+import { releaseHeldMarks } from "@/server/services/evaluations";
 import { queueDueReminders } from "@/server/services/reminders";
 import { pruneMessages } from "@/server/services/retention";
 
@@ -113,6 +114,7 @@ async function scheduleLoop() {
       closed: await job("auto-close", () => closeEndedAssignments()),
       agendas: await job("agendas", () => sendDailyAgendas()),
       reminders: await job("reminders", () => queueDueReminders()),
+      marksReleased: await job("release-held-marks", () => releaseHeldMarks()),
     };
     report(counts);
     if (Date.now() - analyticsRanAt >= ANALYTICS_EVERY_MS) {

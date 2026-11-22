@@ -99,6 +99,8 @@ the NAT instance accepts only the app subnets. The VPC's default security group 
   managed NAT gateway (about \$33 plus traffic). It is a single instance with EC2 automatic
   recovery; while it is down, running tasks keep serving users but cannot send email or pull
   images. \tfvar{nat_mode = "gateway"} switches to a managed gateway (after lifting the SCP deny).
+  The AMI is pinned (\tfvar{nat_ami_id}): to upgrade, set a newer fck-nat AL2023 arm64 image's ID
+  and review the plan, which replaces the instance (about a minute without outbound traffic).
 \end{decision}
 
 \section{Compute}\label{sec:aws-compute}
@@ -124,7 +126,7 @@ circuit breaker with automatic rollback. ECS Exec is enabled for debugging.
   \midrule
   Engine and size & PostgreSQL 17, \code{db.t4g.micro}, single AZ (\tfvar{db_multi_az} switches)\\
   Storage & gp3, 20 GB, autoscaling to 50 GB, encrypted with the AWS-managed key\\
-  Backups & Automated daily, 7-day point-in-time recovery, final snapshot on delete, deletion protection\\
+  Backups & Automated daily, 7-day point-in-time recovery, final snapshot on delete, deletion protection; restore rehearsed 2026-11-22 (22 minutes to a new instance, \cref{sec:ops-restore})\\
   Parameters & \code{rds.force_ssl = 1}; slow statements over 1\,s logged; idle-in-transaction sessions ended after 60\,s\\
   Access & Private subnets only, not publicly accessible; credentials in SSM\\
   \bottomrule

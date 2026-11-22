@@ -148,6 +148,7 @@ Each job records what it did, so running it twice sends nothing twice.
   \code{nudgeUnbookedStudents} & 48h before \code{windowEnd} (once) & ``Last chance to book'' to unbooked students\\
   \code{closeEndedAssignments} & \code{windowEnd} has passed & Assignment → \code{CLOSED}, waitlist cleared, audited with no actor\\
   \code{sendDailyAgendas} & 06:00--11:00 course time, once per local day & Email-only list of today's demos for each host (unless they opted out)\\
+  \code{releaseHeldMarks} (\src{src/server/services/evaluations.ts}) & \code{releaseAt} has passed & Held marks → \code{FINALIZED} and the student's ``Marks released'' notice, each claimed once with a conditional update; audited as \code{evaluation.release} with no actor (ADR-032)\\
   \code{queueDueReminders} & 24h / 1h before; 08:00 on the demo day; 10 min before & Reminders to the student, each claimed once on the booking (\code{reminder24hAt}, \code{reminder1hAt}, \code{reminderMorningAt}, \code{reminder10mAt}). 24h and 1h: email (unless \code{emailReminders} is off) and bell, skipped when booked inside the window. Morning-of (\code{morningReminderDue}, \src{src/domain/reminders.ts}): email, bell and push unless \code{remindMorning} is off; skipped when the demo is under an hour away or was booked after 08:00 course time that day. 10 minutes (\code{lastReminderDue}): push only, with the meeting link, unless \code{remind10m} is off or it was booked within those 10 minutes\\
   \bottomrule
 \end{xltabular}}
@@ -156,7 +157,7 @@ Each job records what it did, so running it twice sends nothing twice.
 
 \begin{itemize}
   \item \ui{Add to calendar} on a booking: Google Calendar and Outlook links that open with the demo filled in, or \route{/bookings/<id>/calendar} as an \code{.ics} file (the student's own, signed in). Each adds a copy; when the booking changes the student is emailed and can add the new time.
-  \item Automatic sync is \ui{coming soon} (see the roadmap). \route{/calendar/<token>} (a personal feed) still answers for links created earlier, but the account page no longer offers it.
+  \item Automatic sync is \ui{coming soon} (see the roadmap). The personal feed (\route{/calendar/<token>}) is retired (ADR-033): every link answers 404 and the stored feed secrets were cleared, because nobody could see, replace or revoke them.
 \end{itemize}
 
 \section{PWA}
@@ -213,16 +214,18 @@ Limits: push arrives even when the app is closed, but the device needs a connect
 
 
 \begin{itemize}
-  \item \code{submit} with no instructor in the course → \code{FINALIZED} directly.
+  \item \textbf{Where a submit goes} (\code{submitRoute}, ADR-032): with an instructor in the course, a TA's submit waits for review (\code{SUBMITTED}). Without one, it is \textbf{held for 24 hours} (\code{RELEASE_HOLD_HOURS}): it stays \code{SUBMITTED} with \code{releaseAt}, the student sees nothing and isn't notified, and the worker releases it at \code{releaseAt} (\code{releaseHeldMarks}). Corrections after unlocking are held too; the student keeps seeing the earlier marks, marked as being corrected.
+  \item \textbf{Withdrawing held marks} (\code{canWithdraw}): before \code{releaseAt}, the TA who submitted them (\code{submittedById}) can withdraw them; other TAs can't. An admin can withdraw them from \route{/admin/marks} with a reason the TA is told, a narrow exception to admins being read-only in courses (ADR-025). Withdrawn marks go back to \code{DRAFT}, audited as \code{evaluation.withdraw}. An instructor added during the hold can finalize or return held marks as usual, which ends the hold.
   \item Only \code{DRAFT} and \code{RETURNED} can be edited. Every rubric row must be scored to submit, and the total must be between 0 and \code{maxMarks}.
-  \item What an \textbf{instructor} (or admin) submits is final: they are the reviewer, so it skips \code{SUBMITTED}.
+  \item What an \textbf{instructor} submits is final at once: they are the reviewer, so it skips \code{SUBMITTED}.
   \item Marking \textbf{before the demo starts} needs a reason (\code{earlyMarkReason}, audited as \code{evaluation.early}).
   \item \textbf{Recorded marks pin the booking.} A booking with marks (any total, or submitted/final) can't be cancelled or moved by the student or staff, and its slot can't be cancelled. The student's page hides \ui{Cancel booking} and \ui{Reschedule} and says why (\code{isMyBookingMarked}). Staff \ui{Clear marks} first (draft only, with a reason, audited as \code{evaluation.clear}; submitted or final marks are unlocked first).
   \item The marking sheet autosaves drafts (\code{saveDraft}); the evaluation is created on the first save, never just by viewing. A score for a booked student whose demo has started records them as present. A no-show can't be marked until the no-show is undone.
   \item Marking a student \textbf{with no booking} needs a reason. It's stored on the evaluation (\code{noBookingReason}), flagged in lists, and audited as \code{evaluation.no_booking}.
   \item A total override needs a note. Attendance locks once the evaluation is \code{SUBMITTED} or \code{FINALIZED}.
   \item Only instructors review. Unlocking needs a reason (in a course without an instructor, the TA can unlock).
-  \item Students see released results only, never drafts or \code{privateNotes}. Unlocking keeps a copy of what the student was shown (\code{Evaluation.released}); until the marks are released again the student keeps seeing it, marked as being corrected, together with any marks question. Releasing clears the copy.
+  \item \textbf{Private notes belong to their author} (\code{canReadPrivateNote}, ADR-031). Each staff member keeps one note per evaluation (\code{EvaluationNote}); saving changes only their own. A note is read by its author and the course's enrolled instructors only: not other TAs, and not admins, who read courses as instructors but aren't enrolled. Notes from before notes had an author are for the instructors only. Services load notes on their own (\code{readableNotes}), never with the evaluation, and they never reach students, exports, emails or push.
+  \item Students see released results only, never drafts or private notes. Unlocking keeps a copy of what the student was shown (\code{Evaluation.released}); until the marks are released again the student keeps seeing it, marked as being corrected, together with any marks question. Releasing clears the copy.
   \item Releasing marks (when submitting is final) asks for confirmation first, and every message uses one word for it: ``released''. Otherwise marks are ``sent for review''.
   \item The marking sheet shows the total as ``--'' while any mark is invalid (non-numeric or outside 0 to the row's maximum).
 \end{itemize}
@@ -268,6 +271,8 @@ platform accounts see no course at all.
   Mark attendance, place or cancel students' bookings, grant exceptions & yes & yes & -- & --\\
   Mark and submit evaluations & yes & yes & -- & --\\
   Review, finalize and unlock marks & yes & unlock without instructor & -- & --\\
+  Withdraw held marks before release & -- & own & -- & console\\
+  Read private notes on marks & all & own & -- & --\\
   Answer students' requests & yes & yes & -- & --\\
   \bottomrule
 \end{xltabular}}
@@ -284,7 +289,7 @@ The account page (\route{/account}) shows only what applies to the user's roles:
   \endhead
   Invite link & 14 days. Re-inviting invalidates older links.\\
   Password reset link & 2 hours. A new request voids any earlier unused link. Resetting ends every session and lifts any sign-in wait.\\
-  Session & 30 days, stored in the DB. Disabled users are signed out.\\
+  Session & 30 days, stored in the DB (the browser holds only a random token, hashed in the DB). The cookie is \code{__Host-slotty_session}: always \code{Secure}, \code{HttpOnly}, \code{SameSite=Lax}, for the whole site and this host only (ADR-033); the older \code{slotty_session} cookie is still read until those sessions expire. Disabled users are signed out.\\
   Unknown email on reset & Silent success, so nobody can probe which emails exist.\\
   Failed sign-ins & Counted per typed email (known or not, so the limit reveals nothing) for an hour: 5 are free, then each one doubles the wait from 30 seconds, up to 15 minutes. While waiting, even the right password is refused. A successful sign-in clears the count. Wrong current passwords on \route{/account} count too.\\
   Sign-ins per network & 50 failures in 15 minutes from one address, across all accounts, refuses that network for 15 minutes. Generous because a campus shares one address.\\

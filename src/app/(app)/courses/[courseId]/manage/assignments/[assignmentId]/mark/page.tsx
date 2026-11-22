@@ -1,4 +1,5 @@
 import { addDays, format, parseISO } from "date-fns";
+import { RELEASE_HOLD_HOURS } from "@/domain/evaluation";
 import { fmt, fmtData, fmtTimeRange, tzLabel } from "@/lib/time";
 import { requireUser } from "@/server/auth/session";
 import { load } from "@/server/page-utils";
@@ -56,7 +57,7 @@ export default async function MarkPage({ params, searchParams }: PageProps<"/cou
       venue: r.booking.venue,
       host: r.booking.host,
     },
-    evaluation: r.evaluation,
+    evaluation: r.evaluation && { ...r.evaluation, releasesOn: r.evaluation.releaseAt ? fmt(r.evaluation.releaseAt, tz) : null },
   }));
 
   const sheetHref = (q: Record<string, string | undefined>) => {
@@ -84,6 +85,7 @@ export default async function MarkPage({ params, searchParams }: PageProps<"/cou
         rows={rows}
         hasInstructor={sheet.hasInstructor}
         finalOnSubmit={!sheet.hasInstructor || sheet.role === "INSTRUCTOR"}
+            holdHours={!sheet.hasInstructor && sheet.role !== "INSTRUCTOR" ? RELEASE_HOLD_HOURS : null}
         mode={mode}
         isToday={mode === "day" && shownDay === today}
         title={title}

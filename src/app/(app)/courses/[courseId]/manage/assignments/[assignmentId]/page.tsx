@@ -1,4 +1,5 @@
 import { plural } from "@/lib/utils";
+import { RELEASE_HOLD_HOURS } from "@/domain/evaluation";
 import Link from "next/link";
 import { CalendarRange, Clock, PenLine, Repeat, Settings2, Target } from "lucide-react";
 import { closeAssignmentAction, publishAssignmentAction } from "@/app/actions/scheduling";
@@ -88,6 +89,7 @@ export default async function ManageAssignmentPage({ params, searchParams }: Pag
     evaluationStatus: r.evaluation?.status ?? null,
     noBooking: Boolean(r.evaluation?.noBookingReason),
     total: r.evaluation?.totalMarks ?? null,
+    releasesOn: r.evaluation?.status === "SUBMITTED" && r.evaluation.releaseAt ? fmt(r.evaluation.releaseAt, tz, "EEE d MMM, HH:mm") : null,
   }));
 
   const facts = [
@@ -240,6 +242,7 @@ export default async function ManageAssignmentPage({ params, searchParams }: Pag
           markBase={`${base}/mark`}
           exportHref={`${base}/export`}
           releases={instructor || !staff.some((s) => s.role === "INSTRUCTOR")}
+          holdHours={!instructor && !staff.some((s) => s.role === "INSTRUCTOR") ? RELEASE_HOLD_HOURS : null}
           initialFilter={typeof filter === "string" ? filter : undefined}
         />
       )}

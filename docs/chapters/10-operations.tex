@@ -104,6 +104,57 @@ aws ssm start-session --profile slotty-prod --target <nat_instance_id> \
   --parameters host=<db_address>,portNumber=5432,localPortNumber=15432
 \end{lstlisting}
 
+\subsection{Restore the database to a point in time}\label{sec:ops-restore}
+RDS keeps 7 days of point-in-time recovery. A restore always creates a \emph{new} instance; the
+running one is untouched until you switch over. Use it after data loss or corruption (a bad
+migration, a mistaken bulk change); for an instance failure, RDS replaces the host by itself.
+\begin{enumerate}
+  \item Pick the time just before the damage (UTC). The latest possible is
+    \code{aws rds describe-db-instances --profile slotty-prod --db-instance-identifier slotty
+    --query "DBInstances[0].LatestRestorableTime"}.
+  \item Restore into a new instance with production's network, parameters and size (the SCP
+    allows only \code{db.t4g.micro} and \code{db.t4g.small}):
+\begin{lstlisting}[language=bash]
+aws rds restore-db-instance-to-point-in-time --profile slotty-prod \
+  --source-db-instance-identifier slotty --target-db-instance-identifier slotty-restored \
+  --restore-time <UTC time> --db-instance-class db.t4g.micro \
+  --db-subnet-group-name slotty --vpc-security-group-ids <db security group> \
+  --db-parameter-group-name slotty-pg17 --no-publicly-accessible --storage-type gp3
+aws rds wait db-instance-available --profile slotty-prod --db-instance-identifier slotty-restored
+\end{lstlisting}
+    It keeps production's encryption, master credentials and TLS requirement.
+  \item Check it through the tunnel above (with \code{host=} the new instance's address): the rows
+    you expect are there, and the damage isn't.
+  \item Switch over (not yet rehearsed). Stop writes first: scale web and worker to 0 desired
+    tasks (the site is down until the end of this step). Rename the damaged instance
+    (\code{aws rds modify-db-instance --db-instance-identifier slotty
+    --new-db-instance-identifier slotty-damaged --apply-immediately}), then the restored one to
+    \code{slotty}, so its address matches \code{/slotty/DATABASE\_URL} and Terraform's state again;
+    then scale web and worker back up (\code{aws ecs update-service --desired-count}) and check
+    \route{/health}. Run
+    \code{terraform plan} and reconcile any drift (deletion protection, backup settings).
+  \item Keep \code{slotty-damaged} until you're sure, then remove its deletion protection and
+    delete it. Everything written between the restore time and the switch-over is lost unless
+    you copy it across by hand.
+\end{enumerate}
+
+\paragraph{Rehearsal, 2026-11-22 (issue \#38).} Production restored to 15:16:30 UTC into a
+scratch \code{db.t4g.micro}, compared through two read-only tunnels, then deleted without a
+snapshot (cost: cents).
+{\tablefont
+\begin{xltabular}{\linewidth}{@{}P{38mm} L@{}}
+  \toprule
+  \thead{Measure} & \thead{Result}\\
+  \midrule
+  Restore time (start to available) & 22 min 07 s (15:20:40 to 15:42:47 UTC), for 20 GB of storage\\
+  RPO (latest restorable point) & 4--8 minutes behind real time when checked; RDS ships transaction logs about every 5 minutes, so plan for up to about 10 minutes of lost writes\\
+  Consistency & All 29 tables identical as of the restore time: row counts and a hash of every row, including bookings, evaluations, scores and the audit log; PostgreSQL 17.9 on both\\
+  Estimated RTO & About 45 minutes to a working service: the restore, a check, and the switch-over (renames and a redeploy, not yet rehearsed)\\
+  \bottomrule
+\end{xltabular}}
+Repeat the drill after a database size or engine change, and at least once a term. The copy stays
+in the same account and region as production; a copy elsewhere is issue \#39.
+
 \subsection{Someone can't sign in: ``Too many failed sign-ins''}
 The account (or their network) hit the sign-in limit (\cref{ch:rules}, ADR-026). The wait ends by
 itself within 15 minutes. To lift it at once, send them a reset from \route{/admin/users/[id]}
@@ -171,8 +222,6 @@ count as new from then on. No alarm is spent on analytics: it is not part of the
 
 \begin{todo}
   \begin{itemize}
-    \item Restore drill: restore a point-in-time copy of the database to a temporary instance,
-      check it, delete it. Record the date and the time it took.
     \item Incident process: who is alerted, severity levels, and the post-incident review.
     \item Scaling playbook for a large demo day: when to raise \tfvar{web_min} beforehand.
   \end{itemize}

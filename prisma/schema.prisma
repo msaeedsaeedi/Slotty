@@ -32,8 +32,9 @@ model User {
   /// line (`bun run platform:grant`), never from the admin console.
   platformAccess Boolean    @default(false)
   status         UserStatus @default(INVITED)
-  /// Secret for the personal iCal feed (/calendar/<token>); null until created.
-  calendarToken  String?    @unique
+  // The column "calendarToken" (the retired personal iCal feed, ADR-033) still exists in the
+  // database, cleared, for the previous release; it is no longer modeled. `prisma migrate dev`
+  // proposes dropping it: leave that out until the contract release.
   /// Email preferences (in-app notifications are always kept).
   emailReminders Boolean    @default(true)
   emailAgenda    Boolean    @default(true)
@@ -61,6 +62,8 @@ model User {
   evaluations       Evaluation[]        @relation("EvaluationStudent")
   evaluated         Evaluation[]        @relation("EvaluationEvaluator")
   reviewed          Evaluation[]        @relation("EvaluationReviewer")
+  submitted         Evaluation[]        @relation("EvaluationSubmitter")
+  evaluationNotes   EvaluationNote[]    @relation("EvaluationNoteAuthor")
   notifications     Notification[]
   auditLogs         AuditLog[]
   allowances        BookingAllowance[]  @relation("AllowanceStudent")
@@ -423,13 +426,20 @@ model Evaluation {
   totalOverride   Boolean          @default(false)
   overrideNote    String?
   feedback        String?
-  privateNotes    String?
+  // The column "privateNotes" still exists in the database for the previous release (rollback)
+  // but is no longer modeled, so no query can return it. Notes live in EvaluationNote (ADR-031).
+  // `prisma migrate dev` proposes dropping it: leave that out until the contract release.
   /// Why staff marked a student who had no demo booking (unusual, so it's recorded).
   noBookingReason String?
   /// Why staff marked the demo before it started (also unusual, also recorded).
   earlyMarkReason String?
   status          EvaluationStatus @default(DRAFT)
   submittedAt     DateTime?
+  /// Who submitted the marks last: the only TA who may withdraw them while they're held.
+  submittedById   String?
+  /// Held marks (ADR-032): a TA's submit in a course without an instructor stays SUBMITTED until
+  /// this time, then the worker releases it. Null when nothing is held.
+  releaseAt       DateTime?
   reviewedById    String?
   reviewedAt      DateTime?
   reviewComment   String?
@@ -440,14 +450,36 @@ model Evaluation {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
-  assignment Assignment        @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  student    User              @relation("EvaluationStudent", fields: [studentId], references: [id])
-  booking    Booking?          @relation(fields: [bookingId], references: [id], onDelete: SetNull)
-  evaluator  User              @relation("EvaluationEvaluator", fields: [evaluatorId], references: [id])
-  reviewedBy User?             @relation("EvaluationReviewer", fields: [reviewedById], references: [id])
-  scores     EvaluationScore[]
+  assignment  Assignment        @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student     User              @relation("EvaluationStudent", fields: [studentId], references: [id])
+  booking     Booking?          @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  evaluator   User              @relation("EvaluationEvaluator", fields: [evaluatorId], references: [id])
+  reviewedBy  User?             @relation("EvaluationReviewer", fields: [reviewedById], references: [id])
+  submittedBy User?             @relation("EvaluationSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+  scores      EvaluationScore[]
+  notes       EvaluationNote[]
 
   @@unique([assignmentId, studentId])
+  @@index([status, releaseAt])
+}
+
+/// A staff member's private note on one evaluation (ADR-031). Readable only by its author and
+/// the course's enrolled instructors (`canReadPrivateNote`), never by students or admins, and
+/// never part of exports, emails or push. Loaded on its own, never through Evaluation.
+model EvaluationNote {
+  id           String   @id @default(cuid())
+  evaluationId String
+  /// Null for notes written before notes had authors: only the course's instructors read those.
+  authorId     String?
+  body         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  author     User?      @relation("EvaluationNoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@unique([evaluationId, authorId])
+  @@index([authorId])
 }
 
 model EvaluationScore {

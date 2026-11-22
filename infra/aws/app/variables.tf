@@ -85,6 +85,15 @@ variable "db_max_storage_gb" {
   default = 50
 }
 
+variable "nat_ami_id" {
+  # Pinned (#40): fck-nat-al2023-hvm-1.4.0-20261109-arm64-ebs, owner 568608671756 (fck-nat), us-east-1.
+  # To upgrade, pick a newer fck-nat AL2023 arm64 image, set its ID here and review the plan: it
+  # replaces the NAT instance (about a minute without outbound traffic).
+  description = "AMI of the fck-nat instance (nat_mode = \"instance\")."
+  type        = string
+  default     = "ami-04cdf0e88da1d5502"
+}
+
 variable "nat_mode" {
   description = "\"instance\" (fck-nat on t4g.nano, ~$7/mo) or \"gateway\" (managed NAT Gateway, ~$33/mo; also lift the SCP deny in ../org)."
   type        = string

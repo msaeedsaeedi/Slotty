@@ -12,6 +12,7 @@ import {
   listMyVisibleMarks,
   submitEvaluations,
   unlockEvaluation,
+  releaseHeldMarks,
 } from "@/server/services/evaluations";
 import { courseProgress, exportAssignmentCsv } from "@/server/services/reports";
 import { queueDueReminders } from "@/server/services/reminders";
@@ -148,7 +149,7 @@ describe("booking", () => {
 });
 
 describe("evaluation lifecycle", () => {
-  it("TA running a course alone: submit finalizes, student sees marks but not private notes", async () => {
+  it("TA running a course alone: submit holds the marks for 24 hours, then the student sees them but not private notes", async () => {
     const ta = await makeUser("Tara TA");
     const ann = await makeUser("Ann");
     const { course, assignment, slots } = await setupCourse(ta);
@@ -172,7 +173,13 @@ describe("evaluation lifecycle", () => {
     expect((await listMyVisibleMarks(ann)).size).toBe(0);
 
     const [result] = await submitEvaluations(ta, [ev.id]);
-    expect(result.status).toBe("FINALIZED");
+    // Held for 24 hours (ADR-032): still hidden, then the worker releases it.
+    expect(result.status).toBe("SUBMITTED");
+    expect(result.releaseAt).not.toBeNull();
+    expect(await getMyResult(ann, assignment.id)).toBeNull();
+    expect(await releaseHeldMarks(inHours(23))).toBe(0);
+    expect(await releaseHeldMarks(inHours(25))).toBe(1);
+    expect((await db.evaluation.findUniqueOrThrow({ where: { id: ev.id } })).status).toBe("FINALIZED");
     const mine = await getMyResult(ann, assignment.id);
     expect(mine).toMatchObject({ totalMarks: 8.5, maxMarks: 10, feedback: "Nice work" });
     expect(JSON.stringify(mine)).not.toContain("Struggled");

@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
+import { execFileSync } from "node:child_process";
 import { adminCreateCourseFor, createCourse, createPublishedAssignment, importRoster, login, open } from "./helpers";
+
+/** Release held marks now, as the worker would after 24 hours (the e2e server runs no worker). */
+const releaseHeldMarks = () =>
+  execFileSync("bun", ["tests/e2e/release-held.ts"], { env: { ...process.env, DATABASE_URL: process.env.E2E_DATABASE_URL }, stdio: "pipe" });
 
 test("TA runs the whole loop alone: roster → slots → booking → marking → student sees marks → export", async ({ browser }) => {
   // TA sets up the course and imports a new student by email.
@@ -51,7 +56,7 @@ test("TA runs the whole loop alone: roster → slots → booking → marking →
   await expect(student.getByText(/1 of 2 changes left/)).toBeVisible();
 
   // TA scores the demo on the marking sheet: marks autosave as drafts, and with
-  // no instructor, releasing them is final. Attendance waits for the demo to start.
+  // no instructor, released marks reach the student 24 hours later. Attendance waits for the demo to start.
   await open(ta, `/courses/${courseId}/manage/assignments/${assignmentId}?tab=students`);
   await ta.getByRole("link", { name: "Mark", exact: true }).click();
   await expect(ta.getByText("Attendance can be recorded once the demo starts")).toBeVisible();
@@ -62,15 +67,25 @@ test("TA runs the whole loop alone: roster → slots → booking → marking →
   await ta.getByLabel("Code quality").fill("3.5");
   await expect(ta.getByLabel("Total marks")).toHaveText("8.5");
   await ta.getByLabel("Feedback for the student").fill("Clear walkthrough");
-  await ta.getByLabel("Private note").fill("Needed hints on tests");
+  await ta.getByLabel("Your private note").fill("Needed hints on tests");
   await expect(ta.getByText("Draft saved")).toBeVisible();
   // A reload keeps everything that was typed.
   await ta.reload();
   await expect(ta.getByLabel("Feedback for the student")).toHaveValue("Clear walkthrough");
+  await expect(ta.getByLabel("Your private note")).toHaveValue("Needed hints on tests");
   await ta.getByRole("button", { name: "Release 1 mark" }).click();
-  // Releasing is final for the student, so it asks first.
-  await ta.getByRole("dialog").getByRole("button", { name: "Release marks" }).click();
-  await expect(ta.getByText("1 mark released to the student.")).toBeVisible();
+  // Releasing asks first and says when the student will see the marks (24-hour hold, ADR-032).
+  const dialog = ta.getByRole("dialog");
+  await expect(dialog).toContainText("in 24 hours");
+  await dialog.getByRole("button", { name: "Release marks" }).click();
+  await expect(ta.getByText(/1 mark released; the student sees it in 24 hours/)).toBeVisible();
+
+  // During the hold the student sees nothing, and the export says the marks aren't final.
+  await student.reload();
+  await expect(student.getByText("Your result")).toHaveCount(0);
+  const held = await ta.request.get(`/courses/${courseId}/manage/assignments/${assignmentId}/export`);
+  expect(await held.text()).toContain("held until");
+  releaseHeldMarks();
 
   // Student sees marks + feedback, never the private notes.
   await student.reload();
