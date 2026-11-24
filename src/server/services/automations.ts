@@ -50,10 +50,8 @@ export async function nudgeUnbookedStudents(now = new Date()): Promise<number> {
       const claimed = await tx.demoPolicy.updateMany({ where: { assignmentId: p.assignmentId, nudgeSentAt: null }, data: { nudgeSentAt: now } });
       if (claimed.count === 0) return;
       const a = p.assignment;
-      const [students, booked] = await Promise.all([
-        tx.enrollment.findMany({ where: { courseId: a.courseId, role: "STUDENT" }, select: { userId: true } }),
-        tx.booking.findMany({ where: { assignmentId: a.id, status: { not: "CANCELLED" } }, select: { studentId: true } }),
-      ]);
+      const students = await tx.enrollment.findMany({ where: { courseId: a.courseId, role: "STUDENT" }, select: { userId: true } });
+      const booked = await tx.booking.findMany({ where: { assignmentId: a.id, status: { not: "CANCELLED" } }, select: { studentId: true } });
       const done = new Set(booked.map((b) => b.studentId));
       const targets = students.map((s) => s.userId).filter((id) => !done.has(id));
       await notify(tx, targets, {

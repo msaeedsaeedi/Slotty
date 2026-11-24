@@ -112,11 +112,9 @@ export async function addAvailability(actor: Actor, assignmentId: string, input:
       // While booking is open, students still without a demo hear about new times
       // (waitlisted students were just told separately).
       if (!policy.bookingOpensAt || policy.bookingOpensAt <= new Date()) {
-        const [booked, waiting, students] = await Promise.all([
-          tx.booking.findMany({ where: { assignmentId, status: { not: "CANCELLED" } }, select: { studentId: true } }),
-          tx.waitlistEntry.findMany({ where: { assignmentId }, select: { studentId: true } }),
-          tx.enrollment.findMany({ where: { courseId: assignment.courseId, role: "STUDENT" }, select: { userId: true } }),
-        ]);
+        const booked = await tx.booking.findMany({ where: { assignmentId, status: { not: "CANCELLED" } }, select: { studentId: true } });
+        const waiting = await tx.waitlistEntry.findMany({ where: { assignmentId }, select: { studentId: true } });
+        const students = await tx.enrollment.findMany({ where: { courseId: assignment.courseId, role: "STUDENT" }, select: { userId: true } });
         const skip = new Set([...booked, ...waiting].map((r) => r.studentId));
         const days = [...new Set(data.blocks.map((b) => fmt(b.startsAt, tz, "EEE d MMM")))].join(", ");
         await notify(
