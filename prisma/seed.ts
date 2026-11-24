@@ -3,10 +3,10 @@
  * Safe to re-run: accounts are upserted and demo courses are only created once.
  *
  * Accounts (password for all demo users: "password123"):
- *   admin@slotty.local (password from SEED_ADMIN_PASSWORD)
- *   prof@slotty.local — instructor of CS 350
- *   ta@slotty.local   — TA of CS 350, and sole staff of CS 101 (no instructor)
- *   student1..6@slotty.local
+ *   admin@uniflow.local (password from SEED_ADMIN_PASSWORD)
+ *   prof@uniflow.local — instructor of CS 350
+ *   ta@uniflow.local   — TA of CS 350, and sole staff of CS 101 (no instructor)
+ *   student1..6@uniflow.local
  */
 import "dotenv/config";
 import { addDays, format } from "date-fns";
@@ -30,16 +30,16 @@ async function upsertUser(email: string, name: string, password: string, isAdmin
 
 async function main() {
   const admin = await upsertUser(
-    process.env.SEED_ADMIN_EMAIL ?? "admin@slotty.local",
-    "Slotty Admin",
+    process.env.SEED_ADMIN_EMAIL ?? "admin@uniflow.local",
+    "Uniflow Admin",
     process.env.SEED_ADMIN_PASSWORD ?? "admin12345",
     true,
   );
-  const prof = await upsertUser("prof@slotty.local", "Dr. Ada Instructor", "password123");
-  const ta = await upsertUser("ta@slotty.local", "Tariq TA", "password123");
+  const prof = await upsertUser("prof@uniflow.local", "Dr. Ada Instructor", "password123");
+  const ta = await upsertUser("ta@uniflow.local", "Tariq TA", "password123");
   const students = await Promise.all(
     ["Sara Ahmadi", "Liam Chen", "Maya Patel", "Omar Haddad", "Zoe Müller", "Ravi Kumar"].map((name, i) =>
-      upsertUser(`student${i + 1}@slotty.local`, name, "password123"),
+      upsertUser(`student${i + 1}@uniflow.local`, name, "password123"),
     ),
   );
 

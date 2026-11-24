@@ -24,8 +24,8 @@ const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
   // The Docker image ships only the files the server traces (see Dockerfile).
   output: "standalone",
-  // The dev server behind Caddy at https://slotty.local (infra/Caddyfile); HMR and dev assets need this.
-  allowedDevOrigins: ["slotty.local"],
+  // The dev server behind Caddy at https://uniflow.local (infra/Caddyfile); HMR and dev assets need this.
+  allowedDevOrigins: ["uniflow.local"],
   async headers() {
     return [
       {

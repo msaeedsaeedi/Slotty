@@ -4,12 +4,12 @@ import { isDeployed, mailConfigProblems } from "@/server/startup-checks";
 
 afterEach(() => vi.unstubAllEnvs());
 
-const deployed = { NODE_ENV: "production", APP_URL: "https://slotty.example.edu", SMTP_HOST: "email-smtp.us-east-1.amazonaws.com", MAIL_FROM: "Slotty <no-reply@example.edu>" };
+const deployed = { NODE_ENV: "production", APP_URL: "https://uniflow.example.edu", SMTP_HOST: "email-smtp.us-east-1.amazonaws.com", MAIL_FROM: "Uniflow <no-reply@example.edu>" };
 
 describe("isLocalAppUrl", () => {
   it("knows local addresses from public ones", () => {
-    for (const url of ["http://localhost:3100", "http://127.0.0.1:3000", "http://[::1]:3000", "https://slotty.local", "http://app.localhost", "", undefined]) expect(isLocalAppUrl(url)).toBe(true);
-    for (const url of ["https://slotty.example.edu", "https://localhost.example.edu", "https://10.0.0.5", "not a url"]) expect(isLocalAppUrl(url)).toBe(false);
+    for (const url of ["http://localhost:3100", "http://127.0.0.1:3000", "http://[::1]:3000", "https://uniflow.local", "http://app.localhost", "", undefined]) expect(isLocalAppUrl(url)).toBe(true);
+    for (const url of ["https://uniflow.example.edu", "https://localhost.example.edu", "https://10.0.0.5", "not a url"]) expect(isLocalAppUrl(url)).toBe(false);
   });
 });
 
@@ -31,7 +31,7 @@ describe("mailConfigProblems", () => {
   });
 
   it("leaves development and the local e2e server alone", () => {
-    expect(mailConfigProblems({ NODE_ENV: "development", APP_URL: "https://slotty.example.edu" })).toEqual([]);
+    expect(mailConfigProblems({ NODE_ENV: "development", APP_URL: "https://uniflow.example.edu" })).toEqual([]);
     expect(mailConfigProblems({ NODE_ENV: "production", APP_URL: "http://localhost:3100", SMTP_HOST: "", ENABLE_DEV_MAIL: "1" })).toEqual([]);
   });
 });

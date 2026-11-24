@@ -9,11 +9,11 @@ import { Client } from "pg";
  * shared with the dev database, and nothing has to be running beforehand except Docker.
  */
 export const POSTGRES_IMAGE = "postgres:17";
-export const TEMPLATE_DB = "slotty_test_template";
+export const TEMPLATE_DB = "uniflow_test_template";
 const root = path.resolve(import.meta.dirname, "../..");
 
-/** Test databases are named slotty_test…; helpers that wipe tables refuse any other name. */
-export const isTestDatabaseUrl = (url: string | undefined) => /\/slotty_test[\w]*(\?|$)/.test(url ?? "");
+/** Test databases are named uniflow_test…; helpers that wipe tables refuse any other name. */
+export const isTestDatabaseUrl = (url: string | undefined) => /\/uniflow_test[\w]*(\?|$)/.test(url ?? "");
 
 export function databaseUrl(base: string, name: string) {
   const url = new URL(base);
@@ -24,8 +24,8 @@ export function databaseUrl(base: string, name: string) {
 export async function startPostgres(): Promise<{ container: StartedPostgreSqlContainer; baseUrl: string }> {
   const container = await new PostgreSqlContainer(POSTGRES_IMAGE)
     .withDatabase(TEMPLATE_DB)
-    .withUsername("slotty")
-    .withPassword("slotty")
+    .withUsername("uniflow")
+    .withPassword("uniflow")
     // Durability doesn't matter for a database that lives for one run.
     .withCommand(["postgres", "-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off"])
     .start();

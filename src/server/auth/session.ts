@@ -12,9 +12,16 @@ export type { Actor };
  * `__Host-`: the browser only accepts it over HTTPS (or localhost), for the whole site, from this
  * host alone, so no subdomain or plain-HTTP response can set or replace it (ADR-033).
  */
-const COOKIE = "__Host-slotty_session";
-/** Before ADR-033. Still read so nobody is signed out; removed once those sessions have expired. */
-const LEGACY_COOKIE = "slotty_session";
+const COOKIE = "__Host-uniflow_session";
+/**
+ * Earlier names, still read so nobody is signed out; signing in or out clears them. Remove each once
+ * the sessions it carries have expired (30 days after the release that retired it; #138):
+ * `__Host-slotty_session` before the rename to Uniflow (issue #133), `slotty_session` before ADR-033.
+ */
+const OLD_COOKIES = [
+  { name: "__Host-slotty_session", hostPrefixed: true },
+  { name: "slotty_session", hostPrefixed: false },
+] as const;
 const COOKIE_ATTRS = { httpOnly: true, secure: true, sameSite: "lax", path: "/" } as const;
 const SESSION_DAYS = 30;
 const DAY = 86_400_000;
@@ -25,22 +32,38 @@ export async function createSession(userId: string): Promise<void> {
   await db.session.create({ data: { userId, tokenHash: hashToken(token), expiresAt } });
   const jar = await cookies();
   jar.set(COOKIE, token, { ...COOKIE_ATTRS, expires: expiresAt });
-  if (jar.has(LEGACY_COOKIE)) jar.delete(LEGACY_COOKIE);
+  clearOldCookies(jar);
 }
 
-/** This browser's session token, from the current cookie or the pre-ADR-033 one. */
-async function sessionToken(): Promise<string | undefined> {
+type Jar = Awaited<ReturnType<typeof cookies>>;
+
+/** Drop the cookies under earlier names. A __Host- cookie is only cleared by a Set-Cookie with the same Secure and Path. */
+function clearOldCookies(jar: Jar) {
+  for (const c of OLD_COOKIES) {
+    if (!jar.has(c.name)) continue;
+    if (c.hostPrefixed) jar.delete({ name: c.name, ...COOKIE_ATTRS });
+    else jar.delete(c.name);
+  }
+}
+
+/** Every session token this browser holds: the current cookie first, then the earlier names. */
+async function sessionTokens(): Promise<string[]> {
   const jar = await cookies();
-  return jar.get(COOKIE)?.value ?? jar.get(LEGACY_COOKIE)?.value;
+  return [COOKIE, ...OLD_COOKIES.map((c) => c.name)].map((n) => jar.get(n)?.value).filter((t): t is string => Boolean(t));
+}
+
+/** This browser's session token, from the current cookie or an earlier one. */
+async function sessionToken(): Promise<string | undefined> {
+  return (await sessionTokens())[0];
 }
 
 export async function destroySession(): Promise<void> {
-  const jar = await cookies();
-  const tokens = [jar.get(COOKIE)?.value, jar.get(LEGACY_COOKIE)?.value].filter((t): t is string => Boolean(t));
+  const tokens = await sessionTokens();
   if (tokens.length) await db.session.deleteMany({ where: { tokenHash: { in: tokens.map(hashToken) } } });
+  const jar = await cookies();
   // A __Host- cookie is only cleared by a Set-Cookie with the same Secure and Path attributes.
   jar.delete({ name: COOKIE, ...COOKIE_ATTRS });
-  if (jar.has(LEGACY_COOKIE)) jar.delete(LEGACY_COOKIE);
+  clearOldCookies(jar);
 }
 
 /** Hash of this browser's session token, so account actions can keep it while ending others. */

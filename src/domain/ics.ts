@@ -48,7 +48,7 @@ export function buildCalendar(args: { name: string; events: CalendarEvent[]; now
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Slotty//Demo bookings//EN",
+    "PRODID:-//Uniflow//Demo bookings//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     `X-WR-CALNAME:${icsEscape(args.name)}`,

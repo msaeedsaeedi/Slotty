@@ -31,10 +31,10 @@ export function configureAnalytics(next: { enabled: boolean; share: boolean }) {
 function sessionId(): string {
   const make = () => (crypto.randomUUID?.() ?? `${Date.now()}${Math.random()}`).replace(/[^A-Za-z0-9]/g, "").slice(0, 32);
   try {
-    let id = sessionStorage.getItem("slotty.sid");
+    let id = sessionStorage.getItem("uniflow.sid");
     if (!id) {
       id = make();
-      sessionStorage.setItem("slotty.sid", id);
+      sessionStorage.setItem("uniflow.sid", id);
     }
     return id;
   } catch {

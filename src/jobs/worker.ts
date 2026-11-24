@@ -20,7 +20,7 @@ import { Client } from "pg";
 import { runStartupChecks } from "@/server/startup-checks";
 import { db } from "@/server/db";
 import { closeMailer, deliverPendingEmails } from "@/server/mailer";
-import { OUTBOX_CHANNEL } from "@/server/outbox-signal";
+import { OLD_OUTBOX_CHANNEL, OUTBOX_CHANNEL } from "@/server/outbox-signal";
 import { deliverPendingPush } from "@/server/push";
 import { isPushConfigured } from "@/server/push-config";
 import { rollupAndPrune } from "@/server/services/analytics";
@@ -145,6 +145,7 @@ async function startListener(): Promise<boolean> {
   try {
     await client.connect();
     await client.query(`LISTEN ${OUTBOX_CHANNEL}`);
+    await client.query(`LISTEN ${OLD_OUTBOX_CHANNEL}`); // until web tasks from before the rename are gone (#138)
     const arrived = new Promise<boolean>((resolve) => {
       const timer = setTimeout(() => resolve(false), 3_000);
       client.once("notification", () => {
