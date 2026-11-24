@@ -1,9 +1,9 @@
-# Slotty
+# Uniflow
 
-Slotty is a scheduling and evaluation tool for university demos, vivas, and code reviews. It covers the whole demo lifecycle, **schedule → book → conduct → evaluate → record**, in one place instead of spreadsheets and chat threads.
+Uniflow is a scheduling and evaluation tool for university demos, vivas, and code reviews. It covers the whole demo lifecycle, **schedule → book → conduct → evaluate → record**, in one place instead of spreadsheets and chat threads.
 
 - **Students** see which assignments need a demo and book a free slot. They can reschedule or cancel within the course rules, get confirmations, reminders, and venue changes by email, and see their marks once they're released.
-- **TAs** set the demo rules and add their availability, which Slotty splits into slots. On the day they run from a "Today" list: mark attendance, score against a rubric, keep private notes, and submit. A TA can run a course **completely alone**; if the course has no instructor, submitting releases the marks directly.
+- **TAs** set the demo rules and add their availability, which Uniflow splits into slots. On the day they run from a "Today" list: mark attendance, score against a rubric, keep private notes, and submit. A TA can run a course **completely alone**; if the course has no instructor, submitting releases the marks directly.
 - **Instructors** see progress across the course, review TA submissions (finalize or return with a comment), and export bookings with marks as CSV.
 - **Admins** moderate. They can open any course, disable accounts, and read the audit log. Nobody needs an admin to get started.
 
@@ -70,7 +70,7 @@ CI (`.github/workflows/ci.yml`) runs all of these on every pull request, plus a 
 
 ## Deploying
 
-`master` is production: merging a release pull request from `dev` (with a new version in `package.json`) deploys it (`.github/workflows/deploy.yml`) and, once it serves, tags `vX.Y.Z` and publishes the GitHub Release. Merging into `dev` deploys nothing. Both images are built on an ARM64 runner and pushed to ECR, then `infra/aws/deploy.sh` runs migrations as a one-off ECS task (skipped when `prisma/migrations` hasn't changed) and rolls out the web and worker services. The deploy finishes when `/health` reports the new release. Work is planned in the Slotty GitHub Project, in two-week sprints with one release each. Report security problems privately (see [SECURITY.md](SECURITY.md)). Details, runbooks and decisions are in the system documentation (chapters 8–10 and 14).
+`master` is production: merging a release pull request from `dev` (with a new version in `package.json`) deploys it (`.github/workflows/deploy.yml`) and, once it serves, tags `vX.Y.Z` and publishes the GitHub Release. Merging into `dev` deploys nothing. Both images are built on an ARM64 runner and pushed to ECR, then `infra/aws/deploy.sh` runs migrations as a one-off ECS task (skipped when `prisma/migrations` hasn't changed) and rolls out the web and worker services. The deploy finishes when `/health` reports the new release. Work is planned in the Uniflow GitHub Project, in two-week sprints with one release each. Report security problems privately (see [SECURITY.md](SECURITY.md)). Details, runbooks and decisions are in the system documentation (chapters 8–10 and 14).
 
 Building the images locally: `docker buildx bake` (see `docker-bake.hcl`).
 
@@ -89,7 +89,7 @@ prisma/                Schema, migrations, seed
 docs/                  System documentation (LaTeX): journeys, rules, architecture, AWS, operations, decisions
 ```
 
-The system documentation is one LaTeX document in `docs/` (user journeys, business rules, architecture, AWS platform, operations, how changes are made, decision records, roadmap). Build it with `bun run docs:build` → `docs/build/slotty.pdf`; CI also attaches the PDF to every run that changes `docs/`.
+The system documentation is one LaTeX document in `docs/` (user journeys, business rules, architecture, AWS platform, operations, how changes are made, decision records, roadmap). Build it with `bun run docs:build` → `docs/build/uniflow.pdf`; CI also attaches the PDF to every run that changes `docs/`.
 
 ## Key rules
 

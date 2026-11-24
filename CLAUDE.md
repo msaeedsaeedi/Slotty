@@ -1,8 +1,8 @@
 @AGENTS.md
 
-# Slotty — working notes
+# Uniflow — working notes
 
-Slotty: demo scheduling and evaluation for university courses. System documentation is one LaTeX document in `docs/` (`bun run docs:build`); read the chapter for the area you change before designing.
+Uniflow: demo scheduling and evaluation for university courses. System documentation is one LaTeX document in `docs/` (`bun run docs:build`); read the chapter for the area you change before designing.
 
 - Package manager/runner is **bun** (`bun run …`, `bunx …`). No pnpm or sudo.
 - Local services run in Docker: `bun run infra:up` (infra/docker-compose.yml) starts Postgres 17 on :5432 with the dev database `uniflow` (`.env`), Mailpit (SMTP :1025, inbox http://localhost:8025) and Caddy, which serves `bun run dev` at https://uniflow.local. Tests don't use it: each run starts a throwaway Postgres with Testcontainers.
@@ -11,7 +11,7 @@ Slotty: demo scheduling and evaluation for university courses. System documentat
 - Checks before a pull request: `bun run typecheck`, `bun run lint`, `bun run test` (unit + integration), and `bun run test:e2e` for user-facing changes. They need Docker running (in an agent shell: `sg docker -c "bun run test"`). CI (`.github/workflows/ci.yml`) runs them all; `dev` and `master` only take PRs with a green **CI ok** that are up to date.
 
 ## Way of working
-- Work is planned in the **Slotty GitHub Project** (backlog, two-week sprints, release milestones; docs ch. 13). Build only issues in the current sprint; new ideas and findings become a Backlog issue, not code.
+- Work is planned in the **Uniflow GitHub Project** (backlog, two-week sprints, release milestones; docs ch. 13). Build only issues in the current sprint; new ideas and findings become a Backlog issue, not code.
 - Branch off `dev` (the default branch) as `<type>/<issue>-<slug>`; open a pull request into `dev` from the template with `Closes #<issue>` and a release-notes label. GitHub deletes the branch when the PR merges (repository setting; `dev` and `master` are protected).
 - Conventional Commits for commit messages and PR titles: `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `ci`, `build`, `refactor`, `test`, `perf`, `revert`; `!` for breaking), issue in the footer (`Refs #N`/`Closes #N`). Release PRs are `chore(release): vX.Y.Z`.
 - GitOps (ADR-027): `master` is production. Merging into `dev` deploys nothing; merging a release PR (`dev` → `master`, with a new `package.json` version) deploys, then tags `vX.Y.Z` and publishes the release (`.github/workflows/deploy.yml`). Hotfixes are `hotfix/*` PRs into `master`; rollback is a revert PR into `master`. Merge the Back-merge PR it opens afterwards. Never open or merge a PR into `master` without the user's go-ahead.
