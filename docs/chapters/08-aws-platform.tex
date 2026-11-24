@@ -1,7 +1,7 @@
 \chapter{AWS platform}\label{ch:aws}
 \chapterstatus{complete}{2026-11-16}{\src{infra/aws/org}, \src{infra/aws/app}, \src{Dockerfile}}
 
-Slotty runs in its own AWS account, \code{slotty-prod}, in us-east-1. Everything in this chapter
+Uniflow runs in its own AWS account, \code{slotty-prod}, in us-east-1. Everything in this chapter
 is created by Terraform from \src{infra/aws}; nothing was built by hand except the two steps AWS
 requires a person for (the SES production-access request and the DNS delegation from
 Cloudflare). \Cref{fig:aws} shows the whole deployment.
@@ -15,7 +15,7 @@ Cloudflare). \Cref{fig:aws} shows the whole deployment.
 \end{figure}
 
 \section{Accounts and guardrails}\label{sec:aws-guardrails}
-An AWS Organization separates Slotty from the other workloads of the management account.
+An AWS Organization separates Uniflow from the other workloads of the management account.
 \src{infra/aws/org} manages it, applied with the management account's credentials:
 
 \begin{xltabular}{\linewidth}{@{}P{34mm} L@{}}
@@ -44,7 +44,7 @@ An AWS Organization separates Slotty from the other workloads of the management 
 \end{auditnote}
 
 \begin{risk}
-  The SCPs also block things Slotty will want when it grows (a NAT gateway, a larger database).
+  The SCPs also block things Uniflow will want when it grows (a NAT gateway, a larger database).
   Raising a limit is a reviewed change to \src{infra/aws/org/scp.tf}, on purpose.
 \end{risk}
 
@@ -70,7 +70,7 @@ An AWS Organization separates Slotty from the other workloads of the management 
 \begin{decision}{ADR-002}
   API Gateway instead of an Application Load Balancer: about \$1 a month at bootstrap volume
   instead of about \$18. Its limits (30\,s per request, 10\,MB responses, buffered rather than
-  streamed responses) do not affect Slotty today.
+  streamed responses) do not affect Uniflow today.
 \end{decision}
 
 \begin{auditnote}
@@ -155,7 +155,7 @@ suppression list stops further sends to bounced or complaining addresses. The SM
 belong to an IAM user that may only call \code{ses:SendRawEmail} with a \code{From} address on the
 domain.
 
-Slotty's AWS account receives no mail. The domain's MX records point to Cloudflare Email
+Uniflow's AWS account receives no mail. The domain's MX records point to Cloudflare Email
 Routing, which forwards \code{support@} to the product owner's inbox (ADR-021). Cloudflare can't
 add those records itself because the domain is delegated here, so \src{infra/aws/app/dns.tf}
 holds them: Cloudflare's three MX hosts and SPF record, the same as on \code{msaeedsaeedi.com}.

@@ -576,3 +576,20 @@ Add one for every deliberate trade-off.
    dependency for a few lines of shell).}
   {Merges land on \code{dev} without the pull-request route, or the image build starts depending on
    files outside its listed inputs.}
+
+\adr{036}{The product is renamed Uniflow}{2026-11-25}{Accepted}
+  {The name ``Slotty'' reads too close to an offensive word, which is a poor fit for a tool used
+   by students and staff and named in emails to them.}
+  {The product is \emph{Uniflow}, with a new mark (a ``U'' whose left arm flows in, \src{public/brand}).
+   The rename runs in steps in release v1.0.0-beta.5. Internal identifiers come first (\#133), each
+   with a one-release fallback so nobody is signed out and no notification waits. Then what users see
+   (\#132), then this document and the repository files (\#136). The hostname, mail sender,
+   AWS resource names and repository name change with the move of production to a new AWS account
+   (\#134, \#135, \#137). Until then this document keeps the live resource names
+   (\code{slotty-prod}, \code{/slotty/…}, \code{slotty.msaeedsaeedi.com}) so the runbooks still
+   match production. Past decision records and change-log lines keep the name they were written with.}
+  {Calendar entries keep their \code{@slotty} UIDs, so demos people already saved aren't duplicated.
+   Dismissed hints keep their storage keys. The old cookie and channel names, the old push message
+   and the \route{/icons/<kind>} redirects are removed later (\#138). Rejected: renaming AWS resources
+   in place, which would destroy and recreate them (including the database) for a name users never see.}
+  {The name meets a trademark objection, or the old hostname still gets meaningful traffic a term after the move.}

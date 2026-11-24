@@ -1,6 +1,6 @@
 # Security policy
 
-Slotty holds student names, emails, bookings, attendance and marks. Please report anything that
+Uniflow holds student names, emails, bookings, attendance and marks. Please report anything that
 could expose or change that data.
 
 ## Reporting a vulnerability

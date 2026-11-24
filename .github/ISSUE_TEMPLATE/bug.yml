@@ -1,5 +1,5 @@
 name: Bug
-description: Slotty does something it shouldn't, or doesn't do what it should.
+description: Uniflow does something it shouldn't, or doesn't do what it should.
 labels: [bug]
 body:
   - type: markdown

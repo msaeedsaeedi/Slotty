@@ -2,14 +2,14 @@
 \chapterstatus{draft}{2026-11-16}{product owner, \src{infra/aws}, \src{package.json}}
 
 \section{Context}
-Slotty is one web application used by four roles. It sends email and push notifications and
+Uniflow is one web application used by four roles. It sends email and push notifications and
 offers calendar entries; everything else happens inside it. \Cref{fig:context} shows what it
 talks to.
 
 \begin{figure}[htbp]
   \centering
   \input{figures/system-context}
-  \caption{System context: the people who use Slotty and the outside systems it relies on.}
+  \caption{System context: the people who use Uniflow and the outside systems it relies on.}
   \label{fig:context}
 \end{figure}
 
@@ -23,7 +23,7 @@ talks to.
   Admin & Platform-wide: people, course staffing, email delivery, audit. Never a course member.\\
   Email (\aws{Amazon SES}) & Outgoing transactional email only: invites, resets, booking changes, reminders, marks.\\
   Push services & Browser vendors' Web Push endpoints, for device notifications (PWA).\\
-  Calendar apps & Google Calendar and Outlook links and \texttt{.ics} files; Slotty doesn't call them.\\
+  Calendar apps & Google Calendar and Outlook links and \texttt{.ics} files; Uniflow doesn't call them.\\
   \bottomrule
 \end{xltabular}
 

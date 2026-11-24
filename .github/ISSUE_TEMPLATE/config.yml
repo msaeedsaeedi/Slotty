@@ -3,6 +3,6 @@ contact_links:
   - name: Report a security vulnerability
     url: https://github.com/msaeedsaeedi/Slotty/security/advisories/new
     about: Report privately. Don't open a public issue for security problems.
-  - name: Help using Slotty
+  - name: Help using Uniflow
     url: mailto:support@slotty.msaeedsaeedi.com
-    about: Questions about using Slotty in your course.
+    about: Questions about using Uniflow in your course.

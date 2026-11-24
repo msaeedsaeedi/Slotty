@@ -16,7 +16,7 @@ from SSM (\cref{ch:aws}).
   \envvar{ORIGIN_VERIFY_SECRET} & SSM & Secret header CloudFront sends; unset disables the origin lock.\\
   \envvar{SMTP_HOST}, \envvar{SMTP_PORT} & env & SES SMTP endpoint, port 587. Required (with \envvar{MAIL_FROM}) in a deployment: a production build with a public \envvar{APP_URL} refuses to start without it. Empty host is for local development only: emails are marked sent and noted in the worker log by recipient and subject, never their body.\\
   \envvar{SMTP_USER}, \envvar{SMTP_PASS} & SSM & SES SMTP credentials (worker only).\\
-  \envvar{MAIL_FROM} & env & Sender, \code{Slotty <no-reply@<domain>>}. Required in a deployment.\\
+  \envvar{MAIL_FROM} & env & Sender, \code{Uniflow <no-reply@<domain>>}. Required in a deployment.\\
   \envvar{ENABLE_DEV_MAIL} & env & \code{1} shows \route{/dev/mail} in a production build, for the local e2e server only. A deployment refuses to start with it set, and never shows the page.\\
   \envvar{VAPID_PUBLIC_KEY}, \envvar{VAPID_PRIVATE_KEY} & SSM & Web Push keys; both empty turns push off.\\
   \envvar{VAPID_SUBJECT} & env & Contact for push services (\code{mailto:}).\\
