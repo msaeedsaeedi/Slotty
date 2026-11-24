@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseRoster } from "@/domain/csv-roster";
 
 describe("parseRoster", () => {
-  it("parses the Slotty template", () => {
+  it("parses the Uniflow template", () => {
     const res = parseRoster("email,name,role,section\nAda@Uni.edu,Ada Lovelace,student,A\nbob@uni.edu,Bob,TA,");
     expect(res.errors).toEqual([]);
     expect(res.rows).toEqual([

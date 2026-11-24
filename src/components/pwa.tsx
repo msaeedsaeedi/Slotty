@@ -57,7 +57,7 @@ export function ServiceWorkerRegistrar() {
       .getRegistrations()
       .then((regs) => Promise.all(regs.map((r) => r.unregister())))
       .then(() => ("caches" in window ? caches.keys() : []))
-      .then((keys) => Promise.all(keys.filter((k) => k.startsWith("slotty-")).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => /^(uniflow|slotty)-/.test(k)).map((k) => caches.delete(k))))
       .catch(() => {});
   }, []);
   return null;
@@ -67,7 +67,7 @@ export function ServiceWorkerRegistrar() {
 export function ClearSavedPages() {
   useEffect(() => {
     if (!("caches" in window)) return;
-    caches.keys().then((keys) => keys.filter((k) => k.startsWith("slotty-pages-")).forEach((k) => caches.delete(k)));
+    caches.keys().then((keys) => keys.filter((k) => /^(uniflow|slotty)-pages-/.test(k)).forEach((k) => caches.delete(k)));
   }, []);
   return null;
 }
@@ -79,6 +79,7 @@ interface InstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
+// Storage keys keep their pre-Uniflow names, so dismissed hints stay dismissed.
 const DISMISS_KEY = "slotty.install-hint.dismissed";
 
 function readDismissed() {
@@ -90,7 +91,7 @@ function readDismissed() {
 }
 
 /**
- * "Install Slotty" on the dashboard: uses the browser's install prompt where
+ * "Install Uniflow" on the dashboard: uses the browser's install prompt where
  * available, and explains Add to Home Screen on iOS (needed there for push).
  */
 export function InstallHint() {
@@ -124,7 +125,7 @@ export function InstallHint() {
     <div className="flex items-start gap-3 rounded-xl border bg-card p-4 text-sm">
       <Download className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden />
       <div className="flex-1 space-y-2">
-        <p className="font-medium">Install Slotty on this device</p>
+        <p className="font-medium">Install Uniflow on this device</p>
         <p className="text-muted-foreground">
           Open it like an app, see your demo details offline, and get reminders as notifications.
           {ios && !prompt && " On iPhone or iPad: tap the Share button, then “Add to Home Screen”."}
@@ -218,10 +219,10 @@ function usePush(publicKey: string | null) {
 export function PushToggle({ publicKey }: { publicKey: string | null }) {
   const { state, enable, disable } = usePush(publicKey);
   if (state === "unsupported") {
-    return <p className="text-sm text-muted-foreground">This browser can&apos;t receive notifications from Slotty. On iPhone, install Slotty to your Home Screen first.</p>;
+    return <p className="text-sm text-muted-foreground">This browser can&apos;t receive notifications from Uniflow. On iPhone, install Uniflow to your Home Screen first.</p>;
   }
   if (state === "denied") {
-    return <p className="text-sm text-muted-foreground">Notifications are blocked for Slotty in this browser&apos;s settings. Allow them there to turn this on.</p>;
+    return <p className="text-sm text-muted-foreground">Notifications are blocked for Uniflow in this browser&apos;s settings. Allow them there to turn this on.</p>;
   }
   return state === "on" ? (
     <Button variant="outline" size="sm" onClick={disable}>

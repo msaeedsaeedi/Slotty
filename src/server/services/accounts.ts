@@ -66,10 +66,10 @@ export async function issueInvite(tx: Tx, user: { id: string; email: string; nam
   });
   const link = absoluteUrl(`/invite/${token}`);
   const content = renderEmail({
-    title: "You're invited to Slotty",
-    body: `Hi ${user.name},\n\n${context}\n\nSet your password to get started (link valid for ${INVITE_DAYS} days):\n${link}\n\nNew to Slotty? See how it works: ${absoluteUrl("/")}\nQuestions? Email ${SUPPORT_EMAIL}.`,
+    title: "You're invited to Uniflow",
+    body: `Hi ${user.name},\n\n${context}\n\nSet your password to get started (link valid for ${INVITE_DAYS} days):\n${link}\n\nNew to Uniflow? See how it works: ${absoluteUrl("/")}\nQuestions? Email ${SUPPORT_EMAIL}.`,
   });
-  await queueEmail(tx, user.email, "You're invited to Slotty", content);
+  await queueEmail(tx, user.email, "You're invited to Uniflow", content);
   return token;
 }
 
@@ -138,7 +138,7 @@ export async function requestPasswordReset(email: string, opts: { ip?: string | 
     await queueEmail(
       tx,
       user.email,
-      "Reset your Slotty password",
+      "Reset your Uniflow password",
       renderEmail({
         title: "Reset your password",
         body: `Hi ${user.name},\n\nUse this link within ${RESET_HOURS} hours to choose a new password:\n${link}\n\nIf you didn't ask for this, ignore this email.`,

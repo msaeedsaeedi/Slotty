@@ -37,7 +37,7 @@ function Chip({ children, tone = "text" }: { children: React.ReactNode; tone?: "
 
 export function ImportVisual() {
   return (
-    <Frame label="A class list pasted into Slotty: three student emails and 39 more, and a confirmation that 42 students were invited.">
+    <Frame label="A class list pasted into Uniflow: three student emails and 39 more, and a confirmation that 42 students were invited.">
       <Caption>Class list · CS 2001</Caption>
       <div className="flex flex-1 flex-col justify-center gap-5 p-5">
         <div className="lp-mono space-y-1.5 rounded-[10px] border border-dashed border-[var(--line-strong)] bg-[rgb(0_0_0/0.2)] px-4 py-3.5 text-[12px] normal-case text-[var(--text-2)]">

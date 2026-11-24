@@ -117,3 +117,18 @@ test("the session cookie is __Host-, Secure and HttpOnly, older cookies still wo
 test("the retired personal calendar feed answers 404 for any link (ADR-033)", async ({ request }) => {
   expect((await request.get("/calendar/0123456789abcdef.ics")).status()).toBe(404);
 });
+
+test("app icons are brand files, and the old generated icon addresses still reach them (#132)", async ({ request }) => {
+  for (const [old, file] of [["192", "icon-192.png"], ["512", "icon-512.png"], ["maskable", "icon-maskable-512.png"], ["badge", "badge-96.png"]]) {
+    const res = await request.get(`/icons/${old}`);
+    expect(res.status()).toBe(200);
+    expect(res.url()).toMatch(new RegExp(`/brand/${file}$`));
+    expect(res.headers()["content-type"]).toBe("image/png");
+  }
+  const manifest = await (await request.get("/manifest.webmanifest")).json();
+  expect(manifest).toMatchObject({ name: "Uniflow — demo booking", short_name: "Uniflow" });
+  for (const icon of manifest.icons) expect((await request.get(icon.src)).status()).toBe(200);
+  const preview = await request.get("/opengraph-image");
+  expect(preview.status()).toBe(200);
+  expect(preview.headers()["content-type"]).toBe("image/png");
+});

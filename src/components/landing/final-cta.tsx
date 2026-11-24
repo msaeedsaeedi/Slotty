@@ -29,7 +29,7 @@ export function FinalCta() {
           <Link href="/login" className="lp-btn lp-btn-primary lp-btn-lg">
             Sign in <span aria-hidden className="lp-btn-arrow">→</span>
           </Link>
-          <a href={supportMailto("Help with Slotty")} className="lp-link inline-flex min-h-11 items-center px-1 text-[16px] font-medium no-underline hover:underline">
+          <a href={supportMailto("Help with Uniflow")} className="lp-link inline-flex min-h-11 items-center px-1 text-[16px] font-medium no-underline hover:underline">
             Email support
           </a>
         </div>

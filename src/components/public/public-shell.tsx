@@ -14,7 +14,7 @@ import { Wordmark } from "../landing/wordmark";
  */
 export function PublicShell({ children }: { children: React.ReactNode }) {
   return (
-    <div data-theme="slotty-landing" data-public className={`${sans.variable} ${mono.variable} flex flex-1 flex-col`}>
+    <div data-theme="uniflow-landing" data-public className={`${sans.variable} ${mono.variable} flex flex-1 flex-col`}>
       <MotionFlag />
       {/* The hero's light: the same warm haze as the landing page, under the header and the page. */}
       <div className="lp-hero relative isolate flex flex-1 flex-col overflow-hidden">

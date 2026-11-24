@@ -43,7 +43,7 @@ request after 30 seconds, and at this scale polling costs cents (\cref{ch:cost})
   \item \code{<LiveBell>} (\src{src/components/live-bell.tsx}) checks
     \route{/api/notifications/unread} every 30 seconds while the tab is visible, straight away
     when the tab regains focus, and when a push arrives (the service worker posts
-    \code{slotty:push} to open tabs). Only the badge changes, except on \route{/notifications},
+    \code{uniflow:push} to open tabs; for one release the bell also accepts \code{slotty:push} from workers installed before the rename). Only the badge changes, except on \route{/notifications},
     \route{/dashboard} and \route{/bookings}, which reload their data when the count goes up.
     A 401 stops the polling.
   \item \code{<LiveRefresh>} reloads a whole page's data every 30 seconds on demo day

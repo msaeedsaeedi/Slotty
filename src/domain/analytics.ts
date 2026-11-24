@@ -105,7 +105,7 @@ export function routeTemplate(path: string): string | null {
     }
     if (seg === ":id") out.push(seg);
     else if (WORDS.test(seg) && seg.length <= 24) out.push(seg);
-    else if (/^\d{1,3}$/.test(seg)) out.push(seg); // e.g. /icons/192
+    else if (/^\d{1,3}$/.test(seg)) out.push(seg); // a short number, e.g. a page or step
     else out.push(":id");
   }
   return "/" + out.join("/");

@@ -17,7 +17,7 @@ test("a student answers the booking survey and sends feedback; only the platform
   const survey = ria.getByRole("complementary", { name: "How easy was it to book your demo?" });
   await expect(survey).toBeVisible();
   await survey.getByRole("button", { name: "4: Easy" }).click();
-  await expect(ria.getByText("Thanks — that helps us improve Slotty.")).toBeVisible();
+  await expect(ria.getByText("Thanks — that helps us improve Uniflow.")).toBeVisible();
   await expect(survey).toBeHidden();
 
   // Feedback from the header.

@@ -11,7 +11,7 @@ import { hashPassword, MIN_PASSWORD_LENGTH } from "@/server/auth/password";
 async function main() {
   const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
   const password = process.env.ADMIN_PASSWORD ?? "";
-  const name = process.env.ADMIN_NAME?.trim() || "Slotty Admin";
+  const name = process.env.ADMIN_NAME?.trim() || "Uniflow Admin";
   if (!email) throw new Error("Set ADMIN_EMAIL.");
 
   const existing = await db.user.findUnique({ where: { email } });

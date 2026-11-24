@@ -21,10 +21,10 @@ import { Trust } from "./trust";
  */
 export function LandingPage() {
   return (
-    <div data-theme="slotty-landing" className={`${sans.variable} ${mono.variable} flex flex-1 flex-col`}>
+    <div data-theme="uniflow-landing" className={`${sans.variable} ${mono.variable} flex flex-1 flex-col`}>
       {/* Without JavaScript the stepper can't switch: show every step as a list instead. */}
       <noscript>
-        <style>{`[data-theme="slotty-landing"] .lp-tabs{display:none!important}[data-theme="slotty-landing"] .lp-step-panel{display:grid!important}[data-theme="slotty-landing"] .lp-step-panel+.lp-step-panel{margin-top:48px}`}</style>
+        <style>{`[data-theme="uniflow-landing"] .lp-tabs{display:none!important}[data-theme="uniflow-landing"] .lp-step-panel{display:grid!important}[data-theme="uniflow-landing"] .lp-step-panel+.lp-step-panel{margin-top:48px}`}</style>
       </noscript>
       <MotionFlag />
       <SiteNav />

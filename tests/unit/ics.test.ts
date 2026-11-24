@@ -17,7 +17,7 @@ describe("ics", () => {
   });
   it("builds a calendar with stable UIDs and CRLF line endings", () => {
     const ics = buildCalendar({
-      name: "Slotty",
+      name: "Uniflow",
       now: new Date("2026-10-01T00:00:00Z"),
       events: [{ uid: "booking-1@slotty", start: new Date("2026-10-05T09:00:00Z"), end: new Date("2026-10-05T09:15:00Z"), summary: "CS101 demo", location: "Lab 1" }],
     });

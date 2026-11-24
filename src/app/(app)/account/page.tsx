@@ -82,7 +82,7 @@ export default async function AccountPage() {
               Which pages you open, how fast they load and where a booking or marking gets stuck, under a code instead of your name. It helps us
               find what to fix. Errors and feedback are reported either way.{" "}
               <Link href="/privacy" className="underline underline-offset-2">
-                What Slotty collects
+                What Uniflow collects
               </Link>
             </CardDescription>
           </CardHeader>
@@ -147,7 +147,7 @@ export default async function AccountPage() {
           <CardHeader>
             <CardTitle>Notifications on this device</CardTitle>
             <CardDescription>
-              {student ? "Reminders and booking changes" : "New requests and changes to your demos"} as phone or desktop notifications, even when Slotty
+              {student ? "Reminders and booking changes" : "New requests and changes to your demos"} as phone or desktop notifications, even when Uniflow
               isn&apos;t open.
               {pushDevices > 0 && ` On for ${pushDevices} device${pushDevices === 1 ? "" : "s"}.`} Signing out of a device turns them off there.
             </CardDescription>

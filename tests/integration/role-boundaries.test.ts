@@ -114,10 +114,10 @@ describe("only instructors manage TAs", () => {
     const ta = await makeUser("Tara TA");
     const co = await makeUser("Co TA");
     const { course } = await setupCourse(ta);
-    await expect(addMember(ta, course.id, { email: co.email, role: "TA" })).rejects.toThrow(/Only a Slotty admin can add, change or remove TAs/);
+    await expect(addMember(ta, course.id, { email: co.email, role: "TA" })).rejects.toThrow(/Only a Uniflow admin can add, change or remove TAs/);
 
     await adminAssignStaff(admin, course.id, { email: co.email, role: "TA" });
-    await expect(removeMember(ta, course.id, co.id)).rejects.toThrow(/Only a Slotty admin/);
+    await expect(removeMember(ta, course.id, co.id)).rejects.toThrow(/Only a Uniflow admin/);
     // Tara hosts upcoming slots, so she has to hand them over first.
     await expect(adminRemoveStaff(admin, course.id, ta.id)).rejects.toThrow(/hosts 4 upcoming slots/);
     expect(await adminRemoveStaff(admin, course.id, co.id)).toMatchObject({ name: "Co TA" });

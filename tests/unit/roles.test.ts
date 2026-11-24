@@ -37,7 +37,7 @@ describe("who manages whom", () => {
   it("leaves TAs to the instructor, or to an admin when there is none", () => {
     expect(canManageTAs("INSTRUCTOR", true).ok).toBe(true);
     expect(canManageTAs("TA", true)).toMatchObject({ ok: false, reason: expect.stringMatching(/course instructor/) });
-    expect(canManageTAs("TA", false)).toMatchObject({ ok: false, reason: expect.stringMatching(/Slotty admin/) });
+    expect(canManageTAs("TA", false)).toMatchObject({ ok: false, reason: expect.stringMatching(/Uniflow admin/) });
     expect(canManageTAs("STUDENT", true).ok).toBe(false);
     expect(canManageTAs(null, false).ok).toBe(false);
   });

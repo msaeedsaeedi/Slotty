@@ -181,7 +181,7 @@ export default async function ManageAssignmentPage({ params, searchParams }: Pag
         <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
           <div className="order-2 min-w-0 lg:order-1">
             {slots.length === 0 ? (
-              <EmptyState title="No slots yet">Pick the days and hours you&apos;re available on the right. Slotty splits them into {policy.slotDurationMin}-minute slots.</EmptyState>
+              <EmptyState title="No slots yet">Pick the days and hours you&apos;re available on the right. Uniflow splits them into {policy.slotDurationMin}-minute slots.</EmptyState>
             ) : (
               <SlotTable
                 slots={slotRows}

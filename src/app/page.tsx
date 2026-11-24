@@ -4,7 +4,7 @@ import { LandingPage } from "@/components/landing/landing-page";
 import { INSTITUTION } from "@/lib/site";
 import { getCurrentUser } from "@/server/auth/session";
 
-const title = `Slotty — Demo booking and marking for ${INSTITUTION}`;
+const title = `Uniflow — Demo booking and marking for ${INSTITUTION}`;
 const description =
   "Demo week, minus the spreadsheet. Staff publish time slots, students book one under clear rules, TAs mark against a rubric on the day, and students see their marks only after the instructor releases them.";
 
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   title: { absolute: title },
   description,
   alternates: { canonical: "/" },
-  openGraph: { type: "website", siteName: "Slotty", title, description, url: "/" },
+  openGraph: { type: "website", siteName: "Uniflow", title, description, url: "/" },
   twitter: { card: "summary_large_image", title, description },
 };
 

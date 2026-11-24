@@ -1,6 +1,6 @@
 import { GITHUB_URL, INSTITUTION, MAKER } from "@/lib/site";
 
-/** Who's behind Slotty, and where its source lives. */
+/** Who's behind Uniflow, and where its source lives. */
 export function Maker() {
   return (
     <section aria-labelledby="maker-title" className="border-t border-[var(--line)] bg-[var(--board)] py-16 sm:py-20">
@@ -15,7 +15,7 @@ export function Maker() {
               <h2 id="maker-title" className="lp-h2 mt-2 text-[clamp(30px,3.2vw,40px)]">
                 {MAKER.name}
               </h2>
-              <p className="mt-2 text-[16px] text-[var(--text-2)]">The person behind Slotty.</p>
+              <p className="mt-2 text-[16px] text-[var(--text-2)]">The person behind Uniflow.</p>
               <a href={MAKER.url} target="_blank" rel="noopener" className="lp-btn lp-btn-quiet mt-5">
                 More work at {MAKER.host} <span aria-hidden className="lp-btn-arrow">↗</span>
                 <span className="sr-only">(opens in a new tab)</span>

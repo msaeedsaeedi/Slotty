@@ -132,7 +132,7 @@ export async function surveys(actor: Actor, days: RangeDays, now = new Date()) {
   });
 }
 
-// ─── Workflow numbers (from the tables Slotty already keeps) ─────────────────
+// ─── Workflow numbers (from the tables Uniflow already keeps) ─────────────────
 
 /**
  * What people actually did, from bookings, requests, the waitlist and marks.

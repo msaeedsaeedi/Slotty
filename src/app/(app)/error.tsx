@@ -7,7 +7,7 @@ import { track } from "@/lib/analytics";
 
 /**
  * Shown when a page fails to render. The error is reported (scrubbed, see
- * `scrubErrorMessage`) so the Errors tab in Insights shows where Slotty breaks.
+ * `scrubErrorMessage`) so the Errors tab in Insights shows where Uniflow breaks.
  * Server errors arrive here as a generic message plus a digest that matches the
  * server log.
  */
