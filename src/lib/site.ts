@@ -17,4 +17,4 @@ export function supportMailto(subject?: string): string {
 export const MAKER = { name: "Mohammad Saeed Saeedi", initials: "MS", url: "https://msaeedsaeedi.com", host: "msaeedsaeedi.com" } as const;
 
 /** Uniflow's source code. */
-export const GITHUB_URL = "https://github.com/msaeedsaeedi/Slotty";
+export const GITHUB_URL = "https://github.com/msaeedsaeedi/Uniflow";

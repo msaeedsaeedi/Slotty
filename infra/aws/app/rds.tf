@@ -38,8 +38,8 @@ resource "aws_db_instance" "main" {
   engine_version = "17"
   instance_class = var.db_instance_class
 
-  db_name  = "slotty"
-  username = "slotty"
+  db_name  = var.db_name
+  username = var.db_name
   password = random_password.db.result
   port     = 5432
 

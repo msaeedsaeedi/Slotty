@@ -34,7 +34,7 @@ Uniflow: demo scheduling and evaluation for university courses. System documenta
 
 ## Deployment
 - Application: merge a release PR into `master` (docs ch. 9); `.github/workflows/deploy.yml` builds both ARM64 images (`docker-bake.hcl`), runs migrations as a one-off ECS task when `prisma/migrations` changed, rolls out web and worker and checks `/health` reports the new release (`infra/aws/deploy.sh`, ADR-022).
-- Infrastructure: Terraform in `infra/aws/org` (management account) and `infra/aws/app` (slotty-prod). Always show `terraform plan` and get approval before `apply`; never apply unreviewed.
+- Infrastructure: Terraform in `infra/aws/org` (management account), `infra/aws/account` (the standalone account, ADR-037) and `infra/aws/app`, run through `infra/aws/app/tf.sh <slotty|uniflow>` (slotty-prod, us-east-1; or the standalone account, ap-southeast-2). Always show `terraform plan` and get approval before `apply`; never apply unreviewed.
 - Migrations must keep the previous release working (expand, then contract in a later release): rollback does not undo them.
 
 ## Decided (don't re-ask; propose a superseding ADR instead)
@@ -46,7 +46,7 @@ Uniflow: demo scheduling and evaluation for university courses. System documenta
 - Run `prisma migrate reset` or otherwise wipe a database without the user's explicit approval.
 - Send email or push directly from a request; always through the outbox.
 - Mutate data from pages or Server Actions with Prisma directly; go through a service.
-- Commit `terraform.tfvars`, Terraform state or plans, `.env` files, or print secrets from SSM.
+- Commit `terraform.tfvars` or `*.secret.tfvars`, Terraform state or plans, `.env` files, or print secrets from SSM.
 
 ## Always
 - Update the documentation chapters a change affects in the same pull request, and add a line to `docs/appendices/c-changelog.tex`. Map: user flows → ch. 3; rules → ch. 4; modules → ch. 5; schema → ch. 6; patterns → ch. 7; AWS → ch. 8 (and ch. 12 for cost); CI/CD → ch. 9; runbooks and alarms → ch. 10; security controls → ch. 11; roadmap → ch. 15.
