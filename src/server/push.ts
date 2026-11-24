@@ -13,7 +13,7 @@ let configured = false;
 function configure() {
   if (configured) return;
   webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT ?? "mailto:no-reply@slotty.local",
+    process.env.VAPID_SUBJECT ?? "mailto:no-reply@uniflow.local",
     process.env.VAPID_PUBLIC_KEY!,
     process.env.VAPID_PRIVATE_KEY!,
   );

@@ -78,27 +78,40 @@ test("only the public pages are open to search engines", async ({ request }) => 
   expect(robots).toContain("Disallow: /");
 });
 
-test("the session cookie is __Host-, Secure and HttpOnly, an older cookie still works, and signing out clears both (ADR-033)", async ({ browser, baseURL }) => {
+test("the session cookie is __Host-, Secure and HttpOnly, older cookies still work, and signing out clears them (ADR-033, #133)", async ({ browser, baseURL }) => {
   const ta = await login(browser, "ta@e2e.test");
   const cookies = await ta.context().cookies();
-  const session = cookies.find((c) => c.name === "__Host-slotty_session");
-  expect(session).toMatchObject({ secure: true, httpOnly: true, path: "/", sameSite: "Lax" });
-  expect(cookies.some((c) => c.name === "slotty_session")).toBe(false);
+  expect(cookies.find((c) => c.name === "__Host-uniflow_session")).toMatchObject({ secure: true, httpOnly: true, path: "/", sameSite: "Lax" });
+  expect(cookies.some((c) => c.name.endsWith("slotty_session"))).toBe(false);
+  await ta.context().close();
+  // By domain and path, not url: Chromium refuses a Secure cookie set for an http:// URL.
+  const domain = new URL(baseURL!).hostname;
 
-  // A browser still holding the pre-ADR-033 cookie stays signed in.
-  const legacy = await browser.newContext();
-  await legacy.addCookies([{ name: "slotty_session", value: session!.value, url: baseURL! }]);
-  const page = await legacy.newPage();
-  await open(page, "/dashboard");
-  await expect(page).toHaveURL(/\/dashboard$/);
+  // A browser still holding a cookie under an earlier name (before the rename to Uniflow, or before
+  // ADR-033) stays signed in; signing out ends that session and clears the cookie.
+  for (const old of [{ name: "__Host-slotty_session", secure: true }, { name: "slotty_session", secure: false }]) {
+    const fresh = await login(browser, "ta@e2e.test");
+    const token = (await fresh.context().cookies()).find((c) => c.name === "__Host-uniflow_session")!.value;
+    await fresh.context().close();
 
-  // Signing out ends the session and clears the cookie, whichever name it had.
-  await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page).toHaveURL(/\/(login)?$/);
-  expect((await legacy.cookies()).some((c) => c.name.endsWith("slotty_session"))).toBe(false);
-  await open(ta, "/dashboard");
-  await expect(ta).toHaveURL(/\/login/);
-  await legacy.close();
+    const legacy = await browser.newContext();
+    await legacy.addCookies([{ name: old.name, value: token, domain, path: "/", secure: old.secure }]);
+    const page = await legacy.newPage();
+    await open(page, "/dashboard");
+    await expect(page).toHaveURL(/\/dashboard$/);
+
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await expect(page).toHaveURL(/\/(login)?$/);
+    expect((await legacy.cookies()).some((c) => c.name.endsWith("_session"))).toBe(false);
+
+    // The session itself is gone, not just the cookie.
+    const replay = await browser.newContext();
+    await replay.addCookies([{ name: "__Host-uniflow_session", value: token, domain, path: "/", secure: true }]);
+    const again = await replay.newPage();
+    await open(again, "/dashboard");
+    await expect(again).toHaveURL(/\/login/);
+    await Promise.all([legacy.close(), replay.close()]);
+  }
 });
 
 test("the retired personal calendar feed answers 404 for any link (ADR-033)", async ({ request }) => {

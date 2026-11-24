@@ -24,6 +24,8 @@ function bookingRows(filter: object) {
 function studentEvent(b: BookingForCalendar): CalendarEvent {
   const url = absoluteUrl(`/courses/${b.assignment.courseId}/assignments/${b.assignmentId}`);
   return {
+    // Kept from before the rename to Uniflow (#133): calendar apps match events by UID, so a
+    // new suffix would add a second copy of a demo someone already saved.
     uid: `booking-${b.id}@slotty`,
     start: b.slot.startsAt,
     end: b.slot.endsAt,

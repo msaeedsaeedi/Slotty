@@ -11,8 +11,10 @@ A change and the messages it causes are written in \emph{one} database transacti
 from a web request. If the change rolls back, so do its messages.
 
 The worker (\src{src/jobs/worker.ts}) delivers them. It wakes as soon as a transaction that queued
-something commits, through PostgreSQL \code{LISTEN}/\code{NOTIFY} (\src{src/server/outbox-signal.ts}),
-with a slow poll as a backstop. Each row is claimed with a conditional update, so two workers share
+something commits, through PostgreSQL \code{LISTEN}/\code{NOTIFY} on the channel
+\code{uniflow_outbox} (\src{src/server/outbox-signal.ts}), with a slow poll as a backstop. For the
+release that renamed it from \code{slotty_outbox} (issue \#133), web signals both names and the
+worker listens on both, so tasks from either release reach each other during a rollout. Each row is claimed with a conditional update, so two workers share
 the work instead of duplicating it. Delivery is \emph{at least once}: a crash between sending and
 recording sends that one message again. A failed email is retried at most five times with
 exponential backoff (1, 2, 4, 8 minutes), then marked \code{FAILED} and shown to admins

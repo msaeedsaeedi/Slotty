@@ -56,7 +56,7 @@ describe("deviceClass", () => {
 
 describe("scrubErrorMessage", () => {
   it("removes emails, links, long numbers and tokens", () => {
-    const m = scrubErrorMessage("Failed for ann.lee@uni.edu at https://slotty.example/courses/abc?x=1 id cmhx1y2z30000abcd1234 code 123456");
+    const m = scrubErrorMessage("Failed for ann.lee@uni.edu at https://uniflow.example/courses/abc?x=1 id cmhx1y2z30000abcd1234 code 123456");
     expect(m).toBe("Failed for <email> at <url> id <id> code <n>");
   });
   it("keeps ordinary words and caps the length", () => {

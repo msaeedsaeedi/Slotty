@@ -5,7 +5,7 @@
 Slotty: demo scheduling and evaluation for university courses. System documentation is one LaTeX document in `docs/` (`bun run docs:build`); read the chapter for the area you change before designing.
 
 - Package manager/runner is **bun** (`bun run …`, `bunx …`). No pnpm or sudo.
-- Local services run in Docker: `bun run infra:up` (infra/docker-compose.yml) starts Postgres 17 on :5432 with the dev database `slotty` (`.env`), Mailpit (SMTP :1025, inbox http://localhost:8025) and Caddy, which serves `bun run dev` at https://slotty.local. Tests don't use it: each run starts a throwaway Postgres with Testcontainers.
+- Local services run in Docker: `bun run infra:up` (infra/docker-compose.yml) starts Postgres 17 on :5432 with the dev database `uniflow` (`.env`), Mailpit (SMTP :1025, inbox http://localhost:8025) and Caddy, which serves `bun run dev` at https://uniflow.local. Tests don't use it: each run starts a throwaway Postgres with Testcontainers.
 - If `docker` says permission denied in an agent shell, run it through `sg docker -c "…"`.
 - `prisma migrate reset` is blocked for agents. Ask the user before wiping the dev DB.
 - Checks before a pull request: `bun run typecheck`, `bun run lint`, `bun run test` (unit + integration), and `bun run test:e2e` for user-facing changes. They need Docker running (in an agent shell: `sg docker -c "bun run test"`). CI (`.github/workflows/ci.yml`) runs them all; `dev` and `master` only take PRs with a green **CI ok** that are up to date.

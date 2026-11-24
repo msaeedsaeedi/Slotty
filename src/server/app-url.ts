@@ -12,7 +12,7 @@ export function appUrl(): string {
   const raw = process.env.APP_URL?.trim();
   if (!raw) {
     if (process.env.NODE_ENV === "production") {
-      throw new Error("APP_URL is not set. Set it to the public address, e.g. https://slotty.example.edu");
+      throw new Error("APP_URL is not set. Set it to the public address, e.g. https://uniflow.example.edu");
     }
     return DEV_DEFAULT;
   }
@@ -28,7 +28,7 @@ export function appUrl(): string {
 
 /**
  * Is APP_URL a local address (localhost, a loopback IP, or a .local / .localhost name such as
- * the dev Caddy's slotty.local)? Unset counts as local, since appUrl() then falls back to
+ * the dev Caddy's uniflow.local)? Unset counts as local, since appUrl() then falls back to
  * localhost outside production.
  */
 export function isLocalAppUrl(raw = process.env.APP_URL): boolean {

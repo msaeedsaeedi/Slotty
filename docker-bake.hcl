@@ -1,7 +1,7 @@
 # Both images in one Buildx run, so their shared stages build once and in parallel:
-#   docker buildx bake                       → slotty-app:latest and slotty-app:latest-migrate (local)
+#   docker buildx bake                       → uniflow-app:latest and uniflow-app:latest-migrate (local)
 #   REPOSITORY=<ecr url> TAG=<sha> docker buildx bake --push        (what CI does)
-variable "REPOSITORY" { default = "slotty-app" }
+variable "REPOSITORY" { default = "uniflow-app" }
 variable "TAG" { default = "latest" }
 
 group "default" {

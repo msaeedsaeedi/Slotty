@@ -17,7 +17,7 @@ Next.js 16 (App Router, Server Actions), TypeScript, PostgreSQL with Prisma 7, T
 
 | | Command | URL | Database |
 | --- | --- | --- | --- |
-| Development | `bun run dev` + `bun run worker` | https://slotty.local (Caddy) or http://localhost:3000 | `slotty` in the local Postgres (`.env`) |
+| Development | `bun run dev` + `bun run worker` | https://uniflow.local (Caddy) or http://localhost:3000 | `uniflow` in the local Postgres (`.env`) |
 | Tests | `bun run test`, `bun run test:e2e` | http://localhost:3100 (e2e) | a throwaway Postgres per run (Testcontainers) |
 
 Production runs on AWS (`infra/aws`) and runs exactly what is on `master`; see [Deploying](#deploying).
@@ -30,14 +30,16 @@ bun install
 bun run infra:up     # Postgres, Mailpit and Caddy in Docker (infra/docker-compose.yml)
 bun run db:migrate   # apply migrations
 bun run db:seed      # demo data (see below)
-bun run dev          # https://slotty.local
+bun run dev          # https://uniflow.local
 bun run worker       # in a second terminal: sends queued emails and schedules reminders
 ```
 
-Caddy serves the dev server at **https://slotty.local**, using a certificate from its own local CA (`infra/Caddyfile`). This needs a one-time setup:
+Caddy serves the dev server at **https://uniflow.local**, using a certificate from its own local CA (`infra/Caddyfile`). This needs a one-time setup:
 
-1. Add `127.0.0.1 slotty.local` to your hosts file. On WSL, edit the Windows file `C:\Windows\System32\drivers\etc\hosts` as Administrator.
+1. Add `127.0.0.1 uniflow.local` to your hosts file. On WSL, edit the Windows file `C:\Windows\System32\drivers\etc\hosts` as Administrator.
 2. Run `bun run infra:cert`, which copies Caddy's CA to `infra/caddy-root.crt`. Then trust it: on WSL, run `certutil.exe -user -addstore Root infra/caddy-root.crt` and restart the browser. The CA is kept in the `caddy_data` volume, so you only redo this if you delete that volume.
+
+**Coming from a Slotty checkout?** The Docker project, database and hostname were renamed (issue #133), so `infra:up` now creates fresh `uniflow` volumes and leaves the old `slotty` ones untouched. Stop the old containers with `docker compose -p slotty down` (this keeps their volumes), update `DATABASE_URL`, `APP_URL`, `MAIL_FROM`, `SEED_ADMIN_EMAIL` and `VAPID_SUBJECT` in `.env` from `.env.example`, then run `bun run infra:up`, `bun run db:migrate` and `bun run db:seed`. Also redo steps 1 and 2 above, because the hostname and Caddy's CA volume are new. Delete the old volumes (`docker volume rm slotty_pgdata slotty_caddy_data`) once you don't need their data.
 
 `APP_URL` in `.env` controls links in emails. Set it to `http://localhost:3000` if you skip Caddy.
 
@@ -49,10 +51,10 @@ Other database scripts: `bun run db:studio` opens Prisma Studio, and `bun run db
 
 | Email | Password | What they see |
 | --- | --- | --- |
-| `admin@slotty.local` | `admin12345` | Admin pages |
-| `prof@slotty.local` | `password123` | Instructor of CS 350 (review queue) |
-| `ta@slotty.local` | `password123` | TA of CS 350; runs CS 101 alone |
-| `student1@slotty.local` … `student6` | `password123` | Students |
+| `admin@uniflow.local` | `admin12345` | Admin pages |
+| `prof@uniflow.local` | `password123` | Instructor of CS 350 (review queue) |
+| `ta@uniflow.local` | `password123` | TA of CS 350; runs CS 101 alone |
+| `student1@uniflow.local` … `student6` | `password123` | Students |
 
 ## Tests
 
