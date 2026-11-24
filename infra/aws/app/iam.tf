@@ -27,7 +27,7 @@ resource "aws_iam_role_policy_attachment" "execution" {
 }
 
 resource "aws_iam_role_policy" "execution_secrets" {
-  name = "read-slotty-secrets"
+  name = "read-${local.name}-secrets"
   role = aws_iam_role.execution.id
   policy = jsonencode({
     Version = "2012-10-17"
@@ -110,7 +110,7 @@ resource "aws_iam_role" "build" {
 }
 
 resource "aws_iam_role_policy" "build" {
-  name = "push-slotty-images"
+  name = "push-${local.name}-images"
   role = aws_iam_role.build.id
   policy = jsonencode({
     Version = "2012-10-17"
@@ -140,7 +140,7 @@ resource "aws_iam_role" "deploy" {
 }
 
 resource "aws_iam_role_policy" "deploy" {
-  name = "deploy-slotty"
+  name = "deploy-${local.name}"
   role = aws_iam_role.deploy.id
   policy = jsonencode({
     Version = "2012-10-17"

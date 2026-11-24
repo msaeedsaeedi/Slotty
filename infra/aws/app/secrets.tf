@@ -4,7 +4,7 @@
 
 locals {
   ssm_prefix = "/${local.name}"
-  db_base    = "postgres://slotty:${random_password.db.result}@${aws_db_instance.main.address}:5432/slotty"
+  db_base    = "postgres://${var.db_name}:${random_password.db.result}@${aws_db_instance.main.address}:5432/${var.db_name}"
 }
 
 # node-postgres (app and worker): full verification against the RDS CA bundle, which is baked

@@ -10,7 +10,7 @@ This chapter gathers the controls described elsewhere into one view an auditor c
   \midrule
   \endhead
   Account isolation & Dedicated account in an Organization; SCPs deny other regions, large or expensive resources, root-user actions, leaving the Organization and tampering with CloudTrail & \cref{sec:aws-guardrails}\\
-  Audit (cloud) & Organization CloudTrail with log-file validation, 90 days, in the management account & \src{infra/aws/org}\\
+  Audit (cloud) & \code{slotty-prod}: organization CloudTrail with log-file validation, 90 days, in the management account. Standalone account: CloudTrail Event history, 90 days (ADR-037) & \src{infra/aws/org}\\
   Audit (app) & Moderation-relevant changes written in the same transaction as the change, including every change to marks (private notes only as edited), mark exports and each person a roster import adds or changes; append-only, enforced by a database trigger that refuses \code{UPDATE} and \code{DELETE} & \cref{ch:crosscutting}\\
   Network & Tasks and database in private subnets; database subnets have no route out; inbound, security groups allow only the next hop; outbound, tasks may only use HTTPS (443), Postgres to the database's security group, and for the worker SMTP submission (587) to SES; no SSH anywhere; ECS Exec off by default and logged to \code{/slotty/exec} when turned on for an incident & \src{infra/aws/app/network.tf}, \src{ecs.tf}\\
   Edge & TLS 1.2+ with HSTS; origin reachable only with CloudFront's secret header; API Gateway throttling & \cref{sec:aws-request-path}\\

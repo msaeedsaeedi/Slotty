@@ -53,7 +53,7 @@ resource "aws_cloudfront_distribution" "main" {
   http_version    = "http2and3"
   price_class     = "PriceClass_100"
   aliases         = [var.domain]
-  comment         = "Slotty"
+  comment         = var.product_name
 
   origin {
     origin_id   = "api"

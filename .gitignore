@@ -57,10 +57,12 @@ next-env.d.ts
 
 # Terraform
 .terraform/
+.terraform-*/
 *.tfstate
 *.tfstate.*
 *.tfplan
 infra/aws/**/terraform.tfvars
+infra/aws/**/*.secret.tfvars
 
 # Local Claude Code settings
 .claude/settings.local.json
