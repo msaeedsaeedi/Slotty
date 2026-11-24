@@ -43,13 +43,13 @@ export default async function AdminCoursesPage({ searchParams }: PageProps<"/adm
             </Label>
             <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
               <Input name="email" type="email" required placeholder="Email" aria-label="Instructor or TA email" />
-              <Input name="name" placeholder="Name (if new to Slotty)" aria-label="Instructor or TA name" maxLength={120} />
+              <Input name="name" placeholder="Name (if new to Uniflow)" aria-label="Instructor or TA name" maxLength={120} />
               <select name="role" defaultValue="INSTRUCTOR" aria-label="Their role" className="h-8 rounded-md border bg-background px-2 text-sm">
                 <option value="INSTRUCTOR">Instructor</option>
                 <option value="TA">TA</option>
               </select>
             </div>
-            <p className="text-xs text-muted-foreground">They get an invite, or a notification if they already use Slotty.</p>
+            <p className="text-xs text-muted-foreground">They get an invite, or a notification if they already use Uniflow.</p>
           </fieldset>
           <SubmitButton>Create course</SubmitButton>
         </ActionForm>
@@ -104,7 +104,7 @@ export default async function AdminCoursesPage({ searchParams }: PageProps<"/adm
                         <ActionForm action={assignStaffAction} resetOnSuccess className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto]">
                           <input type="hidden" name="courseId" value={c.id} />
                           <Input name="email" type="email" required placeholder="Email" aria-label={`Staff email for ${c.code}`} />
-                          <Input name="name" placeholder="Name (if new to Slotty)" aria-label={`Staff name for ${c.code}`} maxLength={120} />
+                          <Input name="name" placeholder="Name (if new to Uniflow)" aria-label={`Staff name for ${c.code}`} maxLength={120} />
                           <select name="role" defaultValue="INSTRUCTOR" aria-label="Role" className="h-8 rounded-md border bg-background px-2 text-sm">
                             <option value="INSTRUCTOR">Instructor</option>
                             <option value="TA">TA</option>

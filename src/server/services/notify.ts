@@ -37,13 +37,13 @@ export interface NotifyResult {
 
 export function renderEmail(n: { title: string; body: string; link?: string }) {
   const url = n.link ? absoluteUrl(n.link) : null;
-  const text = [n.body, url ? `\nOpen in Slotty: ${url}` : "", "\n— Slotty"].join("\n");
+  const text = [n.body, url ? `\nOpen in Uniflow: ${url}` : "", "\n— Uniflow"].join("\n");
   const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
   const html = `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:auto;padding:24px;color:#111">
 <h2 style="margin:0 0 12px;font-size:18px">${esc(n.title)}</h2>
 <p style="white-space:pre-line;line-height:1.5">${esc(n.body)}</p>
-${url ? `<p><a href="${esc(url)}" style="display:inline-block;background:#111;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none">Open in Slotty</a></p>` : ""}
-<p style="color:#888;font-size:12px;margin-top:24px">Slotty — demo scheduling &amp; evaluation</p></div>`;
+${url ? `<p><a href="${esc(url)}" style="display:inline-block;background:#111;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none">Open in Uniflow</a></p>` : ""}
+<p style="color:#888;font-size:12px;margin-top:24px">Uniflow — demo scheduling &amp; evaluation</p></div>`;
   return { text, html };
 }
 

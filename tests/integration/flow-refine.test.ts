@@ -65,13 +65,13 @@ describe("who can hold which role", () => {
     const { course } = await setupCourse(ta);
     await updateCourse(ta, course.id, { code: "CS101", title: "Renamed", term: "T", timezone: "UTC" });
 
-    await expect(importRoster(ta, course.id, "email,role\nboss@uni.edu,instructor")).rejects.toThrow(/Only a Slotty admin/);
-    await expect(addMember(ta, course.id, { email: "boss@uni.edu", name: "Boss", role: "INSTRUCTOR" })).rejects.toThrow(/Only a Slotty admin/);
+    await expect(importRoster(ta, course.id, "email,role\nboss@uni.edu,instructor")).rejects.toThrow(/Only a Uniflow admin/);
+    await expect(addMember(ta, course.id, { email: "boss@uni.edu", name: "Boss", role: "INSTRUCTOR" })).rejects.toThrow(/Only a Uniflow admin/);
     await adminAssignStaff(admin, course.id, { email: prof.email, role: "INSTRUCTOR" });
     // Instructors don't add instructors either, and a TA can't demote one by re-adding them.
-    await expect(addMember(prof, course.id, { email: "co@uni.edu", name: "Co", role: "INSTRUCTOR" })).rejects.toThrow(/Only a Slotty admin/);
-    await expect(importRoster(ta, course.id, `email,role\n${prof.email},ta`)).rejects.toThrow(/Only a Slotty admin/);
-    await expect(removeMember(ta, course.id, prof.id)).rejects.toThrow(/Only a Slotty admin/);
+    await expect(addMember(prof, course.id, { email: "co@uni.edu", name: "Co", role: "INSTRUCTOR" })).rejects.toThrow(/Only a Uniflow admin/);
+    await expect(importRoster(ta, course.id, `email,role\n${prof.email},ta`)).rejects.toThrow(/Only a Uniflow admin/);
+    await expect(removeMember(ta, course.id, prof.id)).rejects.toThrow(/Only a Uniflow admin/);
     await expect(removeMember(prof, course.id, prof.id)).rejects.toThrow();
     // With an instructor, the TA no longer runs the course's settings.
     await expect(updateCourse(ta, course.id, { code: "CS101", title: "X", term: "T", timezone: "UTC" })).rejects.toThrow(/instructor/);
@@ -89,7 +89,7 @@ describe("admin invites", () => {
     const admin = await makeUser("Ada Admin", { isAdmin: true });
     const u = await adminInviteUser(admin, { email: "New@Uni.edu", name: "Nora" });
     expect(u.status).toBe("INVITED");
-    expect(await db.emailOutbox.count({ where: { to: "new@uni.edu", subject: "You're invited to Slotty" } })).toBe(1);
+    expect(await db.emailOutbox.count({ where: { to: "new@uni.edu", subject: "You're invited to Uniflow" } })).toBe(1);
     await expect(adminInviteUser(admin, { email: "new@uni.edu", name: "Nora" })).rejects.toThrow(/already has an account/);
   });
 });
@@ -158,8 +158,8 @@ describe("notifications", () => {
     const { reviewEvaluation } = await import("@/server/services/evaluations");
     await reviewEvaluation(prof, draft.evaluationId, "finalize");
     const released = await db.notification.findFirstOrThrow({ where: { userId: ann.id, type: "evaluation.finalized" } });
-    // Marks, scores and feedback stay in Slotty: the message only says they're out and links there.
-    expect(released.body).toMatch(/are released\. Open Slotty/);
+    // Marks, scores and feedback stay in Uniflow: the message only says they're out and links there.
+    expect(released.body).toMatch(/are released\. Open Uniflow/);
     expect(released.link).toBe(`/courses/${course.id}/assignments/${assignment.id}`);
     for (const secret of ["8 / 10", "5/6", "Nice", "Total"]) expect(released.body).not.toContain(secret);
     const email = await db.emailOutbox.findFirstOrThrow({ where: { to: ann.email, subject: { startsWith: "Marks released" } } });
@@ -184,7 +184,7 @@ describe("notifications", () => {
     await submitEvaluations(prof, [draft.evaluationId]);
     const updated = await db.notification.findFirstOrThrow({ where: { userId: ann.id, type: "evaluation.updated" } });
     expect(updated.title).toMatch(/^Marks updated/);
-    expect(updated.body).toMatch(/were corrected\. Open Slotty/);
+    expect(updated.body).toMatch(/were corrected\. Open Uniflow/);
     expect(updated.body).not.toMatch(/\d+ \/ 10/);
   });
 });

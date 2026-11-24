@@ -18,7 +18,7 @@ const REFRESH_ON_NEW = [/^\/notifications$/, /^\/dashboard$/, /^\/bookings$/];
 /**
  * The header's notification bell. Starts from the server's count, then checks
  * `/api/notifications/unread` every 30 seconds while the tab is visible, straight away when
- * the tab comes back, and when a push arrives (the service worker posts `slotty:push`).
+ * the tab comes back, and when a push arrives (the service worker posts `uniflow:push`; workers from before the rename post `slotty:push`, #138).
  */
 export function LiveBell({ initial }: { initial: number }) {
   const router = useRouter();
@@ -57,7 +57,7 @@ export function LiveBell({ initial }: { initial: number }) {
     const timer = setInterval(check, BELL_POLL_MS);
     const onVisible = () => void check();
     const onMessage = (e: MessageEvent) => {
-      if (e.data?.type === "slotty:push") void check();
+      if (e.data?.type === "uniflow:push" || e.data?.type === "slotty:push") void check();
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);

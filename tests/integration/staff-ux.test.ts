@@ -17,7 +17,7 @@ describe("admins are only admins", () => {
     const { course } = await setupCourse(ta);
 
     await expect(createCourse(admin, { code: "X1", title: "X", term: "T", timezone: "Asia/Karachi" })).rejects.toThrow(/admin console/);
-    await expect(adminAssignStaff(admin, course.id, { email: admin.email, role: "TA" })).rejects.toThrow(/Slotty admin/);
+    await expect(adminAssignStaff(admin, course.id, { email: admin.email, role: "TA" })).rejects.toThrow(/Uniflow admin/);
 
     const r = await importRoster(ta, course.id, `email,role\n${admin.email},ta\nnew@test.edu,student`);
     expect(r.enrolled).toBe(1);
@@ -146,7 +146,7 @@ describe("adding one person", () => {
     await expect(addMember(ta, course.id, { email: "new@test.edu", role: "STUDENT" })).rejects.toThrow(/name/);
     expect(await addMember(ta, course.id, { email: "New@Test.edu", name: "Nia", role: "STUDENT" })).toMatchObject({ invited: 1, name: "Nia" });
     await expect(addMember(ta, course.id, { email: "new@test.edu", role: "STUDENT" })).rejects.toThrow(/already/);
-    await expect(addMember(ta, course.id, { email: "boss@test.edu", name: "Boss", role: "INSTRUCTOR" })).rejects.toThrow(/Only a Slotty admin/);
+    await expect(addMember(ta, course.id, { email: "boss@test.edu", name: "Boss", role: "INSTRUCTOR" })).rejects.toThrow(/Only a Uniflow admin/);
   });
 
   it("keeps someone's section when they're added again without one", async () => {

@@ -1,5 +1,5 @@
 /**
- * How long Slotty keeps messages and sign-in records (docs ch. 11). Emails and push messages
+ * How long Uniflow keeps messages and sign-in records (docs ch. 11). Emails and push messages
  * carry links and course details, so their content goes once it has done its job; the rows
  * themselves stay a little longer for the admin email log and support questions.
  */

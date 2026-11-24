@@ -50,7 +50,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           No account yet?
         </summary>
         <p className="mx-auto max-w-[340px] leading-relaxed">
-          Slotty is invite-only: your course staff add you and you get an email to set a password. Invite expired? Use Forgot password to get a new
+          Uniflow is invite-only: your course staff add you and you get an email to set a password. Invite expired? Use Forgot password to get a new
           one.
         </p>
       </details>

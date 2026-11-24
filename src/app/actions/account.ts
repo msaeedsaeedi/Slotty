@@ -46,7 +46,7 @@ export async function setShareUsageAction(_: ActionState, fd: FormData): Promise
   return run(async () => {
     const share = bool(fd, "shareUsageData");
     await setShareUsageData(await requireUser(), share);
-    return share ? "Thanks — usage data helps us improve Slotty." : "Usage data is off. Errors are still reported, without your visitor key.";
+    return share ? "Thanks — usage data helps us improve Uniflow." : "Usage data is off. Errors are still reported, without your visitor key.";
   });
 }
 

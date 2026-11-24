@@ -52,5 +52,5 @@ export function bookingCalendarOptions(b: BookingForCalendar) {
 export async function bookingIcs(actor: Actor, bookingId: string) {
   const [b] = await bookingRows({ id: bookingId, studentId: actor.id, status: { not: "CANCELLED" } });
   if (!b) throw new DomainError("Booking not found.", "NOT_FOUND");
-  return { filename: `demo-${b.assignment.course.code.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.ics`, ics: buildCalendar({ name: "Slotty", events: [studentEvent(b)] }) };
+  return { filename: `demo-${b.assignment.course.code.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.ics`, ics: buildCalendar({ name: "Uniflow", events: [studentEvent(b)] }) };
 }

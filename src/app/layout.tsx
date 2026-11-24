@@ -10,12 +10,12 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   // Absolute links for Open Graph images and canonical URLs; unset in dev, where Next uses localhost.
   metadataBase: process.env.APP_URL ? new URL(process.env.APP_URL) : undefined,
-  title: { default: "Slotty", template: "%s · Slotty" },
+  title: { default: "Uniflow", template: "%s · Uniflow" },
   description: "Book, run and mark university demos and vivas in one place.",
-  applicationName: "Slotty",
-  appleWebApp: { capable: true, title: "Slotty", statusBarStyle: "default" },
+  applicationName: "Uniflow",
+  appleWebApp: { capable: true, title: "Uniflow", statusBarStyle: "default" },
   // Listed explicitly: an icons object here replaces the file-based app/icon.svg.
-  icons: { icon: [{ url: "/icon.svg", type: "image/svg+xml" }], apple: "/icons/192" },
+  icons: { icon: [{ url: "/icon.svg", type: "image/svg+xml" }], apple: "/brand/apple-touch-icon.png" },
 };
 
 export const viewport: Viewport = { themeColor: "#111111" };

@@ -188,7 +188,7 @@ export async function adminSendAccessEmail(actor: Actor, userId: string) {
   if (user.status === "DISABLED") throw new DomainError("Enable the account first.");
   if (user.status === "INVITED") {
     await db.$transaction(async (tx) => {
-      await issueInvite(tx, user, `${actor.name} (Slotty admin) sent you a new invitation link.`);
+      await issueInvite(tx, user, `${actor.name} (Uniflow admin) sent you a new invitation link.`);
       await audit(tx, actor, { action: "user.invite_resent", entityType: "User", entityId: userId });
     });
     return "invite" as const;
@@ -214,7 +214,7 @@ export async function adminUpdateUser(actor: Actor, userId: string, input: { nam
       if (await tx.user.findUnique({ where: { email: data.email } })) throw new DomainError("Another account already uses that email.", "CONFLICT");
     }
     await tx.user.update({ where: { id: userId }, data });
-    if (data.email !== user.email) await issueInvite(tx, { ...user, ...data }, "Your Slotty invitation, sent to your corrected address.");
+    if (data.email !== user.email) await issueInvite(tx, { ...user, ...data }, "Your Uniflow invitation, sent to your corrected address.");
     await audit(tx, actor, { action: "user.update", entityType: "User", entityId: userId, before: { name: user.name, email: user.email }, after: data });
   });
 }
@@ -342,7 +342,7 @@ async function assignStaff(tx: Tx, actor: Actor, course: { id: string; code: str
   const courseId = course.id;
   let user = await tx.user.findUnique({ where: { email: data.email } });
   if (user?.status === "DISABLED") throw new DomainError("That account is disabled. Enable it first.");
-  if (user?.isAdmin) throw new DomainError(`${user.name} is a Slotty admin, so can't be course staff.`);
+  if (user?.isAdmin) throw new DomainError(`${user.name} is a Uniflow admin, so can't be course staff.`);
   if (user) assertCanJoinCourses(user);
   if (user) {
     const here = await tx.enrollment.findUnique({ where: { courseId_userId: { courseId, userId: user.id } }, select: { role: true } });
@@ -359,7 +359,7 @@ async function assignStaff(tx: Tx, actor: Actor, course: { id: string; code: str
   if (existing) await tx.enrollment.update({ where: { id: existing.id }, data: { role: data.role } });
   else await tx.enrollment.create({ data: { courseId, userId: user.id, role: data.role } });
 
-  const context = `${actor.name} (Slotty admin) made you ${data.role === "TA" ? "a TA" : "the instructor"} of ${course.code} — ${course.title} (${course.term}).`;
+  const context = `${actor.name} (Uniflow admin) made you ${data.role === "TA" ? "a TA" : "the instructor"} of ${course.code} — ${course.title} (${course.term}).`;
   if (user.status === "INVITED") await issueInvite(tx, user, context);
   else await notify(tx, [user.id], { type: "course.enrolled", title: `You now help run ${course.code}`, body: context, link: `/courses/${courseId}/manage` });
   await audit(tx, actor, {
@@ -396,7 +396,7 @@ const inviteInput = z.object({
 });
 
 /**
- * Bring someone onto Slotty without putting them in a course, e.g. an
+ * Bring someone onto Uniflow without putting them in a course, e.g. an
  * instructor who will set up their own course, or another admin.
  */
 export async function adminInviteUser(actor: Actor, input: z.input<typeof inviteInput>) {
@@ -411,8 +411,8 @@ export async function adminInviteUser(actor: Actor, input: z.input<typeof invite
       tx,
       user,
       data.isAdmin
-        ? `${actor.name} invited you to help run Slotty as an administrator.`
-        : `${actor.name} invited you to Slotty, where course demos are booked and marked. Once you're in, you can create your course or be added to one.`,
+        ? `${actor.name} invited you to help run Uniflow as an administrator.`
+        : `${actor.name} invited you to Uniflow, where course demos are booked and marked. Once you're in, you can create your course or be added to one.`,
     );
     await audit(tx, actor, { action: "user.invite", entityType: "User", entityId: user.id, after: { email: data.email, isAdmin: data.isAdmin } });
     return user;

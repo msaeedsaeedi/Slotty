@@ -40,7 +40,7 @@ export default async function InvitePage({ params }: PageProps<"/invite/[token]"
   }
   return (
     <>
-      <PublicHeading title="Welcome to Slotty" center />
+      <PublicHeading title="Welcome to Uniflow" center />
       <Card>
         <CardContent>
           <p className="mb-5 text-[var(--text-2)]">
