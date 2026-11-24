@@ -92,6 +92,17 @@ Booking is the contended path. Capacity is protected by locking the slot rows
 (\code{booking_one_active_per_student}), so the database refuses a double booking even if two
 requests pass the checks at the same moment.
 
+Inside a transaction, queries run one after another. An interactive transaction holds a single
+connection, and node-postgres is dropping its queue for concurrent queries on one client (a
+deprecation warning today, an error in pg@9), so \code{Promise.all} over queries on \code{tx}
+is not allowed; ESLint rejects it (\src{eslint.config.mjs}, issue \#95). \code{Promise.all} on
+\code{db}, outside a transaction, is fine: the pool runs it on separate connections.
+Prisma itself still triggers the warning: inside a transaction, its query engine loads the
+relations of one query (\code{include}) in parallel on the transaction's connection. That is
+outside our code. \code{@prisma/adapter-pg} carries its own \code{pg}~8, so the upgrade to pg@9
+arrives only with a Prisma release that handles it; until then the warning is expected in the
+web and worker logs (tracked upstream, issue \#140).
+
 \section{Time}
 Times are stored in UTC and shown and entered in the course timezone (\src{src/lib/time.ts}:
 \code{fmt}, \code{fmtTimeRange}, \code{fromLocalInput}). Each user picks a 12- or 24-hour clock;

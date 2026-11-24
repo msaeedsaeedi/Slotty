@@ -83,11 +83,9 @@ async function assertNoTimeClash(
  */
 export async function loadChangeState(tx: Tx, assignmentId: string, studentId: string, policy: PolicyRules) {
   const own = { assignmentId, studentId, status: "CANCELLED" as const, cancelledById: studentId };
-  const [selfCancellations, last, row] = await Promise.all([
-    tx.booking.count({ where: { ...own, freeCancel: false } }),
-    tx.booking.findFirst({ where: own, orderBy: { cancelledAt: "desc" }, select: { freeCancel: true } }),
-    tx.bookingAllowance.findUnique({ where: { assignmentId_studentId: { assignmentId, studentId } } }),
-  ]);
+  const selfCancellations = await tx.booking.count({ where: { ...own, freeCancel: false } });
+  const last = await tx.booking.findFirst({ where: own, orderBy: { cancelledAt: "desc" }, select: { freeCancel: true } });
+  const row = await tx.bookingAllowance.findUnique({ where: { assignmentId_studentId: { assignmentId, studentId } } });
   const allowance: Allowance = row ? { extraChanges: row.extraChanges, lateBooking: row.lateBooking } : NO_ALLOWANCE;
   return {
     allowance,

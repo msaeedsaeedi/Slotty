@@ -131,12 +131,10 @@ export async function pastRolesHere(tx: Tx, userIds: string[], courseId: string)
   const past = new Map<string, "student" | "staff">();
   if (userIds.length === 0) return past;
   const inCourse = { assignment: { courseId } };
-  const [booked, marked, hosted, marker] = await Promise.all([
-    tx.booking.findMany({ where: { studentId: { in: userIds }, ...inCourse }, select: { studentId: true }, distinct: ["studentId"] }),
-    tx.evaluation.findMany({ where: { studentId: { in: userIds }, ...inCourse }, select: { studentId: true }, distinct: ["studentId"] }),
-    tx.slot.findMany({ where: { taId: { in: userIds }, ...inCourse }, select: { taId: true }, distinct: ["taId"] }),
-    tx.evaluation.findMany({ where: { evaluatorId: { in: userIds }, ...inCourse }, select: { evaluatorId: true }, distinct: ["evaluatorId"] }),
-  ]);
+  const booked = await tx.booking.findMany({ where: { studentId: { in: userIds }, ...inCourse }, select: { studentId: true }, distinct: ["studentId"] });
+  const marked = await tx.evaluation.findMany({ where: { studentId: { in: userIds }, ...inCourse }, select: { studentId: true }, distinct: ["studentId"] });
+  const hosted = await tx.slot.findMany({ where: { taId: { in: userIds }, ...inCourse }, select: { taId: true }, distinct: ["taId"] });
+  const marker = await tx.evaluation.findMany({ where: { evaluatorId: { in: userIds }, ...inCourse }, select: { evaluatorId: true }, distinct: ["evaluatorId"] });
   for (const r of hosted) past.set(r.taId, "staff");
   for (const r of marker) past.set(r.evaluatorId, "staff");
   for (const r of [...booked, ...marked]) past.set(r.studentId, "student");
