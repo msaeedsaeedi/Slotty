@@ -18,7 +18,8 @@ The values the commands need (subnets, security group, cluster) are in
 \code{infra/aws/app/tf.sh slotty output github_actions_variables}.
 
 \subsection{The standalone account (ADR-037)}
-Production moves to a standalone account in \code{ap-southeast-2} (issue \#135). It has no root
+Production runs in a standalone account in \code{ap-southeast-2} since 2026-11-25 (issues \#135,
+\#137); \code{slotty-prod} is kept read-only until it is retired. It has no root
 user and no member role: sign in to the console with the account's AWS login, and get CLI
 credentials with \code{aws login --profile uniflow} (temporary, refreshed by the CLI). Commands
 for it use \code{--profile uniflow --region ap-southeast-2}.
@@ -30,6 +31,25 @@ aws freetier get-account-plan-state --profile uniflow --region us-east-1
 It reports the plan (\code{FREE} or \code{PAID}), the remaining credits and the Free plan's end
 (2027-05-24). Upgrade to the Paid plan in AWS Settings before either runs out: the upgrade keeps
 the remaining credits, and on the Free plan production stops when they're gone.
+
+\paragraph{The move, 2026-11-25.} With nobody using either system:
+\begin{enumerate}
+  \item Checked the old outbox (nothing pending, no bookings due), then scaled slotty-prod's
+    worker to 0.
+  \item Set the old database read-only
+    (\code{ALTER DATABASE slotty SET default\_transaction\_read\_only = on}).
+  \item Emptied the new database's \code{public} schema and streamed
+    \code{pg\_dump -Fc --no-owner --no-privileges} into
+    \code{pg\_restore --single-transaction --exit-on-error} through SSM tunnels: 133~s.
+  \item Compared every table (row count and a hash of every row): all 30 identical, 8,676 rows.
+  \item Started the new web and worker, which were held at 0 since the rehearsal so a copy could
+    never send anything.
+  \item Smoke-tested, then redirected the old hostname in Cloudflare.
+\end{enumerate}
+The PostgreSQL 17 client and the Session Manager plugin are unpacked from their packages into
+\code{\textasciitilde/.local/opt} (no sudo). Docker can't reach WSL-local tunnel ports. To roll
+back before the redirect: \code{ALTER DATABASE slotty SET default\_transaction\_read\_only = off}
+and scale the old worker to 1.
 
 \begin{risk}
   In this account, never: activate \emph{advanced features}, which can't be undone and makes us
@@ -212,7 +232,7 @@ shell holds \code{DATABASE\_URL}: treat it as full database access. Afterwards a
 without the variable and redeploy, so Exec is off.
 
 \subsection{Support mail is not arriving}
-\code{support@slotty.msaeedsaeedi.com} is forwarded by Cloudflare Email Routing (ADR-021). Two
+\code{support@uniflow.msaeedsaeedi.com} is forwarded by Cloudflare Email Routing (ADR-021). Two
 places to check. DNS: the domain's MX records must point to \code{route1/2/3.mx.cloudflare.net}
 (\src{infra/aws/app/dns.tf}; look them up with any DNS tool). Cloudflare: \ui{Email}
 \textrightarrow{} \ui{Email Routing} on \code{msaeedsaeedi.com} must have the rule for the

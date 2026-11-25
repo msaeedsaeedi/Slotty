@@ -50,9 +50,11 @@ An AWS Organization separates Uniflow from the other workloads of the management
 
 \section{Request path}\label{sec:aws-request-path}
 \begin{enumerate}
-  \item \textbf{Route 53} answers for \code{slotty.msaeedsaeedi.com}, a subdomain delegated from
+  \item \textbf{Route 53} answers for \code{uniflow.msaeedsaeedi.com}, a subdomain delegated from
     the parent zone at Cloudflare by four NS records. A CAA record allows only Amazon to issue
-    certificates for it.
+    certificates for it. The old name, \code{slotty.msaeedsaeedi.com}, is a proxied Cloudflare
+    record with a Redirect Rule: a 301 to the same path and query on \code{uniflow.} (\#134), so
+    invite, reset and calendar links sent before the move keep working.
   \item \textbf{CloudFront} terminates TLS (ACM certificate, TLS 1.2 minimum, HTTP/2 and HTTP/3),
     redirects HTTP to HTTPS and adds HSTS (two years), \code{nosniff}, \code{X-Frame-Options: DENY}
     and a strict referrer policy. \route{/_next/static/*} is cached at the edge (content-hashed,
@@ -74,7 +76,7 @@ An AWS Organization separates Uniflow from the other workloads of the management
 \end{decision}
 
 \begin{auditnote}
-  \code{curl -I https://slotty.msaeedsaeedi.com/login} returns 200 with
+  \code{curl -I https://uniflow.msaeedsaeedi.com/login} returns 200 with
   \code{strict-transport-security}; the API Gateway URL (output \code{api_endpoint}) returns 403
   for \route{/login}, because it lacks the secret header.
 \end{auditnote}
@@ -146,9 +148,9 @@ instead points OpenSSL's trust store at the bundle (\envvar{SSL_CERT_FILE}) and 
 \end{decision}
 
 \section{Email}
-\aws{Amazon SES} sends from \code{no-reply@slotty.msaeedsaeedi.com} through the worker's existing
+\aws{Amazon SES} sends from \code{no-reply@uniflow.msaeedsaeedi.com} through the worker's existing
 SMTP transport (port 587, STARTTLS). The domain identity has Easy DKIM (three CNAME records), a
-custom MAIL FROM domain \code{mail.slotty.msaeedsaeedi.com} with SPF, and a DMARC policy of
+custom MAIL FROM domain \code{mail.uniflow.msaeedsaeedi.com} with SPF, and a DMARC policy of
 \code{p=quarantine} with strict DKIM alignment. A configuration set, the domain's default,
 publishes bounces, complaints and rejections to the alerts SNS topic; the account-level
 suppression list stops further sends to bounced or complaining addresses. The SMTP credentials
