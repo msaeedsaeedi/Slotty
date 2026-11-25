@@ -7,7 +7,7 @@ could expose or change that data.
 
 Report it privately at **Security → Report a vulnerability**
 (<https://github.com/msaeedsaeedi/Uniflow/security/advisories/new>), or email
-support@slotty.msaeedsaeedi.com with "Security" in the subject. Please don't open a public issue,
+support@uniflow.msaeedsaeedi.com with "Security" in the subject. Please don't open a public issue,
 and don't test against other people's real accounts or data.
 
 You'll get a reply within 3 days. Fixes for confirmed problems ship as a patch release; we credit
