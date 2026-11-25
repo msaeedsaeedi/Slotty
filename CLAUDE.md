@@ -34,12 +34,12 @@ Uniflow: demo scheduling and evaluation for university courses. System documenta
 
 ## Deployment
 - Application: merge a release PR into `master` (docs ch. 9); `.github/workflows/deploy.yml` builds both ARM64 images (`docker-bake.hcl`), runs migrations as a one-off ECS task when `prisma/migrations` changed, rolls out web and worker and checks `/health` reports the new release (`infra/aws/deploy.sh`, ADR-022).
-- Infrastructure: Terraform in `infra/aws/org` (management account), `infra/aws/account` (the standalone account, ADR-037) and `infra/aws/app`, run through `infra/aws/app/tf.sh <slotty|uniflow>` (slotty-prod, us-east-1; or the standalone account, ap-southeast-2). Always show `terraform plan` and get approval before `apply`; never apply unreviewed.
+- Infrastructure: Terraform in `infra/aws/org` (management account), `infra/aws/account` (the standalone account, ADR-037) and `infra/aws/app`, run through `infra/aws/app/tf.sh uniflow` (production, the standalone account in ap-southeast-2). The `slotty` deployment (slotty-prod, us-east-1) was retired on 2026-11-25; only its final snapshot remains. Always show `terraform plan` and get approval before `apply`; never apply unreviewed.
 - Migrations must keep the previous release working (expand, then contract in a later release): rollback does not undo them.
 
 ## Decided (don't re-ask; propose a superseding ADR instead)
 - AWS architecture and its trade-offs are ADR-001… in docs chapter 14 (`docs/chapters/14-decisions.tex`).
-- Budget is $55/month for slotty-prod (ADR-030), enforced by SCPs and AWS Budgets; estimate cost changes in docs chapter 12.
+- Budget is $55/month for the production account (ADR-030, ADR-037), watched by AWS Budgets; it runs on the AWS Free plan's credits until the upgrade (#146). Estimate cost changes in docs chapter 12.
 - No RDS Proxy or transaction-mode pooler: the worker needs LISTEN/NOTIFY.
 
 ## Never

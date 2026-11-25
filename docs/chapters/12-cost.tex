@@ -1,7 +1,10 @@
 \chapter{Cost model}\label{ch:cost}
 \chapterstatus{complete}{2026-11-16}{AWS Price List API (us-east-1), \src{infra/aws/app/variables.tf}}
 
-The budget is \$55 a month for the \code{slotty-prod} account (ADR-030) (\cref{sec:aws-guardrails}). The
+Production runs in the standalone account (ADR-037), whose usage budget is also \$55 a month
+(\src{infra/aws/account}); \code{slotty-prod} was retired on 2026-11-25 and now costs only its
+final snapshot, a few cents. The table below is the us-east-1 estimate the design started from
+(ADR-030). The
 estimate below uses on-demand list prices for us-east-1, checked against the AWS Price List API on
 2026-11-16, and 730 hours a month. Fargate Spot has no list price; its line assumes the usual
 discount of about 70\,\%.

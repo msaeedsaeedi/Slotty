@@ -1,10 +1,15 @@
 \chapter{AWS platform}\label{ch:aws}
 \chapterstatus{complete}{2026-11-16}{\src{infra/aws/org}, \src{infra/aws/app}, \src{Dockerfile}}
 
-Uniflow runs in its own AWS account, \code{slotty-prod}, in us-east-1. Everything in this chapter
-is created by Terraform from \src{infra/aws}; nothing was built by hand except the two steps AWS
-requires a person for (the SES production-access request and the DNS delegation from
-Cloudflare). \Cref{fig:aws} shows the whole deployment.
+Uniflow runs in a standalone AWS account in \code{ap-southeast-2} (ADR-037), built from the
+same Terraform as before. Until 2026-11-25 it ran in \code{slotty-prod}, a member account in
+us-east-1 of the organization described below. That account was retired the same day: every
+resource was destroyed, and only the final database snapshot \code{slotty-final} is kept. The
+architecture in this chapter is unchanged apart from the region, the names (\code{uniflow}), and
+the guardrails, which ADR-037 replaces. Everything is created by Terraform from \src{infra/aws};
+nothing was built by hand except the steps AWS or Cloudflare require a person for (the SES
+production-access request, the DNS delegation and the redirect from the old hostname).
+\Cref{fig:aws} shows the whole deployment.
 
 \begin{figure}[p]
   \centering
@@ -15,6 +20,11 @@ Cloudflare). \Cref{fig:aws} shows the whole deployment.
 \end{figure}
 
 \section{Accounts and guardrails}\label{sec:aws-guardrails}
+This section describes the retired \code{slotty-prod} setup. The standalone account has no
+organization of ours: AWS manages its organization and guardrails, and \src{infra/aws/account}
+holds its state bucket and budget (ADR-037). The management account's organization below still
+exists, holding only the emptied \code{slotty-prod} account and its final snapshot.
+
 An AWS Organization separates Uniflow from the other workloads of the management account.
 \src{infra/aws/org} manages it, applied with the management account's credentials:
 

@@ -2,6 +2,9 @@
 \chapterstatus{draft}{2026-11-21}{\src{infra/aws}, \src{infra/aws/deploy.sh}}
 
 \section{Access}
+Production is the standalone account (\cref{sec:ops-standalone}). \code{slotty-prod} was retired on
+2026-11-25. Its access below is only needed to restore its final snapshot.
+
 Operators reach \code{slotty-prod} from the management account; nobody has a user in it.
 \begin{description}
   \item[Console] Sign in to the management account, then \emph{Switch role} to account
@@ -17,9 +20,9 @@ region         = us-east-1
 The values the commands need (subnets, security group, cluster) are in
 \code{infra/aws/app/tf.sh slotty output github_actions_variables}.
 
-\subsection{The standalone account (ADR-037)}
+\subsection{The standalone account (ADR-037)}\label{sec:ops-standalone}
 Production runs in a standalone account in \code{ap-southeast-2} since 2026-11-25 (issues \#135,
-\#137); \code{slotty-prod} is kept read-only until it is retired. It has no root
+\#137). It has no root
 user and no member role: sign in to the console with the account's AWS login, and get CLI
 credentials with \code{aws login --profile uniflow} (temporary, refreshed by the CLI). Commands
 for it use \code{--profile uniflow --region ap-southeast-2}.
@@ -50,6 +53,21 @@ The PostgreSQL 17 client and the Session Manager plugin are unpacked from their 
 \code{\textasciitilde/.local/opt} (no sudo). Docker can't reach WSL-local tunnel ports. To roll
 back before the redirect: \code{ALTER DATABASE slotty SET default\_transaction\_read\_only = off}
 and scale the old worker to 1.
+
+\paragraph{Retiring slotty-prod, 2026-11-25.} Once the new account served production:
+\begin{enumerate}
+  \item Turned off the old database's deletion protection
+    (\code{aws rds modify-db-instance --no-deletion-protection}).
+  \item Deleted the images in its ECR repository, since Terraform can't delete a repository
+    that still holds images.
+  \item Ran \code{infra/aws/app/tf.sh slotty plan -destroy}, reviewed it (131 resources), and applied
+    it. RDS took the final snapshot \code{slotty-final} first: 8 minutes for the database.
+  \item Swept the account: no instances, volumes, addresses, NAT, ECS, ECR, CloudFront, API
+    Gateway, hosted zones, customer KMS keys, log groups or buckets remain.
+\end{enumerate}
+To restore it, restore \code{slotty-final} (PostgreSQL 17.9, encrypted) into a new instance in
+\code{slotty-prod}, or copy it out first. Closing the member account would delete the snapshot
+after AWS's 90-day window.
 
 \begin{risk}
   In this account, never: activate \emph{advanced features}, which can't be undone and makes us
