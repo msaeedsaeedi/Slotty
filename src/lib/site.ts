@@ -3,7 +3,7 @@
  * invite emails. Mail to the support address is forwarded to the product owner's inbox by
  * Cloudflare Email Routing; its MX records are in Route 53 (infra/aws/app/dns.tf, ADR-021).
  */
-export const SUPPORT_EMAIL = "support@slotty.msaeedsaeedi.com";
+export const SUPPORT_EMAIL = "support@uniflow.msaeedsaeedi.com";
 
 /** The university this deployment serves. */
 export const INSTITUTION = "FAST-NUCES";
