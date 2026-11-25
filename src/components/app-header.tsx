@@ -3,7 +3,8 @@ import { BarChart3, CalendarClock, LogOut, Shield, UserRound } from "lucide-reac
 import { UniflowMark } from "@/components/uniflow-mark";
 import { FeedbackButton } from "@/components/feedback-button";
 import { LiveBell } from "@/components/live-bell";
-import { ConnectionIndicator } from "@/components/pwa";
+import { ConnectionIndicator } from "@/components/connection-indicator";
+import { offlineOwner } from "@/server/offline-owner";
 import { Button } from "@/components/ui/button";
 import type { Actor } from "@/server/services/access";
 import { myRoleKinds } from "@/server/services/courses";
@@ -57,7 +58,7 @@ export async function AppHeader({ user }: { user: Actor }) {
           )}
         </nav>
         <div className="ml-auto flex items-center gap-1">
-          <ConnectionIndicator renderedAt={new Date().toISOString()} />
+          <ConnectionIndicator owner={offlineOwner(user.id)} renderedAt={new Date().toISOString()} />
           {!outsideCourses && <FeedbackButton />}
           <LiveBell initial={unread} />
           <Link href="/account" className="hidden max-w-40 truncate text-sm text-muted-foreground hover:text-foreground sm:inline">

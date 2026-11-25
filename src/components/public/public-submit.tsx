@@ -8,9 +8,9 @@ import { useSubmitState } from "@/components/action-form";
  * its arrow. Same pending and offline handling as SubmitButton.
  */
 export function PublicSubmit({ children }: { children: React.ReactNode }) {
-  const { pending, online } = useSubmitState();
+  const { pending, online, offlineHint } = useSubmitState();
   return (
-    <button type="submit" disabled={pending || !online} title={!online ? "You're offline" : undefined} className="lp-btn lp-btn-primary lp-btn-lg w-full disabled:opacity-70">
+    <button type="submit" disabled={pending || !online} title={!online ? offlineHint : undefined} className="lp-btn lp-btn-primary lp-btn-lg w-full disabled:opacity-70">
       {pending && <Loader2 aria-hidden className="size-4 animate-spin" />}
       {children}
       {!pending && (

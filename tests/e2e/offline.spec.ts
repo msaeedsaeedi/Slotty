@@ -132,23 +132,63 @@ test("saved pages work offline and on a stalled or failing server, read-only and
   await down.stop();
 });
 
-test("a submit whose connection drops says so, keeps the input, and doesn't show the error page", async ({ browser }) => {
+test("a submit whose connection drops is Unconfirmed, keeps the input, and doesn't show the error page", async ({ browser }) => {
   const page = await login(browser, "ria@e2e.test");
   const context = page.context();
   await open(page, "/account");
   await context.route("**/account", (route) => (route.request().method() === "POST" ? route.abort("internetdisconnected") : route.fallback()));
   await page.getByLabel("Name").fill("Ria Renamed");
   await page.getByRole("button", { name: "Save", exact: true }).first().click();
-  await expect(page.getByText(/Couldn't reach Uniflow, so this may not have gone through/)).toBeVisible();
+  // Unconfirmed, not an error: the change may have happened (#161).
+  const unconfirmed = page.locator('[data-state="unconfirmed"]');
+  await expect(unconfirmed).toHaveText("Couldn't confirm — check before trying again");
   await expect(page.getByText("Something went wrong on this page")).toHaveCount(0);
   await expect(page.getByLabel("Name")).toHaveValue("Ria Renamed");
   await context.unroute("**/account");
 
-  // Offline, submit buttons are disabled: nothing is queued.
+});
+
+test("offline, a submit stays focusable, says why, and sends nothing", async ({ browser }) => {
+  const page = await login(browser, "ria@e2e.test");
+  const context = page.context();
+  await open(page, "/account");
+  let posts = 0;
+  await context.route("**/account", (route) => {
+    if (route.request().method() === "POST") posts++;
+    return route.fallback();
+  });
   await context.setOffline(true);
-  await expect(page.getByRole("button", { name: "Save", exact: true }).first()).toBeDisabled();
+  await expect(page.getByRole("status").filter({ hasText: "Offline" })).toBeVisible();
+  // aria-disabled, not disabled: focusable, with the reason in its name (#161).
+  const save = page.getByRole("button", { name: /^Save\b.*needs a connection$/ }).first();
+  await expect(save).toHaveAttribute("aria-disabled", "true");
+  await expect(save).toHaveAttribute("data-offline", "blocked");
+  await save.focus();
+  await expect(save).toBeFocused();
+  // Playwright waits for aria-disabled controls to become enabled; a person can still tap it.
+  await save.click({ force: true });
+  await expect(page.getByText("Needs a connection", { exact: true })).toBeVisible();
+  expect(posts).toBe(0);
   await context.setOffline(false);
-  await expect(page.getByRole("button", { name: "Save", exact: true }).first()).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Save", exact: true }).first()).not.toHaveAttribute("aria-disabled");
+  await context.unroute("**/account");
+});
+
+test("a short drop doesn't flicker the offline state", async ({ browser }) => {
+  const page = await login(browser, "ria@e2e.test");
+  const context = page.context();
+  await open(page, "/dashboard");
+  // Record every connection state the page root goes through.
+  await page.evaluate(() => {
+    const seen: string[] = ((window as unknown as { seen: string[] }).seen = []);
+    new MutationObserver(() => seen.push(document.documentElement.dataset.connection ?? "")).observe(document.documentElement, { attributes: true, attributeFilter: ["data-connection"] });
+  });
+  await context.setOffline(true);
+  await page.waitForTimeout(1000);
+  await context.setOffline(false);
+  await page.waitForTimeout(2500);
+  expect(await page.evaluate(() => (window as unknown as { seen: string[] }).seen)).not.toContain("offline");
+  await expect(page.getByRole("status").filter({ hasText: "Offline" })).toHaveCount(0);
 });
 
 test("saved pages and drafts don't outlive the account: sign-out, and another account signing in", async ({ browser }) => {
@@ -213,14 +253,16 @@ test("marks typed offline survive a closed tab and save on reconnect, as a draft
   await ta.getByLabel("Reason for marking before the demo").fill("Demoed early by arrangement");
   await ta.getByRole("button", { name: "Start marking" }).click();
   await ta.getByLabel("Functionality").fill("4");
-  await expect(ta.getByText("Draft saved")).toBeVisible();
+  await expect(ta.getByText("Saved", { exact: true })).toBeVisible();
   const markUrl = new URL(ta.url()).pathname + new URL(ta.url()).search;
   const context = ta.context();
 
   // Offline: typing goes on, is kept on this device, and the tab is closed before it saves.
   await context.setOffline(true);
   await ta.getByLabel("Feedback for the student").fill("Typed offline");
-  await expect(ta.getByText("Offline — kept on this device")).toBeVisible();
+  await expect(ta.getByText("Saved on this device", { exact: true })).toBeVisible();
+  // The header counts it and lists it with a link to the student's row (#161).
+  await expect(ta.getByRole("status").filter({ hasText: "1 waiting" })).toBeVisible();
   const stored = () => ta.evaluate(() => new Promise<number>((r) => { const q = indexedDB.open("uniflow-drafts"); q.onsuccess = () => { try { const c = q.result.transaction("drafts").objectStore("drafts").count(); c.onsuccess = () => { r(c.result); q.result.close(); }; } catch { r(0); } }; q.onerror = () => r(0); }));
   await expect.poll(stored).toBe(1);
   await ta.close();
@@ -230,7 +272,7 @@ test("marks typed offline survive a closed tab and save on reconnect, as a draft
   const again = await context.newPage();
   await open(again, markUrl);
   await expect(again.getByLabel("Feedback for the student")).toHaveValue("Typed offline");
-  await expect(again.getByText("Draft saved")).toBeVisible();
+  await expect(again.getByText("Saved", { exact: true })).toBeVisible();
   await expect(again.getByText(/This device has unsaved marks/)).toHaveCount(0);
   await again.reload();
   await expect(again.getByLabel("Feedback for the student")).toHaveValue("Typed offline");
