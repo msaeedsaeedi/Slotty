@@ -10,11 +10,14 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { ActionState } from "@/server/action-utils";
 import type { Flow } from "@/domain/analytics";
-import { useConnection, whenReachable } from "@/components/pwa";
+import { connectionNow, NEEDS_CONNECTION, reportUnreachable, useConnection, whenReachable, type OfflinePolicy } from "@/components/connection";
+import { NetworkButton } from "@/components/ui/network-button";
 import { openSurvey } from "@/components/survey";
 import { trackStep } from "@/lib/analytics";
 
 type Action = (state: ActionState, formData: FormData) => Promise<ActionState>;
+/** The form's last result: the action's, or Unconfirmed when the request got no answer (#161). */
+type FormState = ActionState | { ok: false; error: string; unconfirmed: true };
 
 /** Pending state of the enclosing ActionForm (submits are dispatched by hand, so useFormStatus can't see them). */
 const PendingContext = createContext(false);
@@ -71,20 +74,22 @@ export function ActionForm({
   // Toasts and navigation run when the action resolves rather than in an effect,
   // so they still happen if the refreshed page no longer renders this form
   // (e.g. the slot a student just booked leaves the picker).
-  const [state, formAction, pending] = useActionState(async (prev: ActionState, fd: FormData) => {
+  const [state, formAction, pending] = useActionState(async (prev: FormState, fd: FormData): Promise<FormState> => {
     if (track) trackStep(track, "submit");
     let result: ActionState;
     try {
-      result = await action(prev, fd);
+      result = await action(prev && "unconfirmed" in prev ? null : prev, fd);
     } catch (err) {
-      // A dropped connection: say so here instead of the error page, keep what was typed,
-      // and never retry by itself — the change may or may not have reached the server.
+      // A dropped connection: Unconfirmed, not an error — the change may already have
+      // happened, so calling it an error would invite a second booking or submit. Keep what
+      // was typed, never retry by itself, and refresh once Uniflow answers to show the truth.
       if (!isNetworkError(err)) throw err;
       if (track) trackStep(track, "error");
-      if (compact) toast.error(UNREACHABLE);
+      reportUnreachable();
+      if (compact) toast.warning(UNCONFIRMED);
       stopWaiting.current?.();
       stopWaiting.current = whenReachable(() => router.refresh());
-      return { ok: false as const, error: UNREACHABLE };
+      return { ok: false as const, error: UNCONFIRMED, unconfirmed: true as const };
     }
     if (track && result) trackStep(track, result.ok ? "done" : "error");
     if (result?.ok) {
@@ -114,6 +119,11 @@ export function ActionForm({
         // uncontrolled fields after a form action, which wiped what people typed
         // when a save failed validation (or after saving a draft).
         e.preventDefault();
+        // Actions that need Uniflow are never queued (ADR-038): with no connection, don't send.
+        if (connectionNow() !== "online") {
+          toast(NEEDS_CONNECTION, { id: "needs-connection" });
+          return;
+        }
         const by = (e.nativeEvent as SubmitEvent).submitter;
         if (confirm && !confirmed.current) {
           submitter.current = by;
@@ -126,7 +136,7 @@ export function ActionForm({
       }}
     >
       <PendingContext.Provider value={pending}>
-        <FieldErrorsContext.Provider value={(state && !state.ok && state.fieldErrors) || NO_FIELD_ERRORS}>{children}</FieldErrorsContext.Provider>
+        <FieldErrorsContext.Provider value={(state && !state.ok && "fieldErrors" in state && state.fieldErrors) || NO_FIELD_ERRORS}>{children}</FieldErrorsContext.Provider>
       </PendingContext.Provider>
       {confirm && (
         <Dialog open={asking} onOpenChange={setAsking}>
@@ -155,7 +165,7 @@ export function ActionForm({
         </Dialog>
       )}
       {!compact && state && !state.ok && (
-        <Alert variant="destructive" className="mt-3">
+        <Alert variant={"unconfirmed" in state ? "warning" : "destructive"} data-state={"unconfirmed" in state ? "unconfirmed" : "error"} className="mt-3">
           <AlertDescription>{state.error}</AlertDescription>
         </Alert>
       )}
@@ -165,8 +175,8 @@ export function ActionForm({
 
 const NO_FIELD_ERRORS: Record<string, string> = {};
 
-/** Shown when a submit didn't reach Uniflow: whether it took effect is unknown. */
-export const UNREACHABLE = "Couldn't reach Uniflow, so this may not have gone through. Check once you're back online before trying again.";
+/** Unconfirmed (#161): a submit got no answer, so whether it took effect is unknown. */
+export const UNCONFIRMED = "Couldn't confirm — check before trying again";
 
 /** The request never got an answer (offline, connection dropped), as opposed to an error from the server. */
 function isNetworkError(err: unknown) {
@@ -181,16 +191,27 @@ export function useSubmitState() {
   const { pending: nativePending } = useFormStatus();
   const pending = useContext(PendingContext) || nativePending;
   const { canSubmit } = useConnection();
-  return { pending, online: canSubmit, offlineHint: "Needs a connection" };
+  return { pending, online: canSubmit, offlineHint: NEEDS_CONNECTION };
 }
 
-/** Submit button with a pending spinner. Disabled while offline or on a saved copy: changes are never queued for later. */
-export function SubmitButton({ children, ...props }: ComponentProps<typeof Button>) {
-  const { pending, online, offlineHint } = useSubmitState();
+/**
+ * Submit button with a pending spinner. Policy `network` by default (#161): when Uniflow
+ * can't be reached it shows Offline (focusable, reason announced, click blocked) and
+ * nothing is queued. `offline="local"` is for submits that work without the server.
+ */
+export function SubmitButton({ children, offline = "network", ...props }: Omit<ComponentProps<typeof NetworkButton>, "pending"> & { offline?: OfflinePolicy }) {
+  const { pending } = useSubmitState();
+  if (offline === "local") {
+    return (
+      <Button type="submit" offline="local" {...props} disabled={pending || props.disabled}>
+        {pending && <Loader2 className="animate-spin" />}
+        {children}
+      </Button>
+    );
+  }
   return (
-    <Button type="submit" {...props} disabled={pending || !online || props.disabled} title={!online ? offlineHint : props.title}>
-      {pending && <Loader2 className="animate-spin" />}
+    <NetworkButton type="submit" pending={pending} {...props}>
       {children}
-    </Button>
+    </NetworkButton>
   );
 }

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { AlertTriangle, Check, ChevronLeft, ChevronRight, CircleAlert, CloudOff, Loader2, MapPin, UserRound } from "lucide-react";
 import { saveDraftAction, sheetAttendanceAction, submitManyAction } from "@/app/actions/evaluations";
 import { ActionForm, SubmitButton } from "@/components/action-form";
-import { useOnline } from "@/components/pwa";
+import { reportReachable, reportUnreachable, useConnection, useNetworkGuard } from "@/components/connection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PrivateNotes, type VisibleNote } from "@/components/private-notes";
@@ -15,7 +15,7 @@ import { formatLeft, formatUntil } from "@/domain/demo-day";
 import { hasMarkPrecision, MARK_DECIMALS } from "@/domain/evaluation";
 import { REASON_MAX_LENGTH } from "@/domain/text";
 import { cn } from "@/lib/utils";
-import { deleteDraft, draftsFor, putDraft, type StoredDraft } from "@/lib/draft-store";
+import { announceDrafts, deleteDraft, draftKey, draftsFor, putDraft, type StoredDraft } from "@/lib/draft-store";
 
 export interface SheetRow {
   student: { id: string; name: string; email: string };
@@ -93,7 +93,12 @@ interface Draft {
   earlyMarkReason: string;
 }
 
-type SaveState = { kind: "idle" } | { kind: "dirty" } | { kind: "saving" } | { kind: "saved"; at: string } | { kind: "error"; message: string };
+/**
+ * One row's sync state (#161): `dirty` typed and kept on this device, `local` kept on this
+ * device because Uniflow couldn't be reached, `saving` on its way, `saved` reached Uniflow,
+ * `error` refused by Uniflow (needs attention; not retried by itself).
+ */
+type SaveState = { kind: "idle" } | { kind: "dirty" } | { kind: "local" } | { kind: "saving" } | { kind: "saved"; at: string } | { kind: "error"; message: string };
 
 interface RowState {
   bookingStatus: SheetRow["booking"] extends infer B ? (B extends { status: infer S } ? S : never) | null : never;
@@ -157,7 +162,7 @@ function problems(d: Draft, criteria: Criterion[], maxMarks: number): Record<str
 }
 
 export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOnSubmit, holdHours = null, embedded, mode, isToday, title, timezoneLabel, initialBookingId, now: serverNow, links }: Props) {
-  const online = useOnline();
+  const { online } = useConnection();
   const [now, setNow] = useState(() => new Date(serverNow).getTime());
   const [drafts, setDrafts] = useState<Draft[]>(() => rows.map(draftOf));
   const [state, setState] = useState<RowState[]>(() =>
@@ -237,6 +242,8 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
             return;
           }
           patchState(i, { save: { kind: "saving" } });
+          const key = draftKey(offlineOwner, assignment.id, row.student.id);
+          announceDrafts({ type: "syncing", key, on: true });
           const r = await saveDraftAction({
             assignmentId: assignment.id,
             studentId: row.student.id,
@@ -248,10 +255,24 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
             privateNotes: d.privateNotes,
             noBookingReason: d.noBookingReason || undefined,
             earlyMarkReason: d.earlyMarkReason || undefined,
-          }).catch(() => ({ ok: false as const, error: "Couldn't reach Uniflow. Your marks are kept on this device — they'll save when you're back online." }));
+          })
+            .then((res) => {
+              reportReachable();
+              return res;
+            })
+            .catch(() => {
+              reportUnreachable();
+              return null;
+            })
+            .finally(() => announceDrafts({ type: "syncing", key, on: false }));
+          if (r === null) {
+            // Not an error: the marks stay on this device and save when Uniflow answers.
+            patchState(i, { save: { kind: "local" } });
+            return;
+          }
           if (r.ok) {
             base.current[i] = fingerprint(d, r.value.status, criteria.length > 0);
-            if (!timers.current.has(i) && !again.current.has(i)) local(() => deleteDraft(offlineOwner, assignment.id, row.student.id));
+            if (!timers.current.has(i) && !again.current.has(i)) local(() => deleteDraft(offlineOwner, assignment.id, row.student.id).then(() => announceDrafts({ type: "changed" })));
             patchState(i, {
               evaluationId: r.value.evaluationId,
               evalStatus: r.value.status,
@@ -290,22 +311,36 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
     schedule(i);
   };
 
-  // Retry failed saves when the connection comes back.
+  // Save what's kept on this device once Uniflow answers again. A refusal by Uniflow
+  // (`error`) needs attention and isn't retried by itself.
   useEffect(() => {
     if (!online) return;
     stateRef.current.forEach((s, i) => {
-      if (s.save.kind === "error" && !Object.keys(problems(draftsRef.current[i], criteria, assignment.maxMarks)).length) void save(i);
+      if (s.save.kind === "local" && !Object.keys(problems(draftsRef.current[i], criteria, assignment.maxMarks)).length) void save(i);
     });
   }, [online, save, criteria, assignment.maxMarks]);
 
-  // Write unsaved rows to this device whenever they change.
+  // Write unsaved rows to this device whenever they change, with what the header's list
+  // needs (state, the student's name, the link to their row).
   useEffect(() => {
     state.forEach((s, i) => {
-      if (s.save.kind !== "dirty" && s.save.kind !== "error") return;
-      const entry = { owner: offlineOwner, assignmentId: assignment.id, studentId: rows[i].student.id, draft: drafts[i], base: base.current[i], at: Date.now() };
-      local(() => putDraft(entry));
+      if (s.save.kind !== "dirty" && s.save.kind !== "local" && s.save.kind !== "error") return;
+      const student = rows[i].student;
+      const entry = {
+        owner: offlineOwner,
+        assignmentId: assignment.id,
+        studentId: student.id,
+        draft: drafts[i],
+        base: base.current[i],
+        at: Date.now(),
+        state: s.save.kind === "error" ? ("error" as const) : ("waiting" as const),
+        message: s.save.kind === "error" ? s.save.message : undefined,
+        label: student.name,
+        href: `/courses/${assignment.courseId}/manage/assignments/${assignment.id}/mark?student=${student.id}`,
+      };
+      local(() => putDraft(entry).then(() => announceDrafts({ type: "changed" })));
     });
-  }, [state, drafts, rows, assignment.id, offlineOwner, local]);
+  }, [state, drafts, rows, assignment.id, assignment.courseId, offlineOwner, local]);
 
   // On open: bring back drafts this device kept. Those typed on top of what the server still
   // has come back and save as drafts; if the marks changed since, ask first.
@@ -330,7 +365,11 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
         else if (entry.base === base.current[i]) restore(i, entry.draft);
         else ask.push({ i, entry });
       }
-      if (ask.length) setRestorable(ask);
+      if (ask.length) {
+        setRestorable(ask);
+        // Changed elsewhere since this device kept them: the header lists them as conflicts.
+        for (const { entry } of ask) local(() => putDraft({ ...entry, state: "conflict", message: undefined }).then(() => announceDrafts({ type: "changed" })));
+      }
     });
     return () => {
       cancelled = true;
@@ -449,10 +488,10 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
       {!embedded && <TopBar links={links} assignment={assignment} title={title} />}
 
       {restorable.length > 0 && (
-        <div role="alert" className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+        <div role="alert" data-sync="conflict" className="flex flex-wrap items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
           <CloudOff className="size-4 shrink-0" aria-hidden />
           <p className="flex-1">
-            This device has unsaved marks for {restorable.map((r) => rows[r.i].student.name).join(", ")} from{" "}
+            <strong>Changed elsewhere:</strong> this device has unsaved marks for {restorable.map((r) => rows[r.i].student.name).join(", ")} from{" "}
             {new Date(Math.max(...restorable.map((r) => r.entry.at))).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}, but the
             saved marks have changed since.
           </p>
@@ -469,7 +508,7 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
             size="sm"
             variant="outline"
             onClick={() => {
-              restorable.forEach((r) => local(() => deleteDraft(offlineOwner, assignment.id, r.entry.studentId)));
+              restorable.forEach((r) => local(() => deleteDraft(offlineOwner, assignment.id, r.entry.studentId).then(() => announceDrafts({ type: "changed" }))));
               setRestorable([]);
             }}
           >
@@ -538,7 +577,7 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
               </Link>
             </p>
           </div>
-          <SaveIndicator state={st.save} online={online} />
+          <SaveIndicator state={st.save} />
         </div>
 
         {needsEarlyReason && (
@@ -963,6 +1002,8 @@ function Attendance({
 }) {
   const [pending, setPending] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  // Attendance needs Uniflow (it tells the student and changes their booking): never queued.
+  const net = useNetworkGuard();
   const set = async (s: "BOOKED" | "COMPLETED" | "NO_SHOW") => {
     setPending(true);
     setConfirming(false);
@@ -980,8 +1021,9 @@ function Attendance({
           type="button"
           disabled={pending || locked}
           aria-pressed={status === "COMPLETED"}
-          onClick={() => void set(status === "COMPLETED" ? "BOOKED" : "COMPLETED")}
-          className={cn("flex items-center gap-1 rounded-md px-3 py-1", status === "COMPLETED" ? "bg-emerald-600 text-white" : "hover:bg-muted")}
+          {...net.props}
+          onClick={net.guard(() => void set(status === "COMPLETED" ? "BOOKED" : "COMPLETED"))}
+          className={cn("flex items-center gap-1 rounded-md px-3 py-1 data-[offline=blocked]:cursor-not-allowed data-[offline=blocked]:text-offline", status === "COMPLETED" ? "bg-emerald-600 text-white" : "hover:bg-muted")}
         >
           <Check className="size-3.5" /> Present
         </button>
@@ -989,8 +1031,9 @@ function Attendance({
           type="button"
           disabled={pending || locked}
           aria-pressed={status === "NO_SHOW"}
-          onClick={() => (status === "NO_SHOW" ? void set("BOOKED") : setConfirming(true))}
-          className={cn("flex items-center gap-1 rounded-md px-3 py-1", status === "NO_SHOW" ? "bg-foreground text-background" : "hover:bg-muted")}
+          {...net.props}
+          onClick={net.guard(() => (status === "NO_SHOW" ? void set("BOOKED") : setConfirming(true)))}
+          className={cn("flex items-center gap-1 rounded-md px-3 py-1 data-[offline=blocked]:cursor-not-allowed data-[offline=blocked]:text-offline", status === "NO_SHOW" ? "bg-foreground text-background" : "hover:bg-muted")}
         >
           <UserRound className="size-3.5" /> No-show
         </button>
@@ -1000,7 +1043,7 @@ function Attendance({
       {confirming && (
         <span className="flex flex-wrap items-center gap-2 rounded-lg bg-muted px-2 py-1 text-xs">
           {name} will get an email saying they missed their demo.
-          <Button type="button" size="xs" variant="destructive" onClick={() => void set("NO_SHOW")}>
+          <Button type="button" size="xs" variant="destructive" offline="network" onClick={() => void set("NO_SHOW")}>
             Mark no-show
           </Button>
           <Button type="button" size="xs" variant="ghost" onClick={() => setConfirming(false)}>
@@ -1012,32 +1055,44 @@ function Attendance({
   );
 }
 
-function SaveIndicator({ state, online }: { state: SaveState; online: boolean }) {
-  if (!online && state.kind !== "idle" && state.kind !== "saved") {
-    return (
-      <span className="flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
-        <CloudOff className="size-3.5" /> Offline — kept on this device, saves when you reconnect
-      </span>
-    );
-  }
+/**
+ * One row's sync state (#161, agreed design: step 4 on #160), styled through `data-sync`:
+ * Saved on this device (neutral dot), Syncing (spinner), Saved (success colour for 2 s,
+ * then nothing), or the server's message when it refused the marks (needs attention).
+ */
+function SaveIndicator({ state }: { state: SaveState }) {
+  const savedAt = state.kind === "saved" ? state.at : null;
+  const [faded, setFaded] = useState<string | null>(null);
+  useEffect(() => {
+    if (!savedAt) return;
+    const t = setTimeout(() => setFaded(savedAt), 2000);
+    return () => clearTimeout(t);
+  }, [savedAt]);
+  const fresh = savedAt !== null && faded !== savedAt;
   switch (state.kind) {
     case "dirty":
+    case "local":
+      return (
+        <span data-sync="saved-local" className="flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
+          <span className="size-1.5 rounded-full bg-offline" aria-hidden /> Saved on this device
+        </span>
+      );
     case "saving":
       return (
-        <span className="flex items-center gap-1 text-xs text-muted-foreground" role="status">
-          <Loader2 className="size-3.5 animate-spin" /> Saving…
+        <span data-sync="syncing" className="flex items-center gap-1 text-xs text-muted-foreground" role="status">
+          <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden /> Syncing
         </span>
       );
     case "saved":
-      return (
-        <span className="flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400" role="status">
-          <Check className="size-3.5" /> Draft saved
+      return fresh ? (
+        <span data-sync="synced" className="flex items-center gap-1 text-xs text-success" role="status">
+          <Check className="size-3.5" aria-hidden /> Saved
         </span>
-      );
+      ) : null;
     case "error":
       return (
-        <span className="flex max-w-xs items-center gap-1 text-xs text-destructive" role="alert">
-          <CircleAlert className="size-3.5 shrink-0" /> {state.message}
+        <span data-sync="error" className="flex max-w-xs items-center gap-1 text-xs text-destructive" role="alert">
+          <CircleAlert className="size-3.5 shrink-0" aria-hidden /> {state.message}
         </span>
       );
     default:
