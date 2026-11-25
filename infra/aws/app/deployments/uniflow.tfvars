@@ -15,8 +15,9 @@ github_oidc_subject_prefix = "repo:msaeedsaeedi@144554925/Uniflow@1310919958"
 # ap-southeast-2: the same build as slotty-prod's us-east-1 image (variables.tf).
 nat_ami_id = "ami-04b81362eeedc935e"
 
-# false until CI has pushed the first image to this account's ECR.
-launch = false
+# Services run tasks. Set before the first release (v1.0.0-beta.5): until its deploy pushes the
+# image, tasks fail to start on the placeholder `bootstrap` tag, then the deploy replaces them.
+launch = true
 
 # AWS Free plan limits (until the upgrade in #146): only Free Tier instance types (arm64 ones in
 # ap-southeast-2: t4g.micro/small, t9g.micro/small; checked 2026-11-25), and fewer days of RDS
