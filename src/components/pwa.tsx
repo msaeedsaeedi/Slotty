@@ -2,10 +2,12 @@
 
 import { trackFeature } from "@/lib/analytics";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { useRouter } from "next/navigation";
 import { BellRing, Download, WifiOff, X } from "lucide-react";
 import { toast } from "sonner";
 import { subscribePushAction, unsubscribePushAction } from "@/app/actions/push";
 import { Button } from "@/components/ui/button";
+import { deleteAllDrafts } from "@/lib/draft-store";
 
 // ─── Connectivity ─────────────────────────────────────────────────────────────
 
@@ -18,26 +20,158 @@ function subscribeOnline(cb: () => void) {
   };
 }
 
-/** True while the browser reports no connection (always true during SSR). */
+/** True while the browser reports a connection (always true during SSR). */
 export function useOnline() {
   return useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
+}
+
+// Saved copy: the service worker answered this page from its saved copy because the server
+// was slow, unreachable or failing, even though the browser may think it's online.
+let savedCopy = false;
+let askedWorker = false;
+const savedCopyListeners = new Set<() => void>();
+const setSavedCopy = (value: boolean) => {
+  if (savedCopy === value) return;
+  savedCopy = value;
+  savedCopyListeners.forEach((l) => l());
+};
+
+function subscribeSavedCopy(cb: () => void) {
+  savedCopyListeners.add(cb);
+  const sw = navigator.serviceWorker;
+  if (!askedWorker && sw?.controller) {
+    askedWorker = true;
+    sw.addEventListener("message", (e: MessageEvent) => {
+      if (e.data?.type === "uniflow:saved-copy") setSavedCopy(Boolean(e.data.savedCopy));
+    });
+    sw.controller.postMessage({ type: "saved-copy?" });
+  }
+  return () => savedCopyListeners.delete(cb);
+}
+
+/**
+ * Whether Uniflow can take changes right now: the browser is online and this page isn't a
+ * saved copy. Changes are never queued, so submit buttons are disabled otherwise.
+ */
+export function useConnection() {
+  const online = useOnline();
+  const saved = useSyncExternalStore(subscribeSavedCopy, () => savedCopy, () => false);
+  return { online, savedCopy: saved, canSubmit: online && !saved };
+}
+
+/** Is the server answering? A cheap request that no cache answers. */
+async function reachable() {
+  try {
+    return (await fetch("/health/live", { cache: "no-store" })).ok;
+  } catch {
+    return false;
+  }
+}
+
+const PROBE_MS = 5000;
+
+/**
+ * Call `cb` once Uniflow can be reached again: on the browser's `online` event, or when a
+ * probe every few seconds gets an answer (a flaky connection never fires `online`).
+ * Returns a cancel function.
+ */
+export function whenReachable(cb: () => void): () => void {
+  let done = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const check = async () => {
+    clearTimeout(timer);
+    if (done) return;
+    if (navigator.onLine && (await reachable())) {
+      if (done) return;
+      done = true;
+      window.removeEventListener("online", check);
+      cb();
+      return;
+    }
+    timer = setTimeout(check, PROBE_MS);
+  };
+  window.addEventListener("online", check);
+  timer = setTimeout(check, PROBE_MS);
+  return () => {
+    done = true;
+    clearTimeout(timer);
+    window.removeEventListener("online", check);
+  };
 }
 
 /**
  * Explains offline mode: the page is the last saved copy and changes are paused.
  * Changes are never queued — replaying a booking later could hit a slot that has
- * since been taken or cancelled.
+ * since been taken or cancelled. When Uniflow can be reached again, the page
+ * refreshes itself.
  */
-export function OfflineBanner({ renderedAt }: { renderedAt: string }) {
-  const online = useOnline();
-  if (online) return null;
-  const saved = new Date(renderedAt).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+/**
+ * The one offline signifier: a small label in the header, hidden while Uniflow answers.
+ * "Offline" when the browser has no network, "Can't connect" when it has one but Uniflow
+ * doesn't answer (the page is then a saved copy). The tooltip says when the page was made.
+ * When Uniflow answers again, the page refreshes itself. #161 turns this into the full
+ * indicator (sync counts, the panel of items that need attention).
+ */
+export function ConnectionIndicator({ renderedAt }: { renderedAt: string }) {
+  const { online, savedCopy: copy } = useConnection();
+  const router = useRouter();
+  const showing = !online || copy;
+  useEffect(() => {
+    if (!showing) return;
+    return whenReachable(() => {
+      setSavedCopy(false);
+      router.refresh();
+    });
+  }, [showing, router]);
+  const updated = new Date(renderedAt).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  // The live region stays mounted so screen readers announce the change when it appears.
   return (
-    <div role="status" className="sticky top-14 z-20 border-b border-amber-300 bg-amber-50 px-4 py-2 text-center text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-      <WifiOff className="mr-1.5 inline size-4 align-text-bottom" aria-hidden />
-      You&apos;re offline — showing what was saved {saved}. Booking and other changes are paused until you reconnect.
-    </div>
+    <span role="status" className="contents">
+      {showing && (
+        <span title={`Updated ${updated}`} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground">
+          <WifiOff className="size-3.5" aria-hidden />
+          {online ? "Can't connect" : "Offline"}
+          <span className="sr-only">, page updated {updated}</span>
+        </span>
+      )}
+    </span>
   );
+}
+
+// ─── Saved data belongs to one account ───────────────────────────────────────
+
+// Not cleared by sign-in: only by sign-out (Clear-Site-Data) or a different account.
+const OWNER_KEY = "uniflow.offline-owner";
+
+function clearSavedPageCaches() {
+  if (!("caches" in window)) return;
+  caches
+    .keys()
+    .then((keys) => keys.filter((k) => /^(uniflow|slotty)-pages-/.test(k)).forEach((k) => caches.delete(k)))
+    .catch(() => {});
+}
+
+/**
+ * In every signed-in page: if this device's saved pages and marking drafts belong to
+ * another account (someone else signed in without signing out first), forget them.
+ * `owner` is an opaque per-account key (`offlineOwner`), never the user id.
+ */
+export function OfflineOwner({ owner }: { owner: string }) {
+  useEffect(() => {
+    let previous: string | null;
+    try {
+      previous = localStorage.getItem(OWNER_KEY);
+    } catch {
+      return;
+    }
+    if (previous === owner) return;
+    clearSavedPageCaches();
+    void deleteAllDrafts();
+    try {
+      localStorage.setItem(OWNER_KEY, owner);
+    } catch {}
+  }, [owner]);
+  return null;
 }
 
 // ─── Service worker ──────────────────────────────────────────────────────────
@@ -63,12 +197,13 @@ export function ServiceWorkerRegistrar() {
   return null;
 }
 
-/** On the sign-in page: forget pages saved for whoever used this browser before. */
+/**
+ * On the sign-in, invite and password pages: forget pages saved for whoever used this
+ * browser before. Marking drafts stay: they may be this person's unsaved work after their
+ * session expired; `OfflineOwner` removes them if a different account signs in.
+ */
 export function ClearSavedPages() {
-  useEffect(() => {
-    if (!("caches" in window)) return;
-    caches.keys().then((keys) => keys.filter((k) => /^(uniflow|slotty)-pages-/.test(k)).forEach((k) => caches.delete(k)));
-  }, []);
+  useEffect(clearSavedPageCaches, []);
   return null;
 }
 
@@ -127,7 +262,7 @@ export function InstallHint() {
       <div className="flex-1 space-y-2">
         <p className="font-medium">Install Uniflow on this device</p>
         <p className="text-muted-foreground">
-          Open it like an app, see your demo details offline, and get reminders as notifications.
+          Open it like an app, see the demo details you&apos;ve opened even offline, and get reminders as notifications.
           {ios && !prompt && " On iPhone or iPad: tap the Share button, then “Add to Home Screen”."}
         </p>
         {prompt && (
@@ -260,6 +395,7 @@ export function PushPrompt({ publicKey }: { publicKey: string | null }) {
       <BellRing className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
       <div className="flex-1 space-y-2">
         <p>Get your demo reminders and any changes as notifications on this device?</p>
+        <p className="text-xs text-muted-foreground">They need a connection when they&apos;re sent. For a reminder that works offline, add the demo to your calendar.</p>
         <div className="flex gap-2">
           <Button size="sm" onClick={enable}>
             Turn on

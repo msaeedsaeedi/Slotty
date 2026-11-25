@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { ActionState } from "@/server/action-utils";
 import type { Flow } from "@/domain/analytics";
-import { useOnline } from "@/components/pwa";
+import { useConnection, whenReachable } from "@/components/pwa";
 import { openSurvey } from "@/components/survey";
 import { trackStep } from "@/lib/analytics";
 
@@ -63,12 +63,29 @@ export function ActionForm({
     onSuccessRef.current = onSuccess;
   });
 
+  // After a submit that never reached Uniflow, refresh once it can be reached again,
+  // so the page shows whether the change went through.
+  const stopWaiting = useRef<(() => void) | null>(null);
+  useEffect(() => () => stopWaiting.current?.(), []);
+
   // Toasts and navigation run when the action resolves rather than in an effect,
   // so they still happen if the refreshed page no longer renders this form
   // (e.g. the slot a student just booked leaves the picker).
   const [state, formAction, pending] = useActionState(async (prev: ActionState, fd: FormData) => {
     if (track) trackStep(track, "submit");
-    const result = await action(prev, fd);
+    let result: ActionState;
+    try {
+      result = await action(prev, fd);
+    } catch (err) {
+      // A dropped connection: say so here instead of the error page, keep what was typed,
+      // and never retry by itself — the change may or may not have reached the server.
+      if (!isNetworkError(err)) throw err;
+      if (track) trackStep(track, "error");
+      if (compact) toast.error(UNREACHABLE);
+      stopWaiting.current?.();
+      stopWaiting.current = whenReachable(() => router.refresh());
+      return { ok: false as const, error: UNREACHABLE };
+    }
     if (track && result) trackStep(track, result.ok ? "done" : "error");
     if (result?.ok) {
       if (result.message) toast.success(result.message);
@@ -148,19 +165,30 @@ export function ActionForm({
 
 const NO_FIELD_ERRORS: Record<string, string> = {};
 
-/** Whether the surrounding form is submitting, and whether the browser is online (for custom submit buttons). */
+/** Shown when a submit didn't reach Uniflow: whether it took effect is unknown. */
+export const UNREACHABLE = "Couldn't reach Uniflow, so this may not have gone through. Check once you're back online before trying again.";
+
+/** The request never got an answer (offline, connection dropped), as opposed to an error from the server. */
+function isNetworkError(err: unknown) {
+  return !navigator.onLine || err instanceof TypeError;
+}
+
+/**
+ * Whether the surrounding form is submitting, and whether Uniflow can take changes now
+ * (`online`: the browser is online and the page isn't a saved copy), for custom submit buttons.
+ */
 export function useSubmitState() {
   const { pending: nativePending } = useFormStatus();
   const pending = useContext(PendingContext) || nativePending;
-  const online = useOnline();
-  return { pending, online };
+  const { canSubmit } = useConnection();
+  return { pending, online: canSubmit, offlineHint: "Needs a connection" };
 }
 
-/** Submit button with a pending spinner. Disabled while offline: changes are never queued for later. */
+/** Submit button with a pending spinner. Disabled while offline or on a saved copy: changes are never queued for later. */
 export function SubmitButton({ children, ...props }: ComponentProps<typeof Button>) {
-  const { pending, online } = useSubmitState();
+  const { pending, online, offlineHint } = useSubmitState();
   return (
-    <Button type="submit" {...props} disabled={pending || !online || props.disabled} title={!online ? "You're offline" : props.title}>
+    <Button type="submit" {...props} disabled={pending || !online || props.disabled} title={!online ? offlineHint : props.title}>
       {pending && <Loader2 className="animate-spin" />}
       {children}
     </Button>

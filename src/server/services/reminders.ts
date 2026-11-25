@@ -58,6 +58,11 @@ async function claim(b: DueBooking, field: "reminder24hAt" | "reminder1hAt" | "r
  * Rescheduling or a staff move creates a new booking, so its reminders start afresh; cancelled
  * bookings get none.
  */
+/** A reminder push is useless once the demo has started: expire it then, and deliver it now. */
+function pushUntilStart(b: DueBooking) {
+  return { pushExpiresAt: b.slot.startsAt, pushUrgent: true };
+}
+
 export async function queueDueReminders(now = new Date()): Promise<number> {
   let queued = 0;
   for (const w of WINDOWS) {
@@ -70,6 +75,7 @@ export async function queueDueReminders(now = new Date()): Promise<number> {
           title: `Reminder: ${b.assignment.title} demo ${w.label}`,
           body: `Your ${b.assignment.course.code} demo is ${w.label}.\n\n${details(b)}`,
           link: pageOf(b),
+          ...pushUntilStart(b),
           category: "reminder",
         });
         return true;
@@ -89,6 +95,7 @@ export async function queueDueReminders(now = new Date()): Promise<number> {
         title: `Today: ${b.assignment.title} demo at ${fmtTime(b.slot.startsAt, tz, "12h")}`,
         body: `Your ${b.assignment.course.code} demo is today.\n\n${details(b)}`,
         link: pageOf(b),
+          ...pushUntilStart(b),
       });
       return true;
     });
@@ -104,6 +111,7 @@ export async function queueDueReminders(now = new Date()): Promise<number> {
         title: `${b.assignment.title} demo in ${LAST_REMINDER_MINUTES} minutes`,
         body: `${venueOf(b)} · with ${b.slot.ta.name}${meetingLine(b)}`,
         link: pageOf(b),
+          ...pushUntilStart(b),
         inApp: false,
         email: false,
         push: true,

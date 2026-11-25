@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { fmt, fmtRange, fmtTimeRange, tzLabel } from "@/lib/time";
 import { requireUser } from "@/server/auth/session";
+import { offlineOwner } from "@/server/offline-owner";
 import { load } from "@/server/page-utils";
 import { getStudentBookingControls } from "@/server/services/bookings";
 import { getMarkingSheet, getStudentRecord } from "@/server/services/evaluations";
@@ -106,6 +107,7 @@ export default async function StudentRecordPage({ params, searchParams }: PagePr
             )}
           </div>
           <MarkingSheet
+            offlineOwner={offlineOwner(user.id)}
             key={`${ev?.status}:${row.booking?.status}`}
             embedded
             assignment={{ id: assignmentId, title: assignment.title, maxMarks: assignment.maxMarks, courseId, courseCode: assignment.course.code }}

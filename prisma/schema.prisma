@@ -587,6 +587,11 @@ model PushMessage {
   title          String
   body           String
   link           String?
+  /// After this the push is useless (a reminder for a demo that has started): sent with a
+  /// TTL that ends here, and dropped instead of sent once it has passed. Null: 1 hour TTL.
+  expiresAt      DateTime?
+  /// Sent with `Urgency: high`, so phones in battery saving deliver it now (reminders).
+  urgent         Boolean     @default(false)
   status         EmailStatus @default(PENDING)
   attempts       Int         @default(0)
   lastError      String?

@@ -38,6 +38,7 @@ export function AddToCalendar({ options, size = "sm", variant = "outline" }: { o
         <DropdownMenuItem asChild>
           <a href={options.ics}>Download .ics file (Apple, others)</a>
         </DropdownMenuItem>
+        <p className="max-w-60 px-2 py-1.5 text-xs text-muted-foreground">The .ics file adds alerts 1 hour and 10 minutes before, which work offline.</p>
       </DropdownMenuContent>
     </DropdownMenu>
   );
