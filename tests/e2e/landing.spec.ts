@@ -132,3 +132,39 @@ test("app icons are brand files, and the old generated icon addresses still reac
   expect(preview.status()).toBe(200);
   expect(preview.headers()["content-type"]).toBe("image/png");
 });
+
+for (const view of [
+  { name: "desktop", viewport: { width: 1280, height: 800 }, isMobile: false },
+  { name: "phone", viewport: { width: 390, height: 844 }, isMobile: true },
+]) {
+  test(`"How it works" stays put while the page scrolls through its steps (${view.name}, #126)`, async ({ browser }) => {
+    const context = await browser.newContext({ viewport: view.viewport, isMobile: view.isMobile, hasTouch: view.isMobile, reducedMotion: "reduce" });
+    const page = await context.newPage();
+    await open(page, "/");
+    const section = page.locator("#how-it-works");
+    const mode = await section.getAttribute("data-scroll");
+    const top = await section.evaluate((el) => el.getBoundingClientRect().top + window.scrollY);
+    const height = await section.evaluate((el) => (el as HTMLElement).offsetHeight);
+
+    // Walk down through the section in small steps, as a scroll wheel would.
+    const seen: { tabs: number; mode: string | null; active: string | null }[] = [];
+    for (let y = top - 100; y <= top + height; y += 60) {
+      await page.evaluate((to) => window.scrollTo({ top: to, behavior: "instant" }), y);
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+      const tabs = await page.getByRole("tablist", { name: "Steps" }).evaluate((el) => el.getBoundingClientRect().top);
+      seen.push({ tabs, mode: await section.getAttribute("data-scroll"), active: await page.getByRole("tab", { selected: true }).textContent() });
+    }
+
+    // The section never switches between its scroll track and plain tabs while scrolling.
+    expect(new Set(seen.map((s) => s.mode))).toEqual(new Set([mode]));
+    if (mode === "on") {
+      // Every step is reached, and the stepper doesn't move when the step changes (it used to jump
+      // by up to 49 px, because each step's panel had a different height).
+      expect(new Set(seen.map((s) => s.active)).size).toBe(5);
+      const changes = seen.flatMap((s, i) => (i > 0 && s.active !== seen[i - 1].active ? [s.tabs - seen[i - 1].tabs] : []));
+      expect(changes).toHaveLength(4);
+      for (const moved of changes) expect(Math.abs(moved)).toBeLessThanOrEqual(1);
+    }
+    await context.close();
+  });
+}
