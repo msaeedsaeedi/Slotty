@@ -8,7 +8,7 @@ test("a signed-out visitor reads the landing page and reaches sign-in", async ({
 
   // "Invite only" opens to the support address.
   await page.getByText("Invite only").click();
-  await expect(page.getByRole("link", { name: "support@slotty.msaeedsaeedi.com" }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "support@uniflow.msaeedsaeedi.com" }).first()).toBeVisible();
 
   // The five steps are a tablist: End selects the last step and shows its panel.
   await page.getByRole("tab", { name: /Import class/ }).focus();
