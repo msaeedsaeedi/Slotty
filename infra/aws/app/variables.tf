@@ -135,6 +135,18 @@ variable "nat_ami_id" {
   default     = "ami-04cdf0e88da1d5502"
 }
 
+variable "nat_instance_type" {
+  description = "NAT instance size (arm64, for the fck-nat image). The AWS Free plan only allows Free Tier instance types (#146)."
+  type        = string
+  default     = "t4g.nano"
+}
+
+variable "db_backup_retention_days" {
+  description = "Days of automated backups (point-in-time recovery, docs ch. 10). The AWS Free plan allows fewer than 7 (#146)."
+  type        = number
+  default     = 7
+}
+
 variable "nat_mode" {
   description = "\"instance\" (fck-nat on t4g.nano, ~$7/mo) or \"gateway\" (managed NAT Gateway, ~$33/mo; also lift the SCP deny in ../org)."
   type        = string

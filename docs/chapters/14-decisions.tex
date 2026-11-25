@@ -618,7 +618,10 @@ Add one for every deliberate trade-off.
    90-day Event history (free) replaces it, the same retention. Cost Anomaly Detection and
    GuardDuty aren't available on this plan. Never activate advanced features (irreversible, and
    it makes us the organization's admin), set a spend limit (it pauses the whole project at the
-   limit) or join an organization. The account must move to the Paid plan before the credits run
+   limit) or join an organization. The Free plan also limits the build: the NAT instance must be a
+   Free Tier type (\code{t4g.micro} instead of \code{t4g.nano}) and the database keeps 1 day of
+   backups instead of 7, both set in \src{infra/aws/app/deployments/uniflow.tfvars} until the
+   upgrade (\#146). The account must move to the Paid plan before the credits run
    out or the Free plan ends (2027-05-24); the upgrade keeps the remaining credits. Users in
    Pakistan are about as far from Sydney as from Virginia. Rejected: a CI check against
    Organizations resources. AWS's SCPs already enforce it, and the real risks are console actions
