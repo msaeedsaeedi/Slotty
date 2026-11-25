@@ -6,6 +6,7 @@ Newest first. One line per revision of this document; the pull request has the d
   \toprule
   \thead{Date} & \thead{Change}\\
   \midrule
+  2026-11-25 & Release v1.0.0-beta.5: the rename to Uniflow (internal names \#133, brand \#132, documentation and repository \#136, ADR-036), sequential queries in transactions (\#95), and production's new standalone account in \code{ap-southeast-2} (\#135, ADR-037). This release deploys to the new account; users move to it at the cutover (\#134, \#137).\\
   2026-11-25 & The deploy script names task definitions and the migrate log group after the ECS cluster instead of \code{slotty}, so releases deploy to the new account (issue \#135).\\
   2026-11-25 & Standalone account built (issue \#135): state bucket and budget applied, the \code{uniflow} deployment applied in \code{ap-southeast-2} with \code{launch = false}; the Free plan's limits set a \code{t4g.micro} NAT instance and 1 day of database backups until the upgrade (\#146). Ch.~10 and ADR-037 updated.\\
   2026-11-25 & Standalone production account (issue \#135, ADR-037): \src{infra/aws/app} runs as two deployments through \src{infra/aws/app/tf.sh} (\code{slotty} in \code{us-east-1}, \code{uniflow} in \code{ap-southeast-2}), with region, names and account as variables, CloudFront's certificate from a \code{us-east-1} provider, and providers that refuse any other account; \src{infra/aws/account} adds the state bucket and usage budget. Ch.~8, 10, 11, 12 and 14 updated.\\
