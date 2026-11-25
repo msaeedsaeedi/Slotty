@@ -168,3 +168,33 @@ for (const view of [
     await context.close();
   });
 }
+
+test(`"How it works" settles on one mode at every phone height, without flickering (#126)`, async ({ browser }) => {
+  // The section picks "scroll track" or "plain tabs" from whether its content fits the screen. It
+  // used to flip between them every frame on screens just at the threshold (a 360 px-wide phone
+  // about 690–780 px tall), because the progress line only took space in one of the modes.
+  const context = await browser.newContext({ viewport: { width: 360, height: 640 }, isMobile: true, hasTouch: true, reducedMotion: "reduce" });
+  const page = await context.newPage();
+  await open(page, "/");
+  await page.locator("#how-it-works").scrollIntoViewIfNeeded();
+  const flickering: number[] = [];
+  for (let height = 640; height <= 900; height += 10) {
+    await page.setViewportSize({ width: 360, height });
+    const modes = await page.evaluate(
+      () =>
+        new Promise<string[]>((resolve) => {
+          const el = document.getElementById("how-it-works")!;
+          const seen: string[] = [];
+          const sample = () => {
+            seen.push(el.dataset.scroll ?? "");
+            if (seen.length < 20) requestAnimationFrame(sample);
+            else resolve(seen);
+          };
+          requestAnimationFrame(() => requestAnimationFrame(sample)); // let the resize settle first
+        }),
+    );
+    if (new Set(modes).size > 1) flickering.push(height);
+  }
+  expect(flickering, "viewport heights where the mode kept flipping").toEqual([]);
+  await context.close();
+});

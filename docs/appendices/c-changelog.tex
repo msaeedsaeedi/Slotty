@@ -6,7 +6,7 @@ Newest first. One line per revision of this document; the pull request has the d
   \toprule
   \thead{Date} & \thead{Change}\\
   \midrule
-  2026-11-25 & Landing page (issue \#126): ``How it works'' no longer shifts while scrolling. The five step panels share one grid cell, so the pinned block keeps one height, and the scroll-track mode is chosen from the small viewport height (\code{100svh}), so a phone's address bar can't flip it.\\
+  2026-11-25 & Landing page (issue \#126): ``How it works'' no longer shifts while scrolling. The five step panels share one grid cell, so the pinned block keeps one height, and the scroll-track mode is chosen from the small viewport height (\code{100svh}), so a phone's address bar can't flip it. The progress line keeps its space in both modes, so the mode no longer decides its own height (it flipped every frame on screens just at the threshold). Still being verified on a real phone.\\
   2026-11-25 & \code{slotty-prod} retired (issue \#135): its database snapshotted as \code{slotty-final}, all 131 resources destroyed and the account swept clean. Ch.~8, 10 and 12 updated.\\
   2026-11-25 & Hotfix v1.0.0-beta.5.1: the support address on every page is \code{support@uniflow.msaeedsaeedi.com}; the old one stopped receiving mail with the move (\#134).\\
   2026-11-25 & Production moved (issues \#134, \#137): data copied into the standalone account and verified table by table, the new web and worker started, \code{slotty.msaeedsaeedi.com} redirected to \code{uniflow.msaeedsaeedi.com} by Cloudflare, and support mail moved to \code{support@uniflow.msaeedsaeedi.com}. Ch.~3, 8 and 10 updated.\\

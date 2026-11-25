@@ -58,6 +58,8 @@ export function HowItWorks() {
       setActive((prev) => (prev === i ? prev : i));
     };
 
+    // The content's height must not depend on the mode chosen here (no element may appear or take
+    // space in one mode only), or measure() feeds back into itself through the ResizeObserver.
     const measure = () => {
       // The small viewport height (100svh), not innerHeight: a phone's address bar showing or
       // hiding mid-scroll changes innerHeight and must not flip the section between modes (#126).

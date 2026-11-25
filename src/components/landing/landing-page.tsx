@@ -24,7 +24,7 @@ export function LandingPage() {
     <div data-theme="uniflow-landing" className={`${sans.variable} ${mono.variable} flex flex-1 flex-col`}>
       {/* Without JavaScript the stepper can't switch: show every step as a list instead. */}
       <noscript>
-        <style>{`[data-theme="uniflow-landing"] .lp-tabs{display:none!important}[data-theme="uniflow-landing"] .lp-step-panels{display:block!important}[data-theme="uniflow-landing"] .lp-step-panel{display:grid!important;visibility:visible!important}[data-theme="uniflow-landing"] .lp-step-panel+.lp-step-panel{margin-top:48px}`}</style>
+        <style>{`[data-theme="uniflow-landing"] .lp-tabs{display:none!important}[data-theme="uniflow-landing"] .lp-steps-progress{display:none!important}[data-theme="uniflow-landing"] .lp-step-panels{display:block!important}[data-theme="uniflow-landing"] .lp-step-panel{display:grid!important;visibility:visible!important}[data-theme="uniflow-landing"] .lp-step-panel+.lp-step-panel{margin-top:48px}`}</style>
       </noscript>
       <MotionFlag />
       <SiteNav />

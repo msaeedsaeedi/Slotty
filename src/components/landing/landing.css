@@ -540,9 +540,15 @@
 
   /* Scroll mode (set by HowItWorks when the pinned content fits the screen): the section becomes
      a track about 70% of a screen per step, and the stepper stays under the nav. */
-  [data-theme="uniflow-landing"] .lp-steps-progress,
   [data-theme="uniflow-landing"] .lp-steps-skip {
     display: none;
+  }
+
+  /* The progress line keeps its space in both modes and is only shown in scroll mode. If it took
+     space in one mode only, the content's height would depend on the mode it decides, and on
+     screens just at the threshold the section flipped between modes every frame (#126). */
+  [data-theme="uniflow-landing"] .lp-steps-progress {
+    visibility: hidden;
   }
 
   [data-theme="uniflow-landing"] .lp-steps[data-scroll="on"] {
@@ -560,7 +566,7 @@
   }
 
   [data-theme="uniflow-landing"] .lp-steps[data-scroll="on"] .lp-steps-progress {
-    display: block;
+    visibility: visible;
   }
 
   [data-theme="uniflow-landing"] .lp-steps[data-scroll="on"] .lp-steps-skip {
