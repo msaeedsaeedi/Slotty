@@ -750,11 +750,22 @@
   }
 }
 
-/* Only the selected step shows; without JavaScript a <noscript> style in landing-page.tsx shows
-   them all. (Not the hidden attribute: Tailwind's preflight forces [hidden] to display:none
-   !important in a layer, which an unlayered rule can't undo.) */
+/* Only the selected step shows. The panels are stacked in one grid cell, so the block keeps the
+   tallest step's height and nothing above or around it moves when the step changes (#126);
+   hidden panels keep their space with visibility, which also removes them from the
+   accessibility tree. Without JavaScript a <noscript> style in landing-page.tsx lists them all.
+   (Not the hidden attribute: Tailwind's preflight forces [hidden] to display:none !important in
+   a layer, which an unlayered rule can't undo.) */
+[data-theme="uniflow-landing"] .lp-step-panels {
+  display: grid;
+}
+
+[data-theme="uniflow-landing"] .lp-step-panel {
+  grid-area: 1 / 1;
+}
+
 [data-theme="uniflow-landing"] .lp-step-panel[data-active="false"] {
-  display: none;
+  visibility: hidden;
 }
 
 /* The page behind the wrapper (overscroll) is the board too. */

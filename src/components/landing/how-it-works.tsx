@@ -27,6 +27,7 @@ export function HowItWorks() {
   const sectionRef = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
+  const vhRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<HTMLSpanElement>(null);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
   // While we scroll to a chosen step, scroll position doesn't pick steps (else they'd flicker by).
@@ -58,7 +59,10 @@ export function HowItWorks() {
     };
 
     const measure = () => {
-      const room = window.innerHeight - NAV - (window.innerWidth < 640 ? PHONE_BAR : 0) - 24;
+      // The small viewport height (100svh), not innerHeight: a phone's address bar showing or
+      // hiding mid-scroll changes innerHeight and must not flip the section between modes (#126).
+      const vh = vhRef.current?.offsetHeight || window.innerHeight;
+      const room = vh - NAV - (window.innerWidth < 640 ? PHONE_BAR : 0) - 24;
       el.dataset.scroll = content.offsetHeight <= room ? "on" : "off";
       update();
     };
@@ -158,28 +162,34 @@ export function HowItWorks() {
             <span ref={progressRef} className="block h-full origin-left bg-[var(--text-2)]" style={{ transform: "scaleX(0)" }} />
           </div>
 
-          {STEPS.map((s, i) => (
-            <div
-              key={s.label}
-              role="tabpanel"
-              id={`step-panel-${i}`}
-              aria-labelledby={`step-tab-${i}`}
-              data-active={i === active}
-              className="lp-step-panel mt-6 grid items-center gap-6 md:grid-cols-12 md:gap-10"
-            >
-              <div className="md:col-span-5">
-                <p className="lp-mono text-[11px] text-[var(--text-3)]">
-                  Step {pad(i)} · {s.role}
-                </p>
-                <p className="mt-3 max-w-[30ch] text-[20px] leading-snug text-[var(--text)] sm:text-[22px]">{s.line}</p>
+          {/* All panels share one grid cell, so the block is as tall as the tallest step and doesn't
+              move or resize as the steps change (#126); only the active one is visible. */}
+          <div className="lp-step-panels mt-6">
+            {STEPS.map((s, i) => (
+              <div
+                key={s.label}
+                role="tabpanel"
+                id={`step-panel-${i}`}
+                aria-labelledby={`step-tab-${i}`}
+                data-active={i === active}
+                className="lp-step-panel grid items-center gap-6 md:grid-cols-12 md:gap-10"
+              >
+                <div className="md:col-span-5">
+                  <p className="lp-mono text-[11px] text-[var(--text-3)]">
+                    Step {pad(i)} · {s.role}
+                  </p>
+                  <p className="mt-3 max-w-[30ch] text-[20px] leading-snug text-[var(--text)] sm:text-[22px]">{s.line}</p>
+                </div>
+                <div className="h-[260px] sm:h-[280px] md:col-span-7">
+                  <s.Visual />
+                </div>
               </div>
-              <div className="h-[260px] sm:h-[280px] md:col-span-7">
-                <s.Visual />
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
+      {/* The small viewport height, measured (see measure()). */}
+      <div ref={vhRef} aria-hidden className="pointer-events-none invisible absolute top-0 h-svh w-px" />
       {/* "Skip" lands here: the end of the scroll track */}
       <div id="how-it-works-end" aria-hidden className="absolute bottom-0 h-px w-full scroll-mt-16" />
     </section>
