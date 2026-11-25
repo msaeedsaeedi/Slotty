@@ -1,12 +1,12 @@
 # Security policy
 
-Slotty holds student names, emails, bookings, attendance and marks. Please report anything that
+Uniflow holds student names, emails, bookings, attendance and marks. Please report anything that
 could expose or change that data.
 
 ## Reporting a vulnerability
 
 Report it privately at **Security → Report a vulnerability**
-(<https://github.com/msaeedsaeedi/Slotty/security/advisories/new>), or email
+(<https://github.com/msaeedsaeedi/Uniflow/security/advisories/new>), or email
 support@slotty.msaeedsaeedi.com with "Security" in the subject. Please don't open a public issue,
 and don't test against other people's real accounts or data.
 

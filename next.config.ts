@@ -24,8 +24,18 @@ const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
   // The Docker image ships only the files the server traces (see Dockerfile).
   output: "standalone",
-  // The dev server behind Caddy at https://slotty.local (infra/Caddyfile); HMR and dev assets need this.
-  allowedDevOrigins: ["slotty.local"],
+  // The dev server behind Caddy at https://uniflow.local (infra/Caddyfile); HMR and dev assets need this.
+  allowedDevOrigins: ["uniflow.local"],
+  // App icons moved from generated routes (/icons/<kind>) to files in public/brand (#132). Installed
+  // PWAs keep the old URLs from their cached manifest until it refreshes, so point them at the files.
+  async redirects() {
+    return [
+      { source: "/icons/192", destination: "/brand/icon-192.png", permanent: false },
+      { source: "/icons/512", destination: "/brand/icon-512.png", permanent: false },
+      { source: "/icons/maskable", destination: "/brand/icon-maskable-512.png", permanent: false },
+      { source: "/icons/badge", destination: "/brand/badge-96.png", permanent: false },
+    ];
+  },
   async headers() {
     return [
       {

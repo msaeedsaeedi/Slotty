@@ -1,11 +1,11 @@
-% slottydiagrams.sty — one visual vocabulary for every diagram in the document.
+% uniflowdiagrams.sty — one visual vocabulary for every diagram in the document.
 %   Nodes:   svc (our software), aws=<category> (an AWS service), ext (outside systems), actor
 %   Groups:  account, vpc, subnet=<public|private|data>, zone (a labelled dashed boundary)
 %   Edges:   flow (request/data), async (queued or event-driven), ctrl (deploy/management)
 % AWS nodes take the category colours of the AWS architecture icons, so readers who know
 % AWS diagrams can read ours at a glance.
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{slottydiagrams}[2026/11/16 Slotty diagram styles]
+\ProvidesPackage{uniflowdiagrams}[2026/11/16 Uniflow diagram styles]
 \RequirePackage{tikz}
 \usetikzlibrary{positioning, fit, backgrounds, arrows.meta, calc, shapes.geometric,
   shapes.misc, decorations.pathreplacing, matrix, chains}

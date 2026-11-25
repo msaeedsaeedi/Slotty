@@ -35,7 +35,7 @@ export function closeMailer() {
  */
 export async function deliverPendingEmails(batchSize = 50): Promise<{ sent: number; failed: number; fetched: number }> {
   const smtp = getTransport();
-  const from = process.env.MAIL_FROM ?? "Slotty <no-reply@slotty.local>";
+  const from = process.env.MAIL_FROM ?? "Uniflow <no-reply@uniflow.local>";
   const batch = await db.emailOutbox.findMany({
     where: { status: "PENDING", sendAfter: { lte: new Date() } },
     orderBy: { createdAt: "asc" },

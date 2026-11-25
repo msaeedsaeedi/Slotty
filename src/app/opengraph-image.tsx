@@ -1,7 +1,8 @@
 import { ImageResponse } from "next/og";
 import { INSTITUTION } from "@/lib/site";
+import { UNIFLOW_MARK_PATH, UNIFLOW_MARK_VIEWBOX } from "@/components/uniflow-mark";
 
-export const alt = `Slotty: demo booking and marking for ${INSTITUTION} courses`;
+export const alt = `Uniflow: demo booking and marking for ${INSTITUTION} courses`;
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -44,16 +45,11 @@ export default function OpengraphImage() {
     (
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: BOARD, padding: "60px 72px", color: TEXT }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, fontSize: 30, fontWeight: 600 }}>
-          {/* Slotty's mark (components/slotty-mark.tsx) */}
-          <div style={{ display: "flex", gap: 6, padding: "7px 8px", borderRadius: 9, border: "2.5px solid #5d5a52" }}>
-            {[0, 1].map((i) => (
-              <div key={i} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                <div style={{ width: 11, height: 8, borderRadius: 2, background: TEXT }} />
-                <div style={{ width: 11, height: 8, borderRadius: 2, background: TEXT }} />
-              </div>
-            ))}
-          </div>
-          Slotty
+          {/* Uniflow's mark (components/uniflow-mark.tsx) */}
+          <svg width="40" height="40" viewBox={UNIFLOW_MARK_VIEWBOX} fill={TEXT}>
+            <path d={UNIFLOW_MARK_PATH} />
+          </svg>
+          Uniflow
           <div style={{ display: "flex", marginLeft: "auto", fontSize: 20, color: TEXT_3, letterSpacing: 2 }}>{INSTITUTION}</div>
         </div>
         <div style={{ display: "flex", marginTop: 44, fontSize: 88, fontWeight: 700, letterSpacing: -3, lineHeight: 0.95 }}>Demo week, without the spreadsheet.</div>

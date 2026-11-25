@@ -1,7 +1,7 @@
 \chapter{Roles and user journeys}\label{ch:journeys}
 \chapterstatus{complete}{2026-11-17}{\src{src/app}, \src{src/server/services}}
 
-How each role uses Slotty from start to finish, with the screen, the service that runs, and what the user gets back. Update this chapter whenever a flow changes.
+How each role uses Uniflow from start to finish, with the screen, the service that runs, and what the user gets back. Update this chapter whenever a flow changes.
 
 Roles are \textbf{per course} (\code{Enrollment.role}). A TA can be a student in another course (their home page then has separate \ui{Teaching} and \ui{Studying} sections), but an instructor is never a TA or a student anywhere, and students are never instructors. Only admins name instructors, and only instructors add TAs (an admin does it in a course without one). Nobody switches between student and staff within a course. The instructor manages the course; a TA manages it only when it has no instructor. Instructors usually don't take demos: they give the final check on marks. \textbf{Admin} is a separate, platform-wide role: an admin is never a member of any course.
 
@@ -9,7 +9,7 @@ Times show in the course timezone (Pakistan time for now) on each user's 12- or 
 
 \section{Visitor (not signed in)}\label{sec:journey-visitor}
 
-Accounts are invite-only, so most people first meet Slotty through an invite email or a link from
+Accounts are invite-only, so most people first meet Uniflow through an invite email or a link from
 course staff. Signed-in people opening \route{/} go straight to their home (\route{/dashboard},
 which sends admins to \route{/admin} and platform accounts to \route{/platform}).
 
@@ -19,7 +19,7 @@ which sends admins to \route{/admin} and platform accounts to \route{/platform})
   \thead{\#} & \thead{Step and screen} & \thead{Service} & \thead{What happens / feedback}\\
   \midrule
   \endhead
-  V1 & Finds out what Slotty is\newline{\color{muted}\footnotesize \route{/}} & --- (static, \src{src/components/landing}) & The landing page, styled as a departure board for demo slots. The hero shows one student booking one demo (Lab~4 of CS~2001): a pointer books 10:15 and the row flips to \ui{BOOKED}. Then: the shared-spreadsheet way demo week used to run; the five steps of one demo (a stepper that follows the scroll, with \ui{Skip}); what students, TAs and instructors each see of the same slot; the details; privacy in four facts with a link to \route{/privacy}; who makes Slotty and that it is open source; the eight questions confused users ask (four up front, four behind \ui{More questions}); and a final \ui{Sign in}. Every call to action is \ui{Sign in} or the support address: there is no sign-up. Search engines may index only \route{/} and \route{/privacy} (\src{src/app/robots.ts}).\\
+  V1 & Finds out what Uniflow is\newline{\color{muted}\footnotesize \route{/}} & --- (static, \src{src/components/landing}) & The landing page, styled as a departure board for demo slots. The hero shows one student booking one demo (Lab~4 of CS~2001): a pointer books 10:15 and the row flips to \ui{BOOKED}. Then: the shared-spreadsheet way demo week used to run; the five steps of one demo (a stepper that follows the scroll, with \ui{Skip}); what students, TAs and instructors each see of the same slot; the details; privacy in four facts with a link to \route{/privacy}; who makes Uniflow and that it is open source; the eight questions confused users ask (four up front, four behind \ui{More questions}); and a final \ui{Sign in}. Every call to action is \ui{Sign in} or the support address: there is no sign-up. Search engines may index only \route{/} and \route{/privacy} (\src{src/app/robots.ts}).\\
   V2 & Gets help\newline{\color{muted}\footnotesize \code{support@slotty.msaeedsaeedi.com}} & --- (Cloudflare Email Routing, ADR-021) & The support address is on the landing page, the sign-in pages and in invite emails. Mail to it is forwarded to the product owner's inbox; replies come from the owner's own address. A new course starts here: a TA can then create it, or an admin sets it up with its instructor.\\
   \bottomrule
 \end{xltabular}}
@@ -45,7 +45,7 @@ which sends admins to \route{/admin} and platform accounts to \route{/platform})
   S11 & Sees results\newline{\color{muted}\footnotesize Assignment page} & \code{evaluations.getMyResult} & Only released marks are shown: total, rubric rows, feedback. While staff correct unlocked marks, the student keeps seeing the released ones (marked as being corrected) and any marks question. Private notes are never shown. The \code{evaluation.finalized} notification (bell, email, push) says only that marks are out and links here.\\
   S12b & Gets help when stuck\newline{\color{muted}\footnotesize Assignment page} & \code{requests.createRequest}, \code{waitlist.joinWaitlist} & ``Need a different time? Ask course staff'' opens automatically when self-service is blocked (freeze window, no changes left, closed, nothing free); after a no-show it opens as ``Missed your demo? Ask course staff''. With every slot full, ``Notify me when a slot frees up''. After marks are released, ``Question about your marks?''.\\
   S12c & Calendar \& account\newline{\color{muted}\footnotesize Booking card, \route{/account}} & \code{calendar.bookingCalendarOptions}, \code{accounts.*} & \ui{Add to calendar} on a booking opens Google Calendar or Outlook with the demo filled in, or downloads an \code{.ics} (Apple and others). Automatic calendar sync is shown as \ui{coming soon}. The account page shows only what applies to the role: clock (12/24 h), reminder emails, device notifications, password, devices.\\
-  S12d & Installs the app / goes offline\newline{\color{muted}\footnotesize Dashboard hint, account page} & PWA (\src{src/components/pwa.tsx}, \src{public/sw.js}) & Installs Slotty to the home screen. Turns on notifications for the device (asked after the first booking, or from the account page). Offline, recently opened pages still show the demo time, room, link and TA, with a banner. Changes wait until the device reconnects.\\
+  S12d & Installs the app / goes offline\newline{\color{muted}\footnotesize Dashboard hint, account page} & PWA (\src{src/components/pwa.tsx}, \src{public/sw.js}) & Installs Uniflow to the home screen. Turns on notifications for the device (asked after the first booking, or from the account page). Offline, recently opened pages still show the demo time, room, link and TA, with a banner. Changes wait until the device reconnects.\\
   S12 & Reviews history\newline{\color{muted}\footnotesize \route{/bookings}, \route{/notifications}} & \code{listMyBookings}, \code{inbox} & Every booking, including cancelled and past ones; moved bookings say ``Rescheduled'' or ``Moved by staff'', and the others show the demo state, as on the course page. The notification feed is grouped by assignment, the bell counts only items that need the person and updates without a page refresh (\cref{sec:live-polling}), and it has ``Mark all read''.\\
   \bottomrule
 \end{xltabular}}
@@ -117,7 +117,7 @@ Admins run the platform from the web console. They are never students or staff o
 
 \section{Platform team}\label{sec:journey-platform}
 
-The product team (whoever builds Slotty) reads the evidence for what to improve. That is not the
+The product team (whoever builds Uniflow) reads the evidence for what to improve. That is not the
 admins' job: admins run the deployment. A platform account is a \textbf{dedicated account}: never
 an admin, never in a course, granted only from the command line (\code{bun run platform:grant},
 \cref{sec:ops-platform}), and invisible to the admin console (ADR-016). It lands on

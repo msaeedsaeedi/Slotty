@@ -6,6 +6,13 @@ estimate below uses on-demand list prices for us-east-1, checked against the AWS
 2026-11-16, and 730 hours a month. Fargate Spot has no list price; its line assumes the usual
 discount of about 70\,\%.
 
+\begin{todo}
+  Production moves to \code{ap-southeast-2} (ADR-037), where list prices are higher. Re-price
+  this table for that region (AWS Price List API) before the cutover (\#135). It is paid from the
+  account's Free Tier credits (\$180 on 2026-11-25) until they run out or the Free plan ends
+  (2027-05-24), whichever comes first. The account must be on the Paid plan by then.
+\end{todo}
+
 {\tablefont
 \begin{xltabular}{\linewidth}{@{}P{38mm} L r@{}}
   \toprule

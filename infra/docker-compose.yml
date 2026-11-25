@@ -1,24 +1,24 @@
 # Local development services: Postgres (same major version as production), Mailpit and Caddy.
 #   bun run infra:up      → Postgres on localhost:5432, Mailpit SMTP on :1025, inbox at http://localhost:8025,
-#                           Caddy serving https://slotty.local → `bun run dev` on :3000 (see infra/Caddyfile)
+#                           Caddy serving https://uniflow.local → `bun run dev` on :3000 (see infra/Caddyfile)
 #   bun run infra:down    (add -v to the underlying command to wipe the data volume)
 #
-# Postgres holds the dev database (slotty, .env). Tests don't use it: each run starts its own
+# Postgres holds the dev database (uniflow, .env). Tests don't use it: each run starts its own
 # throwaway Postgres with Testcontainers (tests/support/postgres.ts).
-name: slotty
+name: uniflow
 
 services:
   postgres:
     image: postgres:17
     environment:
-      POSTGRES_USER: slotty
-      POSTGRES_PASSWORD: slotty
-      POSTGRES_DB: slotty
+      POSTGRES_USER: uniflow
+      POSTGRES_PASSWORD: uniflow
+      POSTGRES_DB: uniflow
     ports: ["5432:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U slotty -d slotty"]
+      test: ["CMD-SHELL", "pg_isready -U uniflow -d uniflow"]
       interval: 2s
       retries: 30
 

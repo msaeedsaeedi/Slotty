@@ -1,6 +1,47 @@
-variable "account_role_arn" {
-  description = "Role in the slotty-prod account to manage it with (output slotty_admin_role_arn of ../org)."
+variable "region" {
+  description = "Where the app runs. CloudFront's certificate is always in us-east-1 (provider aws.us_east_1)."
   type        = string
+  default     = "us-east-1"
+}
+
+variable "account_role_arn" {
+  description = "slotty-prod: role in the member account to assume (output slotty_admin_role_arn of ../org). Null for a standalone account signed in with aws_profile."
+  type        = string
+  default     = null
+}
+
+variable "account_id" {
+  description = "The account this deployment must run in. Defaults to the one in account_role_arn."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.account_id != null || var.account_role_arn != null
+    error_message = "Set account_id (standalone account) or account_role_arn (slotty-prod)."
+  }
+}
+
+variable "aws_profile" {
+  description = "AWS CLI profile (e.g. from `aws login --profile uniflow`). Null uses the default credential chain."
+  type        = string
+  default     = null
+}
+
+variable "name" {
+  description = "Prefix for resource names, SSM paths and log groups (lowercase)."
+  type        = string
+  default     = "slotty"
+}
+
+variable "product_name" {
+  description = "Display name: the mail sender, CloudFront and API descriptions, the custom metrics namespace."
+  type        = string
+  default     = "Slotty"
+}
+
+variable "db_name" {
+  description = "Database name and master user."
+  type        = string
+  default     = "slotty"
 }
 
 variable "domain" {
@@ -92,6 +133,18 @@ variable "nat_ami_id" {
   description = "AMI of the fck-nat instance (nat_mode = \"instance\")."
   type        = string
   default     = "ami-04cdf0e88da1d5502"
+}
+
+variable "nat_instance_type" {
+  description = "NAT instance size (arm64, for the fck-nat image). The AWS Free plan only allows Free Tier instance types (#146)."
+  type        = string
+  default     = "t4g.nano"
+}
+
+variable "db_backup_retention_days" {
+  description = "Days of automated backups (point-in-time recovery, docs ch. 10). The AWS Free plan allows fewer than 7 (#146)."
+  type        = number
+  default     = 7
 }
 
 variable "nat_mode" {

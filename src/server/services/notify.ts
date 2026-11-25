@@ -37,13 +37,13 @@ export interface NotifyResult {
 
 export function renderEmail(n: { title: string; body: string; link?: string }) {
   const url = n.link ? absoluteUrl(n.link) : null;
-  const text = [n.body, url ? `\nOpen in Slotty: ${url}` : "", "\n— Slotty"].join("\n");
+  const text = [n.body, url ? `\nOpen in Uniflow: ${url}` : "", "\n— Uniflow"].join("\n");
   const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
   const html = `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:auto;padding:24px;color:#111">
 <h2 style="margin:0 0 12px;font-size:18px">${esc(n.title)}</h2>
 <p style="white-space:pre-line;line-height:1.5">${esc(n.body)}</p>
-${url ? `<p><a href="${esc(url)}" style="display:inline-block;background:#111;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none">Open in Slotty</a></p>` : ""}
-<p style="color:#888;font-size:12px;margin-top:24px">Slotty — demo scheduling &amp; evaluation</p></div>`;
+${url ? `<p><a href="${esc(url)}" style="display:inline-block;background:#111;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none">Open in Uniflow</a></p>` : ""}
+<p style="color:#888;font-size:12px;margin-top:24px">Uniflow — demo scheduling &amp; evaluation</p></div>`;
   return { text, html };
 }
 
@@ -99,10 +99,8 @@ export async function notify(tx: Tx, userIds: string[], input: NotificationInput
 export async function unseenEarlier(tx: Tx, userId: string, key: string, now = new Date()): Promise<boolean> {
   const since = new Date(now.getTime() - SUPERSEDE_MINUTES * 60_000);
   const user = await tx.user.findUnique({ where: { id: userId }, select: { email: true } });
-  const [unread, delivered] = await Promise.all([
-    tx.notification.count({ where: { userId, groupKey: key, readAt: null, createdAt: { gte: since } } }),
-    user ? tx.emailOutbox.count({ where: { to: user.email, groupKey: key, status: { not: "PENDING" }, createdAt: { gte: since } } }) : 0,
-  ]);
+  const unread = await tx.notification.count({ where: { userId, groupKey: key, readAt: null, createdAt: { gte: since } } });
+  const delivered = user ? await tx.emailOutbox.count({ where: { to: user.email, groupKey: key, status: { not: "PENDING" }, createdAt: { gte: since } } }) : 0;
   return unread > 0 && delivered === 0;
 }
 
@@ -116,11 +114,9 @@ async function supersede(tx: Tx, ids: string[], n: NotificationInput, now: Date)
   const since = new Date(now.getTime() - SUPERSEDE_MINUTES * 60_000);
   const key = n.groupKey!;
   const emails = (await tx.user.findMany({ where: { id: { in: ids } }, select: { email: true } })).map((u) => u.email);
-  const [items, pending, delivered] = await Promise.all([
-    tx.notification.findMany({ where: { userId: { in: ids }, groupKey: key, readAt: null, createdAt: { gte: since } }, select: { id: true, title: true } }),
-    tx.emailOutbox.findMany({ where: { to: { in: emails }, groupKey: key, status: "PENDING" }, select: { id: true, subject: true, text: true }, orderBy: { createdAt: "asc" } }),
-    tx.emailOutbox.count({ where: { to: { in: emails }, groupKey: key, status: { not: "PENDING" }, createdAt: { gte: since } } }),
-  ]);
+  const items = await tx.notification.findMany({ where: { userId: { in: ids }, groupKey: key, readAt: null, createdAt: { gte: since } }, select: { id: true, title: true } });
+  const pending = await tx.emailOutbox.findMany({ where: { to: { in: emails }, groupKey: key, status: "PENDING" }, select: { id: true, subject: true, text: true }, orderBy: { createdAt: "asc" } });
+  const delivered = await tx.emailOutbox.count({ where: { to: { in: emails }, groupKey: key, status: { not: "PENDING" }, createdAt: { gte: since } } });
   if (items.length) await tx.notification.deleteMany({ where: { id: { in: items.map((i) => i.id) } } });
   if (pending.length) await tx.emailOutbox.deleteMany({ where: { id: { in: pending.map((e) => e.id) } } });
   // Oldest first, keeping the history an already-replaced email carried.

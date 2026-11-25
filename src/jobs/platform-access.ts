@@ -48,7 +48,7 @@ async function main() {
     const user = await tx.user.create({
       data: {
         email,
-        name: process.env.PLATFORM_NAME?.trim() || "Slotty Platform",
+        name: process.env.PLATFORM_NAME?.trim() || "Uniflow Platform",
         status: "ACTIVE",
         platformAccess: true,
         shareUsageData: false,

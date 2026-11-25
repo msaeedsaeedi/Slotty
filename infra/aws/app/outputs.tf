@@ -1,5 +1,5 @@
 output "name_servers" {
-  description = "Add these as NS records for `slotty` in the Cloudflare zone of msaeedsaeedi.com."
+  description = "Add these as NS records for the subdomain in the Cloudflare zone of msaeedsaeedi.com."
   value       = aws_route53_zone.main.name_servers
 }
 

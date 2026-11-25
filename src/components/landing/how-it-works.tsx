@@ -6,7 +6,7 @@ import { BookVisual, ImportVisual, MarkVisual, ReleaseVisual, SlotsVisual } from
 
 const STEPS = [
   { label: "Import class", role: "TA", line: "Paste the class list. Everyone gets an invite to set a password.", Visual: ImportVisual },
-  { label: "Publish slots", role: "Staff", line: "Pick days, hours and a room. Slotty cuts them into slots.", Visual: SlotsVisual },
+  { label: "Publish slots", role: "Staff", line: "Pick days, hours and a room. Uniflow cuts them into slots.", Visual: SlotsVisual },
   { label: "Students book", role: "Student", line: "Students pick a slot and get reminders 24h and 1h before.", Visual: BookVisual },
   { label: "Mark on the day", role: "TA", line: "Mark attendance and score the rubric. The total adds itself up.", Visual: MarkVisual },
   { label: "Release marks", role: "Instructor", line: "The instructor checks the marks. Students see them only after release.", Visual: ReleaseVisual },

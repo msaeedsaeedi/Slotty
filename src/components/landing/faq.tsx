@@ -13,7 +13,7 @@ const mail = (subject: string) => (
 const FIRST: Item[] = [
   {
     q: "How do I get an account?",
-    a: "Slotty is invite-only. When your course staff add you to a course, you get an email from Slotty with a link to set your password. The link is valid for 14 days. After that, sign in with the same email.",
+    a: "Uniflow is invite-only. When your course staff add you to a course, you get an email from Uniflow with a link to set your password. The link is valid for 14 days. After that, sign in with the same email.",
   },
   {
     q: "My invite expired, or never arrived.",
@@ -46,13 +46,13 @@ const MORE: Item[] = [
   },
   {
     q: "Who sees my marks?",
-    a: "You and your course staff. Students see marks only once they're released, and corrections to released marks are recorded. Slotty's admins, who run the platform, can open any course to help.",
+    a: "You and your course staff. Students see marks only once they're released, and corrections to released marks are recorded. Uniflow's admins, who run the platform, can open any course to help.",
   },
   {
-    q: "How do I start using Slotty for my course?",
+    q: "How do I start using Uniflow for my course?",
     a: (
       <>
-        A TA can create a course and run it alone; a course with an instructor is set up by a Slotty admin. Email {mail("New course on Slotty")} with the course
+        A TA can create a course and run it alone; a course with an instructor is set up by a Uniflow admin. Email {mail("New course on Uniflow")} with the course
         code, the term and who will run it.
       </>
     ),

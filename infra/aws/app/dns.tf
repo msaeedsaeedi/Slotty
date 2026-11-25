@@ -1,5 +1,5 @@
 # Route 53 zone for the subdomain. Delegate it once from Cloudflare: add the four NS records
-# from output `name_servers` for the `slotty` name (DNS only, not proxied).
+# from output `name_servers` for the subdomain (e.g. `slotty`, `uniflow`) (DNS only, not proxied).
 # Apply this first on its own (`terraform apply -target=aws_route53_zone.main`): certificate
 # validation waits until the delegation resolves.
 
@@ -8,6 +8,7 @@ resource "aws_route53_zone" "main" {
 }
 
 resource "aws_acm_certificate" "main" {
+  provider          = aws.us_east_1
   domain_name       = var.domain
   validation_method = "DNS"
   lifecycle {
@@ -28,6 +29,7 @@ resource "aws_route53_record" "cert_validation" {
 }
 
 resource "aws_acm_certificate_validation" "main" {
+  provider                = aws.us_east_1
   certificate_arn         = aws_acm_certificate.main.arn
   validation_record_fqdns = [for r in aws_route53_record.cert_validation : r.fqdn]
 }

@@ -81,7 +81,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ vars.AWS_BUILD_ROLE_ARN }}
-          aws-region: us-east-1
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
       - uses: aws-actions/amazon-ecr-login@7290e214a610b32bc0eef81748948b6d466a8783 # v2.2.0
 
@@ -143,7 +143,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: us-east-1
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
       - name: Migrate and roll out
         run: infra/aws/deploy.sh
@@ -171,4 +171,4 @@ jobs:
           # Notes are generated from the merged PRs' labels (.github/release.yml). Created with the
           # workflow's token, so it doesn't start any other workflow.
           gh release create "$RELEASE" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "Slotty ${RELEASE#v}" --generate-notes $pre
+            --title "Uniflow ${RELEASE#v}" --generate-notes $pre

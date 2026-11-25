@@ -50,7 +50,7 @@ export function canTakeRole(
  * (instructors included) manage students and TAs.
  */
 export function canManageInstructors(actor: { isAdmin: boolean }): RuleResult {
-  return actor.isAdmin ? allow : deny("Only a Slotty admin can add, change or remove instructors (under Administration → Courses).");
+  return actor.isAdmin ? allow : deny("Only a Uniflow admin can add, change or remove instructors (under Administration → Courses).");
 }
 
 /**
@@ -63,7 +63,7 @@ export function canManageTAs(role: CourseRole | null, hasInstructor: boolean): R
   return deny(
     hasInstructor
       ? "Only the course instructor can add, change or remove TAs."
-      : "Only a Slotty admin can add, change or remove TAs in a course without an instructor.",
+      : "Only a Uniflow admin can add, change or remove TAs in a course without an instructor.",
   );
 }
 
@@ -85,8 +85,8 @@ export function canChangeCourseData(actor: { isAdmin: boolean }): RuleResult {
 export function canCreateCourse(actor: { isAdmin: boolean; isPlatform?: boolean }, roles: CourseRole[]): RuleResult {
   if (actor.isAdmin) return deny("Admins don't join courses. Create it from the admin console and name its instructor or TA.");
   if (actor.isPlatform) return deny("That account can't join courses.");
-  if (roles.includes("INSTRUCTOR")) return deny("Instructors' courses are set up by a Slotty admin. Ask an admin to create it and name you as instructor.");
-  if (roles.length > 0 && !roles.includes("TA")) return deny("Students can't create courses. If you're joining as staff, ask a Slotty admin.");
+  if (roles.includes("INSTRUCTOR")) return deny("Instructors' courses are set up by a Uniflow admin. Ask an admin to create it and name you as instructor.");
+  if (roles.length > 0 && !roles.includes("TA")) return deny("Students can't create courses. If you're joining as staff, ask a Uniflow admin.");
   return allow;
 }
 
@@ -107,7 +107,7 @@ export function canManageCourse(role: CourseRole | null, hasInstructor: boolean)
  * usage data, and the platform pages can't reach course data.
  */
 export function canGrantPlatform(user: { isAdmin: boolean; courses: string[] }): RuleResult {
-  if (user.isAdmin) return deny("is a Slotty admin. Platform access needs its own account.");
+  if (user.isAdmin) return deny("is a Uniflow admin. Platform access needs its own account.");
   if (user.courses.length > 0) return deny(`is a member of ${user.courses.join(", ")}. Platform access needs an account that isn't in any course.`);
   return allow;
 }

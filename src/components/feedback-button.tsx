@@ -36,7 +36,7 @@ export function FeedbackButton() {
               <Textarea id="feedback-message" name="message" required maxLength={FEEDBACK_MAX_LENGTH} rows={4} />
             </div>
             <fieldset className="space-y-2 text-sm">
-              <legend className="font-medium">How is Slotty working for you? (optional)</legend>
+              <legend className="font-medium">How is Uniflow working for you? (optional)</legend>
               <div className="flex flex-wrap gap-3">
                 {[1, 2, 3, 4, 5].map((n) => (
                   <label key={n} className="flex items-center gap-1.5">
@@ -48,7 +48,7 @@ export function FeedbackButton() {
             </fieldset>
             <div className="flex items-center justify-between gap-3">
               <Link href="/privacy" className="text-xs text-muted-foreground underline underline-offset-2" onClick={() => setOpen(false)}>
-                What Slotty collects
+                What Uniflow collects
               </Link>
               <SubmitButton>Send</SubmitButton>
             </div>

@@ -218,7 +218,7 @@ export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, holdHo
             privateNotes: d.privateNotes,
             noBookingReason: d.noBookingReason || undefined,
             earlyMarkReason: d.earlyMarkReason || undefined,
-          }).catch(() => ({ ok: false as const, error: "Couldn't reach Slotty. Your marks are kept here — they'll save when you're back online." }));
+          }).catch(() => ({ ok: false as const, error: "Couldn't reach Uniflow. Your marks are kept here — they'll save when you're back online." }));
           if (r.ok) {
             patchState(i, {
               evaluationId: r.value.evaluationId,
@@ -863,7 +863,7 @@ function Attendance({
   const set = async (s: "BOOKED" | "COMPLETED" | "NO_SHOW") => {
     setPending(true);
     setConfirming(false);
-    const r = await sheetAttendanceAction(bookingId, s).catch(() => ({ ok: false as const, error: "Couldn't reach Slotty." }));
+    const r = await sheetAttendanceAction(bookingId, s).catch(() => ({ ok: false as const, error: "Couldn't reach Uniflow." }));
     setPending(false);
     if (r.ok) onChange(r.value);
     else toast.error(r.error);

@@ -24,6 +24,8 @@ function bookingRows(filter: object) {
 function studentEvent(b: BookingForCalendar): CalendarEvent {
   const url = absoluteUrl(`/courses/${b.assignment.courseId}/assignments/${b.assignmentId}`);
   return {
+    // Kept from before the rename to Uniflow (#133): calendar apps match events by UID, so a
+    // new suffix would add a second copy of a demo someone already saved.
     uid: `booking-${b.id}@slotty`,
     start: b.slot.startsAt,
     end: b.slot.endsAt,
@@ -50,5 +52,5 @@ export function bookingCalendarOptions(b: BookingForCalendar) {
 export async function bookingIcs(actor: Actor, bookingId: string) {
   const [b] = await bookingRows({ id: bookingId, studentId: actor.id, status: { not: "CANCELLED" } });
   if (!b) throw new DomainError("Booking not found.", "NOT_FOUND");
-  return { filename: `demo-${b.assignment.course.code.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.ics`, ics: buildCalendar({ name: "Slotty", events: [studentEvent(b)] }) };
+  return { filename: `demo-${b.assignment.course.code.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.ics`, ics: buildCalendar({ name: "Uniflow", events: [studentEvent(b)] }) };
 }

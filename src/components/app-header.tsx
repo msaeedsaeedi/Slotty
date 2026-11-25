@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { BarChart3, CalendarClock, LogOut, Shield, UserRound } from "lucide-react";
-import { SlottyMark } from "@/components/slotty-mark";
+import { UniflowMark } from "@/components/uniflow-mark";
 import { FeedbackButton } from "@/components/feedback-button";
 import { LiveBell } from "@/components/live-bell";
 import { Button } from "@/components/ui/button";
@@ -19,8 +19,8 @@ export async function AppHeader({ user }: { user: Actor }) {
     <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4">
         <Link href={admin ? "/admin" : platform ? "/platform" : "/dashboard"} className="mr-2 flex items-center gap-2 font-semibold">
-          <SlottyMark className="size-6 text-primary" />
-          Slotty
+          <UniflowMark className="size-6 text-primary" />
+          Uniflow
         </Link>
         <nav className="flex items-center gap-1 text-sm">
           {!outsideCourses && (

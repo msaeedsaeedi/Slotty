@@ -1,8 +1,8 @@
-% slottydoc.sty — the design system for Slotty's system documentation.
+% uniflowdoc.sty — the design system for Uniflow's system documentation.
 % Typography, colour tokens, callouts, tables and the commands that tie prose to the code.
 % Every chapter uses only what's defined here, so the document stays visually coherent.
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{slottydoc}[2026/11/16 Slotty documentation style]
+\ProvidesPackage{uniflowdoc}[2026/11/16 Uniflow documentation style]
 
 % ── Page and type ────────────────────────────────────────────────────────────
 \RequirePackage[a4paper, top=26mm, bottom=28mm, inner=28mm, outer=24mm, headsep=9mm]{geometry}
@@ -24,7 +24,7 @@
 \definecolor{muted}{HTML}{5C6670}       % secondary text, captions
 \definecolor{rulegrey}{HTML}{D5DAE0}    % hairlines
 \definecolor{wash}{HTML}{F3F5F7}        % table stripes, code backgrounds
-\definecolor{accent}{HTML}{0F6E6E}      % Slotty teal: headings, links
+\definecolor{accent}{HTML}{0F6E6E}      % Uniflow teal: headings, links
 \definecolor{accentwash}{HTML}{E3F1F0}
 % Callout tones
 \definecolor{decisiontone}{HTML}{2F5FA8}
@@ -58,7 +58,7 @@
 \setkomafont{headsepline}{\color{rulegrey}}
 \clearpairofpagestyles
 \ohead{\sffamily\small\color{muted}\headmark}
-\ihead{\sffamily\small\color{muted}Slotty system documentation}
+\ihead{\sffamily\small\color{muted}Uniflow system documentation}
 \ofoot{\sffamily\small\color{muted}\pagemark}
 \setkomafont{pageheadfoot}{\normalfont}
 
@@ -99,7 +99,7 @@
 % ── Linking prose to the system ──────────────────────────────────────────────
 % Repository base for source links. Builds pass the commit: latexmk -usepretex='\def\docrev{<sha>}'.
 \providecommand{\docrev}{master}
-\newcommand{\repourl}{https://github.com/msaeedsaeedi/Slotty}
+\newcommand{\repourl}{https://github.com/msaeedsaeedi/Uniflow}
 % \src{src/domain/booking-rules.ts}: a file in the repo, linked at the documented revision.
 \newcommand{\src}[1]{\href{\repourl/blob/\docrev/#1}{\textcolor{accent}{\nolinkurl{#1}}}}
 % \code{bookSlot}: an identifier in the code (function, column, enum value). Breaks like a URL,
@@ -119,20 +119,20 @@
 
 % ── Callouts ─────────────────────────────────────────────────────────────────
 \RequirePackage[most]{tcolorbox}
-\tcbset{slottybox/.style={enhanced, breakable, sharp corners, boxrule=0pt, leftrule=2.2pt,
+\tcbset{uniflowbox/.style={enhanced, breakable, sharp corners, boxrule=0pt, leftrule=2.2pt,
   colback=wash, left=8pt, right=8pt, top=5pt, bottom=5pt, before skip=.8\baselineskip,
   after skip=.8\baselineskip, fonttitle=\sffamily\bfseries\small, coltitle=ink,
   attach title to upper={\enspace}}}
 % \begin{decision}{ADR-003} … \end{decision}: a decision with its record.
-\newtcolorbox{decision}[1]{slottybox, colframe=decisiontone, title={\color{decisiontone}Decision #1.}}
+\newtcolorbox{decision}[1]{uniflowbox, colframe=decisiontone, title={\color{decisiontone}Decision #1.}}
 % \begin{brule}{BR-B-04} … : a business rule the code enforces.
-\newtcolorbox{brule}[1]{slottybox, colframe=ruletone, title={\color{ruletone}Rule #1.}}
-\newtcolorbox{risk}{slottybox, colframe=risktone, title={\color{risktone}Risk.}}
-\newtcolorbox{note}{slottybox, colframe=notetone, title={\color{notetone}Note.}}
+\newtcolorbox{brule}[1]{uniflowbox, colframe=ruletone, title={\color{ruletone}Rule #1.}}
+\newtcolorbox{risk}{uniflowbox, colframe=risktone, title={\color{risktone}Risk.}}
+\newtcolorbox{note}{uniflowbox, colframe=notetone, title={\color{notetone}Note.}}
 % \begin{auditnote}: what an auditor should verify, and how.
-\newtcolorbox{auditnote}{slottybox, colframe=audittone, title={\color{audittone}For auditors.}}
+\newtcolorbox{auditnote}{uniflowbox, colframe=audittone, title={\color{audittone}For auditors.}}
 % \begin{todo}: content this chapter still needs. Listed in the document-status table.
-\newtcolorbox{todo}{slottybox, colframe=todotone, colback=todotone!6, title={\color{todotone}To be written.}}
+\newtcolorbox{todo}{uniflowbox, colframe=todotone, colback=todotone!6, title={\color{todotone}To be written.}}
 
 % ── Document status ──────────────────────────────────────────────────────────
 % \chapterstatus{complete|draft|stub}{last reviewed YYYY-MM-DD}{sources of truth}

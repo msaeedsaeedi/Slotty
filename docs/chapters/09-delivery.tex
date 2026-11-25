@@ -39,10 +39,10 @@ request cancels the older run. Back-merge pull requests (\code{master}, already 
 Integration and end-to-end runs each start their own throwaway PostgreSQL 17 container with
 Testcontainers (\src{tests/support/postgres.ts}), migrate it once into a template database and
 remove it when the run ends; the same code runs on a laptop and in CI, and only needs Docker.
-Integration workers each get a copy of the template (\code{slotty_test_<worker>}), so test files
+Integration workers each get a copy of the template (\code{uniflow_test_<worker>}), so test files
 run in parallel without seeing each other's rows. End-to-end tests seed their accounts into it
 before Playwright starts the web server (\src{tests/e2e/run.ts}). Helpers that wipe tables refuse
-any database whose name doesn't start with \code{slotty_test}. Durability is switched off in these
+any database whose name doesn't start with \code{uniflow_test}. Durability is switched off in these
 containers (\code{fsync=off}); they live for one run.
 
 \begin{decision}{ADR-023}
@@ -80,9 +80,9 @@ Versions follow semantic versioning. Until the pilot is signed off they are pre-
 fixes. Each sprint ends with one release (\cref{ch:changes}); an urgent fix gets a patch release
 in between.
 \begin{enumerate}
-  \item On \code{dev}, a pull request titled \emph{Release vX.Y.Z} sets \code{version} in
+  \item On \code{dev}, a pull request titled \code{chore(release): vX.Y.Z} sets \code{version} in
     \src{package.json} and adds a change-log line.
-  \item A pull request from \code{dev} into \code{master}, titled \emph{Release vX.Y.Z}, labelled
+  \item A pull request from \code{dev} into \code{master}, titled \code{chore(release): vX.Y.Z}, labelled
     \code{skip-release-notes}. Besides the usual jobs, CI's \emph{Release PR} job checks that it
     comes from \code{dev} (or a \code{hotfix/} or \code{revert-} branch), that the version differs
     from \code{master}'s, and that no tag has it yet.

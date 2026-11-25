@@ -1,16 +1,16 @@
 % System context (chapter 2).
 \begin{tikzpicture}[node distance=7mm and 12mm]
-  \node[svc=34mm, minimum height=16mm, font=\sffamily\small\bfseries] (slotty) {Slotty\\[-1pt]{\normalfont\scriptsize web app + worker}};
-  \node[actor, above left=4mm and 16mm of slotty] (student) {Student};
+  \node[svc=34mm, minimum height=16mm, font=\sffamily\small\bfseries] (uniflow) {Uniflow\\[-1pt]{\normalfont\scriptsize web app + worker}};
+  \node[actor, above left=4mm and 16mm of uniflow] (student) {Student};
   \node[actor, below=of student] (ta) {TA};
   \node[actor, below=of ta] (instr) {Instructor};
   \node[actor, below=of instr] (admin) {Admin};
-  \node[aws=business, right=22mm of slotty, yshift=12mm] (ses) {Amazon SES\\[-1pt]{\scriptsize email}};
+  \node[aws=business, right=22mm of uniflow, yshift=12mm] (ses) {Amazon SES\\[-1pt]{\scriptsize email}};
   \node[ext, below=of ses] (push) {Push services\\[-1pt]{\scriptsize Web Push}};
   \node[ext, below=of push] (cal) {Calendar apps\\[-1pt]{\scriptsize links, .ics}};
-  \foreach \a in {student, ta, instr, admin} \draw[flow] (\a.east) -- (slotty.west);
-  \draw[async] (slotty.east) -- node[edgelabel, above, sloped]{outbox} (ses.west);
-  \draw[async] (slotty.east) -- (push.west);
-  \draw[flow] (slotty.east) -- node[edgelabel, below, sloped]{links} (cal.west);
+  \foreach \a in {student, ta, instr, admin} \draw[flow] (\a.east) -- (uniflow.west);
+  \draw[async] (uniflow.east) -- node[edgelabel, above, sloped]{outbox} (ses.west);
+  \draw[async] (uniflow.east) -- (push.west);
+  \draw[flow] (uniflow.east) -- node[edgelabel, below, sloped]{links} (cal.west);
   \draw[async] (ses.north) |- ++(0,6mm) -| node[edgelabel, pos=.25]{inbox} (student.north);
 \end{tikzpicture}

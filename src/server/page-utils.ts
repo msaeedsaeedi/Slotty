@@ -16,7 +16,7 @@ export async function load<T>(promise: Promise<T>): Promise<T> {
 }
 
 /**
- * Tab titles for course and assignment pages ("QA Test Lab 2 Viva · Slotty"),
+ * Tab titles for course and assignment pages ("QA Test Lab 2 Viva · Uniflow"),
  * through the same access checks as the page; anyone without access gets the
  * plain default, so titles never leak.
  */

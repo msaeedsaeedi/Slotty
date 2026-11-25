@@ -39,7 +39,7 @@ function AddPerson({ courseId, canAddTAs }: { courseId: string; canAddTAs: boole
     <Card>
       <CardHeader>
         <CardTitle>Add someone</CardTitle>
-        <CardDescription>New people get an email to set a password. People who already use Slotty just get a notification.</CardDescription>
+        <CardDescription>New people get an email to set a password. People who already use Uniflow just get a notification.</CardDescription>
       </CardHeader>
       <CardContent>
         <ActionForm action={addMemberAction} resetOnSuccess className="space-y-3">
@@ -50,7 +50,7 @@ function AddPerson({ courseId, canAddTAs }: { courseId: string; canAddTAs: boole
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="add-name">Name</Label>
-            <Input id="add-name" name="name" maxLength={120} placeholder="Needed if they're new to Slotty" />
+            <Input id="add-name" name="name" maxLength={120} placeholder="Needed if they're new to Uniflow" />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
@@ -110,7 +110,7 @@ function ImportList({ courseId, canAddTAs }: { courseId: string; canAddTAs: bool
               </table>
               <p className="text-xs text-muted-foreground">
                 Google Classroom exports work as they are.{" "}
-                <a href={templateHref(canAddTAs)} download="slotty-class-list.csv" className="inline-flex items-center gap-1 font-medium text-foreground underline">
+                <a href={templateHref(canAddTAs)} download="uniflow-class-list.csv" className="inline-flex items-center gap-1 font-medium text-foreground underline">
                   <Download className="size-3" /> Download a template
                 </a>
               </p>

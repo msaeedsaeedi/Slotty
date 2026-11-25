@@ -51,7 +51,7 @@ Add one for every deliberate trade-off.
    is restored.}
   {Demo-day downtime would cost more than Multi-AZ (\tfvar{db_multi_az}, about \$14 more).}
 
-\adr{005}{A dedicated account with guardrail SCPs}{2026-11-16}{Accepted; budget raised to \$55 by ADR-030}
+\adr{005}{A dedicated account with guardrail SCPs}{2026-11-16}{Accepted; budget raised to \$55 by ADR-030; superseded for the standalone account by ADR-037}
   {The existing AWS account hosts other workloads; Slotty needs its own bill, blast radius and
    hard limits on spending.}
   {An AWS Organization with a \code{slotty-prod} member account, SCPs (one region, small
@@ -576,3 +576,55 @@ Add one for every deliberate trade-off.
    dependency for a few lines of shell).}
   {Merges land on \code{dev} without the pull-request route, or the image build starts depending on
    files outside its listed inputs.}
+
+\adr{036}{The product is renamed Uniflow}{2026-11-25}{Accepted}
+  {The name ``Slotty'' reads too close to an offensive word, which is a poor fit for a tool used
+   by students and staff and named in emails to them.}
+  {The product is \emph{Uniflow}, with a new mark (a ``U'' whose left arm flows in, \src{public/brand}).
+   The rename runs in steps in release v1.0.0-beta.5. Internal identifiers come first (\#133), each
+   with a one-release fallback so nobody is signed out and no notification waits. Then what users see
+   (\#132), then this document and the repository files (\#136). The hostname, mail sender,
+   AWS resource names and repository name change with the move of production to a new AWS account
+   (\#134, \#135, \#137). Until then this document keeps the live resource names
+   (\code{slotty-prod}, \code{/slotty/…}, \code{slotty.msaeedsaeedi.com}) so the runbooks still
+   match production. Past decision records and change-log lines keep the name they were written with.}
+  {Calendar entries keep their \code{@slotty} UIDs, so demos people already saved aren't duplicated.
+   Dismissed hints keep their storage keys. The old cookie and channel names, the old push message
+   and the \route{/icons/<kind>} redirects are removed later (\#138). Rejected: renaming AWS resources
+   in place, which would destroy and recreate them (including the database) for a name users never see.}
+  {The name meets a trademark objection, or the old hostname still gets meaningful traffic a term after the move.}
+
+\adr{037}{Production moves to a standalone account in ap-southeast-2}{2026-11-25}{Accepted; supersedes ADR-005 and ADR-030's SCP guardrails for the new account}
+  {A new AWS account with Free Tier promotional credits (\$180, checked with
+   \code{aws freetier get-account-plan-state}) can carry production for several months. It was
+   opened with AWS's new sign-up experience: AWS places it in an organization that AWS manages,
+   applies its own SCPs and RCPs, and assigns one region (here \code{ap-southeast-2}). The credits
+   expire immediately if the account joins or creates an AWS Organization or sets up Control Tower.
+   Compute, databases and most services are denied in \code{us-east-1}, where only global services
+   (CloudFront, ACM, Route~53, IAM, Budgets) are allowed.}
+  {The same \src{infra/aws/app} stack runs as a second deployment, \code{uniflow}, chosen by
+   \src{infra/aws/app/tf.sh}: its own backend, working directory and var files, and providers that
+   refuse any other account (\code{allowed\_account\_ids}). The region is a variable, and
+   CloudFront's certificate comes from a second provider in \code{us-east-1}. A small
+   \src{infra/aws/account} stack holds the state bucket and a usage budget, and replaces
+   \src{infra/aws/org} for this account. Nothing here uses AWS Organizations, Control Tower,
+   IAM Identity Center or the account's ``advanced features''. AWS's own SCPs already stop the
+   account accepting an organization invite or leaving its organization. A read-only IAM policy
+   simulation on 2026-11-25 found every action the stack needs allowed, the GitHub OIDC provider
+   included, so deploys keep short-lived OIDC credentials (ADR-011).}
+  {Guardrails are AWS's managed SCPs instead of ours (ADR-005's region lock, instance-size and
+   protect policies don't exist here), plus the budget alerts. The budget counts usage before
+   credits, so it shows how fast they're spent. There's no organization CloudTrail: the account's
+   90-day Event history (free) replaces it, the same retention. Cost Anomaly Detection and
+   GuardDuty aren't available on this plan. Never activate advanced features (irreversible, and
+   it makes us the organization's admin), set a spend limit (it pauses the whole project at the
+   limit) or join an organization. The Free plan also limits the build: the NAT instance must be a
+   Free Tier type (\code{t4g.micro} instead of \code{t4g.nano}) and the database keeps 1 day of
+   backups instead of 7, both set in \src{infra/aws/app/deployments/uniflow.tfvars} until the
+   upgrade (\#146). The account must move to the Paid plan before the credits run
+   out or the Free plan ends (2027-05-24); the upgrade keeps the remaining credits. Users in
+   Pakistan are about as far from Sydney as from Virginia. Rejected: a CI check against
+   Organizations resources. AWS's SCPs already enforce it, and the real risks are console actions
+   no check can see.}
+  {The account moves to the Paid plan and the credits are spent (then weigh moving back against
+   staying), or AWS changes the new experience's policies.}

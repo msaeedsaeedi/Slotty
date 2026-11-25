@@ -52,7 +52,7 @@ export function SurveyHost() {
       className="fixed inset-x-4 bottom-4 z-40 mx-auto max-w-sm rounded-xl border bg-card p-4 text-sm shadow-lg sm:right-4 sm:left-auto sm:mx-0"
     >
       {thanks ? (
-        <p role="status">Thanks — that helps us improve Slotty.</p>
+        <p role="status">Thanks — that helps us improve Uniflow.</p>
       ) : (
         <>
           <div className="flex items-start gap-2">

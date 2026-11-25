@@ -1,5 +1,5 @@
 /**
- * How much Slotty tells people, and when. One demo used to produce a dozen
+ * How much Uniflow tells people, and when. One demo used to produce a dozen
  * unread items, half of them echoing what the student had just done, so:
  *
  * - People aren't notified in-app about their own actions; the page already

@@ -1,9 +1,9 @@
-# Slotty
+# Uniflow
 
-Slotty is a scheduling and evaluation tool for university demos, vivas, and code reviews. It covers the whole demo lifecycle, **schedule → book → conduct → evaluate → record**, in one place instead of spreadsheets and chat threads.
+Uniflow is a scheduling and evaluation tool for university demos, vivas, and code reviews. It covers the whole demo lifecycle, **schedule → book → conduct → evaluate → record**, in one place instead of spreadsheets and chat threads.
 
 - **Students** see which assignments need a demo and book a free slot. They can reschedule or cancel within the course rules, get confirmations, reminders, and venue changes by email, and see their marks once they're released.
-- **TAs** set the demo rules and add their availability, which Slotty splits into slots. On the day they run from a "Today" list: mark attendance, score against a rubric, keep private notes, and submit. A TA can run a course **completely alone**; if the course has no instructor, submitting releases the marks directly.
+- **TAs** set the demo rules and add their availability, which Uniflow splits into slots. On the day they run from a "Today" list: mark attendance, score against a rubric, keep private notes, and submit. A TA can run a course **completely alone**; if the course has no instructor, submitting releases the marks directly.
 - **Instructors** see progress across the course, review TA submissions (finalize or return with a comment), and export bookings with marks as CSV.
 - **Admins** moderate. They can open any course, disable accounts, and read the audit log. Nobody needs an admin to get started.
 
@@ -17,7 +17,7 @@ Next.js 16 (App Router, Server Actions), TypeScript, PostgreSQL with Prisma 7, T
 
 | | Command | URL | Database |
 | --- | --- | --- | --- |
-| Development | `bun run dev` + `bun run worker` | https://slotty.local (Caddy) or http://localhost:3000 | `slotty` in the local Postgres (`.env`) |
+| Development | `bun run dev` + `bun run worker` | https://uniflow.local (Caddy) or http://localhost:3000 | `uniflow` in the local Postgres (`.env`) |
 | Tests | `bun run test`, `bun run test:e2e` | http://localhost:3100 (e2e) | a throwaway Postgres per run (Testcontainers) |
 
 Production runs on AWS (`infra/aws`) and runs exactly what is on `master`; see [Deploying](#deploying).
@@ -30,14 +30,16 @@ bun install
 bun run infra:up     # Postgres, Mailpit and Caddy in Docker (infra/docker-compose.yml)
 bun run db:migrate   # apply migrations
 bun run db:seed      # demo data (see below)
-bun run dev          # https://slotty.local
+bun run dev          # https://uniflow.local
 bun run worker       # in a second terminal: sends queued emails and schedules reminders
 ```
 
-Caddy serves the dev server at **https://slotty.local**, using a certificate from its own local CA (`infra/Caddyfile`). This needs a one-time setup:
+Caddy serves the dev server at **https://uniflow.local**, using a certificate from its own local CA (`infra/Caddyfile`). This needs a one-time setup:
 
-1. Add `127.0.0.1 slotty.local` to your hosts file. On WSL, edit the Windows file `C:\Windows\System32\drivers\etc\hosts` as Administrator.
+1. Add `127.0.0.1 uniflow.local` to your hosts file. On WSL, edit the Windows file `C:\Windows\System32\drivers\etc\hosts` as Administrator.
 2. Run `bun run infra:cert`, which copies Caddy's CA to `infra/caddy-root.crt`. Then trust it: on WSL, run `certutil.exe -user -addstore Root infra/caddy-root.crt` and restart the browser. The CA is kept in the `caddy_data` volume, so you only redo this if you delete that volume.
+
+**Coming from a Slotty checkout?** The Docker project, database and hostname were renamed (issue #133), so `infra:up` now creates fresh `uniflow` volumes and leaves the old `slotty` ones untouched. Stop the old containers with `docker compose -p slotty down` (this keeps their volumes), update `DATABASE_URL`, `APP_URL`, `MAIL_FROM`, `SEED_ADMIN_EMAIL` and `VAPID_SUBJECT` in `.env` from `.env.example`, then run `bun run infra:up`, `bun run db:migrate` and `bun run db:seed`. Also redo steps 1 and 2 above, because the hostname and Caddy's CA volume are new. Delete the old volumes (`docker volume rm slotty_pgdata slotty_caddy_data`) once you don't need their data.
 
 `APP_URL` in `.env` controls links in emails. Set it to `http://localhost:3000` if you skip Caddy.
 
@@ -49,10 +51,10 @@ Other database scripts: `bun run db:studio` opens Prisma Studio, and `bun run db
 
 | Email | Password | What they see |
 | --- | --- | --- |
-| `admin@slotty.local` | `admin12345` | Admin pages |
-| `prof@slotty.local` | `password123` | Instructor of CS 350 (review queue) |
-| `ta@slotty.local` | `password123` | TA of CS 350; runs CS 101 alone |
-| `student1@slotty.local` … `student6` | `password123` | Students |
+| `admin@uniflow.local` | `admin12345` | Admin pages |
+| `prof@uniflow.local` | `password123` | Instructor of CS 350 (review queue) |
+| `ta@uniflow.local` | `password123` | TA of CS 350; runs CS 101 alone |
+| `student1@uniflow.local` … `student6` | `password123` | Students |
 
 ## Tests
 
@@ -68,7 +70,7 @@ CI (`.github/workflows/ci.yml`) runs all of these on every pull request, plus a 
 
 ## Deploying
 
-`master` is production: merging a release pull request from `dev` (with a new version in `package.json`) deploys it (`.github/workflows/deploy.yml`) and, once it serves, tags `vX.Y.Z` and publishes the GitHub Release. Merging into `dev` deploys nothing. Both images are built on an ARM64 runner and pushed to ECR, then `infra/aws/deploy.sh` runs migrations as a one-off ECS task (skipped when `prisma/migrations` hasn't changed) and rolls out the web and worker services. The deploy finishes when `/health` reports the new release. Work is planned in the Slotty GitHub Project, in two-week sprints with one release each. Report security problems privately (see [SECURITY.md](SECURITY.md)). Details, runbooks and decisions are in the system documentation (chapters 8–10 and 14).
+`master` is production: merging a release pull request from `dev` (with a new version in `package.json`) deploys it (`.github/workflows/deploy.yml`) and, once it serves, tags `vX.Y.Z` and publishes the GitHub Release. Merging into `dev` deploys nothing. Both images are built on an ARM64 runner and pushed to ECR, then `infra/aws/deploy.sh` runs migrations as a one-off ECS task (skipped when `prisma/migrations` hasn't changed) and rolls out the web and worker services. The deploy finishes when `/health` reports the new release. Work is planned in the Uniflow GitHub Project, in two-week sprints with one release each. Report security problems privately (see [SECURITY.md](SECURITY.md)). Details, runbooks and decisions are in the system documentation (chapters 8–10 and 14).
 
 Building the images locally: `docker buildx bake` (see `docker-bake.hcl`).
 
@@ -87,7 +89,7 @@ prisma/                Schema, migrations, seed
 docs/                  System documentation (LaTeX): journeys, rules, architecture, AWS, operations, decisions
 ```
 
-The system documentation is one LaTeX document in `docs/` (user journeys, business rules, architecture, AWS platform, operations, how changes are made, decision records, roadmap). Build it with `bun run docs:build` → `docs/build/slotty.pdf`; CI also attaches the PDF to every run that changes `docs/`.
+The system documentation is one LaTeX document in `docs/` (user journeys, business rules, architecture, AWS platform, operations, how changes are made, decision records, roadmap). Build it with `bun run docs:build` → `docs/build/uniflow.pdf`; CI also attaches the PDF to every run that changes `docs/`.
 
 ## Key rules
 

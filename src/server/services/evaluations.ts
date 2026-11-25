@@ -419,7 +419,7 @@ export async function submitEvaluations(actor: Actor, evaluationIds: string[], n
 
 /**
  * Tell the student their marks are out. The email and push say only that, with a link: marks,
- * rubric scores and feedback stay in Slotty, behind sign-in, and never sit in an inbox, a lock
+ * rubric scores and feedback stay in Uniflow, behind sign-in, and never sit in an inbox, a lock
  * screen or the outbox (#33). Marks released again after a correction say so.
  */
 async function announceMarks(tx: Tx, evaluation: { id: string; studentId: string; assignmentId: string; assignment: { title: string; courseId: string } }) {
@@ -435,8 +435,8 @@ async function announceMarks(tx: Tx, evaluation: { id: string; studentId: string
     type: unlock ? "evaluation.updated" : "evaluation.finalized",
     title: unlock ? `Marks updated: ${title}` : `Marks released: ${title}`,
     body: unlock
-      ? `Your marks for ${course.code} — ${title} were corrected. Open Slotty to see them.`
-      : `Your marks for ${course.code} — ${title} are released. Open Slotty to see them and the feedback.`,
+      ? `Your marks for ${course.code} — ${title} were corrected. Open Uniflow to see them.`
+      : `Your marks for ${course.code} — ${title} are released. Open Uniflow to see them and the feedback.`,
     link: `/courses/${ev.assignment.courseId}/assignments/${ev.assignmentId}`,
     groupKey: marksKey(ev.id),
     // Held briefly so a quick correction replaces it instead of sending two emails.
@@ -484,7 +484,7 @@ export async function adminWithdrawEvaluation(actor: Actor, evaluationId: string
       await notify(tx, [evaluation.submittedById], {
         type: "evaluation.withdrawn",
         title: `Marks withdrawn: ${evaluation.assignment.title}`,
-        body: `A Slotty admin withdrew ${evaluation.student.name}'s marks before they were released:\n"${reason.trim()}"`,
+        body: `A Uniflow admin withdrew ${evaluation.student.name}'s marks before they were released:\n"${reason.trim()}"`,
         link: `/courses/${evaluation.assignment.courseId}/manage/assignments/${evaluation.assignmentId}/evaluate/${evaluation.studentId}`,
       });
     }

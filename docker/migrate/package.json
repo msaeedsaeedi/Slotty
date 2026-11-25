@@ -1,5 +1,5 @@
 {
-  "name": "slotty-migrate",
+  "name": "uniflow-migrate",
   "private": true,
   "description": "Just the Prisma CLI (and the dotenv its config imports) for the migrate image's `prisma migrate deploy`. Keep prisma in step with the root package.json.",
   "dependencies": {

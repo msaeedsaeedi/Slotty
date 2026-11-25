@@ -5,7 +5,7 @@
 # Used by .github/workflows/deploy.yml; it also works by hand from a checkout with the same
 # variables (values from `terraform output github_actions_variables` in infra/aws/app):
 #
-#   IMAGE_TAG=<git sha> RELEASE=v1.2.0 ECR_REPOSITORY=… ECS_CLUSTER=slotty \
+#   IMAGE_TAG=<git sha> RELEASE=v1.2.0 ECR_REPOSITORY=… ECS_CLUSTER=uniflow \
 #   ECS_SUBNETS=subnet-a,subnet-b ECS_SECURITY_GROUP=sg-… APP_URL=https://… infra/aws/deploy.sh
 #
 # RELEASE (the release tag) becomes APP_VERSION and is what /health reports; it defaults to
@@ -19,6 +19,8 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 RELEASE=${RELEASE:-$IMAGE_TAG}
+# Task-definition families and log groups are named after the cluster (local.name in infra/aws/app).
+NAME=$ECS_CLUSTER
 
 log() { printf '[deploy %3ss] %s\n' "$SECONDS" "$*"; }
 
@@ -93,7 +95,7 @@ image="$ECR_REPOSITORY:$IMAGE_TAG"
 
 # ── Migrations ──
 if needs_migrations; then
-  migrate_td=$(register slotty-migrate "$image-migrate")
+  migrate_td=$(register "$NAME-migrate" "$image-migrate")
   task=$(aws ecs run-task --cluster "$ECS_CLUSTER" --task-definition "$migrate_td" --launch-type FARGATE \
     --network-configuration "awsvpcConfiguration={subnets=[$ECS_SUBNETS],securityGroups=[$ECS_SECURITY_GROUP],assignPublicIp=DISABLED}" \
     --started-by "deploy-${IMAGE_TAG:0:20}" --query 'tasks[0].taskArn' --output text)
@@ -101,7 +103,7 @@ if needs_migrations; then
   aws ecs wait tasks-stopped --cluster "$ECS_CLUSTER" --tasks "$task"
   read -r code reason < <(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$task" \
     --query 'tasks[0].[containers[0].exitCode, stoppedReason]' --output text)
-  aws logs get-log-events --log-group-name /slotty/migrate --log-stream-name "migrate/migrate/${task##*/}" \
+  aws logs get-log-events --log-group-name "/$NAME/migrate" --log-stream-name "migrate/migrate/${task##*/}" \
     --query 'events[].message' --output text 2>/dev/null | tr '\t' '\n' || true
   if [ "$code" != "0" ]; then
     log "migrations failed (exit $code: $reason); services left on the previous release"
@@ -113,8 +115,8 @@ else
 fi
 
 # ── Services ──
-web_td=$(register slotty-web "$image")
-worker_td=$(register slotty-worker "$image")
+web_td=$(register "$NAME-web" "$image")
+worker_td=$(register "$NAME-worker" "$image")
 aws ecs update-service --cluster "$ECS_CLUSTER" --service web --task-definition "$web_td" >/dev/null
 aws ecs update-service --cluster "$ECS_CLUSTER" --service worker --task-definition "$worker_td" >/dev/null
 log "rolling out $web_td and $worker_td"

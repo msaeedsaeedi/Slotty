@@ -12,7 +12,7 @@ resource "aws_apigatewayv2_vpc_link" "main" {
 resource "aws_apigatewayv2_api" "main" {
   name          = local.name
   protocol_type = "HTTP"
-  description   = "Slotty origin (behind CloudFront)"
+  description   = "${var.product_name} origin (behind CloudFront)"
 }
 
 resource "aws_apigatewayv2_integration" "web" {

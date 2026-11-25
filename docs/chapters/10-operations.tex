@@ -15,7 +15,30 @@ source_profile = default
 region         = us-east-1
 \end{lstlisting}
 The values the commands need (subnets, security group, cluster) are in
-\code{terraform -chdir=infra/aws/app output github_actions_variables}.
+\code{infra/aws/app/tf.sh slotty output github_actions_variables}.
+
+\subsection{The standalone account (ADR-037)}
+Production moves to a standalone account in \code{ap-southeast-2} (issue \#135). It has no root
+user and no member role: sign in to the console with the account's AWS login, and get CLI
+credentials with \code{aws login --profile uniflow} (temporary, refreshed by the CLI). Commands
+for it use \code{--profile uniflow --region ap-southeast-2}.
+
+Check the credits once a month, and before any change that adds cost:
+\begin{lstlisting}[language=bash]
+aws freetier get-account-plan-state --profile uniflow --region us-east-1
+\end{lstlisting}
+It reports the plan (\code{FREE} or \code{PAID}), the remaining credits and the Free plan's end
+(2027-05-24). Upgrade to the Paid plan in AWS Settings before either runs out: the upgrade keeps
+the remaining credits, and on the Free plan production stops when they're gone.
+
+\begin{risk}
+  In this account, never: activate \emph{advanced features}, which can't be undone and makes us
+  the organization's admin; set a \emph{spend limit}, which pauses the whole project, production
+  included, when reached; create, join or accept an invitation to an AWS Organization, set up
+  Control Tower or enable IAM Identity Center, each of which ends the Free Tier credits; or buy
+  Savings Plans, Reserved Instances or Marketplace offers. AWS's own policies already block some
+  of these. The others are console actions that only care prevents.
+\end{risk}
 
 \section{Runbooks}
 \subsection{Deploy}
@@ -105,7 +128,7 @@ aws ssm start-session --profile slotty-prod --target <nat_instance_id> \
 \end{lstlisting}
 
 \subsection{Restore the database to a point in time}\label{sec:ops-restore}
-RDS keeps 7 days of point-in-time recovery. A restore always creates a \emph{new} instance; the
+RDS keeps 7 days of point-in-time recovery (in the standalone account, 1 day while it is on the AWS Free plan, \#146). A restore always creates a \emph{new} instance; the
 running one is untouched until you switch over. Use it after data loss or corruption (a bad
 migration, a mistaken bulk change); for an instance failure, RDS replaces the host by itself.
 \begin{enumerate}

@@ -11,8 +11,10 @@ A change and the messages it causes are written in \emph{one} database transacti
 from a web request. If the change rolls back, so do its messages.
 
 The worker (\src{src/jobs/worker.ts}) delivers them. It wakes as soon as a transaction that queued
-something commits, through PostgreSQL \code{LISTEN}/\code{NOTIFY} (\src{src/server/outbox-signal.ts}),
-with a slow poll as a backstop. Each row is claimed with a conditional update, so two workers share
+something commits, through PostgreSQL \code{LISTEN}/\code{NOTIFY} on the channel
+\code{uniflow_outbox} (\src{src/server/outbox-signal.ts}), with a slow poll as a backstop. For the
+release that renamed it from \code{slotty_outbox} (issue \#133), web signals both names and the
+worker listens on both, so tasks from either release reach each other during a rollout. Each row is claimed with a conditional update, so two workers share
 the work instead of duplicating it. Delivery is \emph{at least once}: a crash between sending and
 recording sends that one message again. A failed email is retried at most five times with
 exponential backoff (1, 2, 4, 8 minutes), then marked \code{FAILED} and shown to admins
@@ -41,7 +43,7 @@ request after 30 seconds, and at this scale polling costs cents (\cref{ch:cost})
   \item \code{<LiveBell>} (\src{src/components/live-bell.tsx}) checks
     \route{/api/notifications/unread} every 30 seconds while the tab is visible, straight away
     when the tab regains focus, and when a push arrives (the service worker posts
-    \code{slotty:push} to open tabs). Only the badge changes, except on \route{/notifications},
+    \code{uniflow:push} to open tabs; for one release the bell also accepts \code{slotty:push} from workers installed before the rename). Only the badge changes, except on \route{/notifications},
     \route{/dashboard} and \route{/bookings}, which reload their data when the count goes up.
     A 401 stops the polling.
   \item \code{<LiveRefresh>} reloads a whole page's data every 30 seconds on demo day
@@ -89,6 +91,17 @@ Booking is the contended path. Capacity is protected by locking the slot rows
 \enquote{one active booking per student per assignment} by a partial unique index
 (\code{booking_one_active_per_student}), so the database refuses a double booking even if two
 requests pass the checks at the same moment.
+
+Inside a transaction, queries run one after another. An interactive transaction holds a single
+connection, and node-postgres is dropping its queue for concurrent queries on one client (a
+deprecation warning today, an error in pg@9), so \code{Promise.all} over queries on \code{tx}
+is not allowed; ESLint rejects it (\src{eslint.config.mjs}, issue \#95). \code{Promise.all} on
+\code{db}, outside a transaction, is fine: the pool runs it on separate connections.
+Prisma itself still triggers the warning: inside a transaction, its query engine loads the
+relations of one query (\code{include}) in parallel on the transaction's connection. That is
+outside our code. \code{@prisma/adapter-pg} carries its own \code{pg}~8, so the upgrade to pg@9
+arrives only with a Prisma release that handles it; until then the warning is expected in the
+web and worker logs (tracked upstream, issue \#140).
 
 \section{Time}
 Times are stored in UTC and shown and entered in the course timezone (\src{src/lib/time.ts}:

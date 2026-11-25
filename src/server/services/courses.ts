@@ -131,12 +131,10 @@ export async function pastRolesHere(tx: Tx, userIds: string[], courseId: string)
   const past = new Map<string, "student" | "staff">();
   if (userIds.length === 0) return past;
   const inCourse = { assignment: { courseId } };
-  const [booked, marked, hosted, marker] = await Promise.all([
-    tx.booking.findMany({ where: { studentId: { in: userIds }, ...inCourse }, select: { studentId: true }, distinct: ["studentId"] }),
-    tx.evaluation.findMany({ where: { studentId: { in: userIds }, ...inCourse }, select: { studentId: true }, distinct: ["studentId"] }),
-    tx.slot.findMany({ where: { taId: { in: userIds }, ...inCourse }, select: { taId: true }, distinct: ["taId"] }),
-    tx.evaluation.findMany({ where: { evaluatorId: { in: userIds }, ...inCourse }, select: { evaluatorId: true }, distinct: ["evaluatorId"] }),
-  ]);
+  const booked = await tx.booking.findMany({ where: { studentId: { in: userIds }, ...inCourse }, select: { studentId: true }, distinct: ["studentId"] });
+  const marked = await tx.evaluation.findMany({ where: { studentId: { in: userIds }, ...inCourse }, select: { studentId: true }, distinct: ["studentId"] });
+  const hosted = await tx.slot.findMany({ where: { taId: { in: userIds }, ...inCourse }, select: { taId: true }, distinct: ["taId"] });
+  const marker = await tx.evaluation.findMany({ where: { evaluatorId: { in: userIds }, ...inCourse }, select: { evaluatorId: true }, distinct: ["evaluatorId"] });
   for (const r of hosted) past.set(r.taId, "staff");
   for (const r of marker) past.set(r.evaluatorId, "staff");
   for (const r of [...booked, ...marked]) past.set(r.studentId, "student");
@@ -165,7 +163,7 @@ async function screenRows(tx: Tx, courseId: string, parsed: { rows: RosterRow[];
   for (const r of parsed.rows) {
     const u = byEmail.get(r.email);
     if (u?.isAdmin) {
-      errors.push({ line: r.line, message: `${r.email} is a Slotty admin, so can't be added to a course.` });
+      errors.push({ line: r.line, message: `${r.email} is a Uniflow admin, so can't be added to a course.` });
       continue;
     }
     if (u?.platformAccess) {
@@ -233,7 +231,7 @@ export async function addMember(actor: Actor, courseId: string, input: z.input<t
   });
   const before = existing?.enrollments[0];
   const name = data.name || existing?.name;
-  if (!name) throw new DomainError("This email has no Slotty account yet. Add their name so we can invite them.");
+  if (!name) throw new DomainError("This email has no Uniflow account yet. Add their name so we can invite them.");
   const r = await importRows(actor, courseId, { rows: [{ line: 1, email: data.email, name, role: data.role, section: data.section }], errors: [] });
   if (r.errors.length) throw new DomainError(r.errors[0].message);
   if (r.unchanged) throw new DomainError(`${name} is already in this course as ${data.role === "TA" ? "a TA" : data.role.toLowerCase()}.`);

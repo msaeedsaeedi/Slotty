@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "slotty-migrate",
+      "name": "uniflow-migrate",
       "dependencies": {
         "dotenv": "18.0.10",
         "prisma": "7.10.1",

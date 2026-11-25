@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { WifiOff } from "lucide-react";
-import { SlottyMark } from "@/components/slotty-mark";
+import { UniflowMark } from "@/components/uniflow-mark";
 
 export const metadata = { title: "Offline" };
 
@@ -8,7 +8,7 @@ export const metadata = { title: "Offline" };
 export default function OfflinePage() {
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-4 px-4 py-16 text-center">
-      <SlottyMark className="size-10 text-primary" />
+      <UniflowMark className="size-10 text-primary" />
       <WifiOff className="size-6 text-muted-foreground" aria-hidden />
       <h1 className="text-xl font-semibold">You&apos;re offline</h1>
       <p className="text-sm text-muted-foreground">

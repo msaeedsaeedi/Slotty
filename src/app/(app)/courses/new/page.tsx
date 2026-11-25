@@ -35,7 +35,7 @@ export default async function NewCoursePage() {
           <ActionForm action={createCourseAction} className="space-y-5">
             <CourseFields />
             <p className="text-xs text-muted-foreground">
-              You&apos;ll be the course&apos;s TA. Instructors are added by a Slotty admin; once a course has one, TA marks go to them for
+              You&apos;ll be the course&apos;s TA. Instructors are added by a Uniflow admin; once a course has one, TA marks go to them for
               review. Without one, TA submissions are final.
             </p>
             <SubmitButton>Create course</SubmitButton>

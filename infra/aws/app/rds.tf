@@ -38,8 +38,8 @@ resource "aws_db_instance" "main" {
   engine_version = "17"
   instance_class = var.db_instance_class
 
-  db_name  = "slotty"
-  username = "slotty"
+  db_name  = var.db_name
+  username = var.db_name
   password = random_password.db.result
   port     = 5432
 
@@ -54,7 +54,7 @@ resource "aws_db_instance" "main" {
   publicly_accessible    = false
   parameter_group_name   = aws_db_parameter_group.main.name
 
-  backup_retention_period    = 7
+  backup_retention_period    = var.db_backup_retention_days
   backup_window              = "07:00-07:30"
   maintenance_window         = "sun:08:00-sun:08:45"
   auto_minor_version_upgrade = true

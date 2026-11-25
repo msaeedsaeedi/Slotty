@@ -177,7 +177,7 @@ resource "aws_cloudwatch_log_metric_filter" "worker_crashes" {
   pattern        = "\"[worker]\" \"failed\" -\"failed=\""
   metric_transformation {
     name          = "WorkerJobCrashes"
-    namespace     = "Slotty"
+    namespace     = var.product_name
     value         = "1"
     default_value = "0"
   }
@@ -189,7 +189,7 @@ resource "aws_cloudwatch_log_metric_filter" "email_send_failures" {
   pattern        = "\"[worker]\" \"failed=\""
   metric_transformation {
     name          = "EmailSendFailures"
-    namespace     = "Slotty"
+    namespace     = var.product_name
     value         = "1"
     default_value = "0"
   }
@@ -197,7 +197,7 @@ resource "aws_cloudwatch_log_metric_filter" "email_send_failures" {
 
 resource "aws_cloudwatch_metric_alarm" "worker_failures" {
   alarm_name          = "${local.name}-worker-failures"
-  alarm_description   = "Worker job crashed, or 10+ failed email sends in 30 min (see /slotty/worker logs and Admin → email outbox)."
+  alarm_description   = "Worker job crashed, or 10+ failed email sends in 30 min (see /${local.name}/worker logs and Admin → email outbox)."
   evaluation_periods  = 1
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
@@ -214,7 +214,7 @@ resource "aws_cloudwatch_metric_alarm" "worker_failures" {
   metric_query {
     id = "crashes"
     metric {
-      namespace   = "Slotty"
+      namespace   = var.product_name
       metric_name = "WorkerJobCrashes"
       period      = 1800
       stat        = "Sum"
@@ -223,7 +223,7 @@ resource "aws_cloudwatch_metric_alarm" "worker_failures" {
   metric_query {
     id = "sends"
     metric {
-      namespace   = "Slotty"
+      namespace   = var.product_name
       metric_name = "EmailSendFailures"
       period      = 1800
       stat        = "Sum"

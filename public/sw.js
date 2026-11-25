@@ -1,4 +1,4 @@
-/* Slotty service worker: offline copies of a student's key pages + push notifications.
+/* Uniflow service worker: offline copies of a student's key pages + push notifications.
  *
  * Caching rules (see the system documentation, Business rules → PWA):
  * - Only GET requests. Server Actions (POST) are never cached or replayed.
@@ -10,9 +10,11 @@
  * - RSC data requests (soft navigations) are never cached; when they fail,
  *   Next.js falls back to a full navigation, which this worker can answer.
  */
-const VERSION = "v3"; // v3: drop dev-server assets cached by v2; bump to replace cached copies
-const STATIC_CACHE = `slotty-static-${VERSION}`;
-const PAGE_CACHE = `slotty-pages-${VERSION}`;
+const VERSION = "v4"; // v4: Uniflow names and icons (v3 dropped dev-server assets); bump to replace cached copies
+const STATIC_CACHE = `uniflow-static-${VERSION}`;
+const PAGE_CACHE = `uniflow-pages-${VERSION}`;
+/** Caches this worker owns: its own and, from before the rename (#132), the `slotty-` ones. */
+const OWN_CACHE = /^(uniflow|slotty)-/;
 const OFFLINE_URL = "/offline";
 const OFFLINE_PAGES = [/^\/dashboard$/, /^\/bookings$/, /^\/notifications$/, /^\/courses\/[^/]+$/, /^\/courses\/[^/]+\/assignments\/[^/]+$/];
 
@@ -20,7 +22,7 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(STATIC_CACHE)
-      .then((cache) => cache.addAll([OFFLINE_URL, "/icons/192", "/icons/badge"]))
+      .then((cache) => cache.addAll([OFFLINE_URL, "/brand/icon-192.png", "/brand/badge-96.png"]))
       .then(() => self.skipWaiting()),
   );
 });
@@ -29,7 +31,7 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k.startsWith("slotty-") && !k.endsWith(VERSION)).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => OWN_CACHE.test(k) && k !== STATIC_CACHE && k !== PAGE_CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
@@ -85,19 +87,19 @@ self.addEventListener("push", (event) => {
   try {
     data = event.data.json();
   } catch {
-    data = { title: "Slotty", body: event.data.text() };
+    data = { title: "Uniflow", body: event.data.text() };
   }
   event.waitUntil(
     Promise.all([
-      self.registration.showNotification(data.title || "Slotty", {
+      self.registration.showNotification(data.title || "Uniflow", {
         body: data.body,
-        icon: "/icons/192",
-        badge: "/icons/badge",
+        icon: "/brand/icon-192.png",
+        badge: "/brand/badge-96.png",
         tag: data.tag,
         data: { url: data.url || "/notifications" },
       }),
       // Open tabs update their bell now instead of at the next check.
-      self.clients.matchAll({ type: "window" }).then((windows) => windows.forEach((w) => w.postMessage({ type: "slotty:push" }))),
+      self.clients.matchAll({ type: "window" }).then((windows) => windows.forEach((w) => w.postMessage({ type: "uniflow:push" }))),
     ]),
   );
 });

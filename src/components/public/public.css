@@ -6,7 +6,7 @@
  */
 
 @layer components {
-  [data-theme="slotty-landing"][data-public] {
+  [data-theme="uniflow-landing"][data-public] {
     --background: var(--board);
     --foreground: var(--text);
     --card: var(--panel);
