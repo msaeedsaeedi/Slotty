@@ -47,7 +47,7 @@ resource "aws_iam_instance_profile" "nat" {
 resource "aws_instance" "nat" {
   count                       = var.nat_mode == "instance" ? 1 : 0
   ami                         = var.nat_ami_id
-  instance_type               = "t4g.nano"
+  instance_type               = var.nat_instance_type
   subnet_id                   = aws_subnet.public[0].id
   vpc_security_group_ids      = [aws_security_group.nat.id]
   associate_public_ip_address = true

@@ -128,7 +128,7 @@ aws ssm start-session --profile slotty-prod --target <nat_instance_id> \
 \end{lstlisting}
 
 \subsection{Restore the database to a point in time}\label{sec:ops-restore}
-RDS keeps 7 days of point-in-time recovery. A restore always creates a \emph{new} instance; the
+RDS keeps 7 days of point-in-time recovery (in the standalone account, 1 day while it is on the AWS Free plan, \#146). A restore always creates a \emph{new} instance; the
 running one is untouched until you switch over. Use it after data loss or corruption (a bad
 migration, a mistaken bulk change); for an instance failure, RDS replaces the host by itself.
 \begin{enumerate}
