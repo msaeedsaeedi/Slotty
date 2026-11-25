@@ -15,6 +15,7 @@ import { formatLeft, formatUntil } from "@/domain/demo-day";
 import { hasMarkPrecision, MARK_DECIMALS } from "@/domain/evaluation";
 import { REASON_MAX_LENGTH } from "@/domain/text";
 import { cn } from "@/lib/utils";
+import { deleteDraft, draftsFor, putDraft, type StoredDraft } from "@/lib/draft-store";
 
 export interface SheetRow {
   student: { id: string; name: string; email: string };
@@ -53,6 +54,8 @@ interface Criterion {
 }
 
 interface Props {
+  /** Opaque key of the signed-in account (`offlineOwner`): unsaved drafts on this device are kept under it. */
+  offlineOwner: string;
   assignment: { id: string; title: string; maxMarks: number; courseId: string; courseCode: string };
   criteria: Criterion[];
   rows: SheetRow[];
@@ -117,6 +120,20 @@ function draftOf(r: SheetRow): Draft {
   };
 }
 
+/**
+ * What the server has for one student, comparable with a draft typed on top of it: a draft
+ * kept on this device is restored silently only while this still matches.
+ */
+function fingerprint(d: Draft, status: string | null, rubric: boolean): string {
+  const points = Object.entries(d.points)
+    .filter(([, v]) => v.trim())
+    .map(([k, v]) => [k, Number(v)])
+    .sort(([a], [b]) => String(a).localeCompare(String(b)));
+  // With a rubric the total is computed from the points (the server sends it, typing doesn't).
+  const total = !rubric && d.total.trim() ? Number(d.total) : null;
+  return JSON.stringify([status, points, total, d.feedback.trim(), d.privateNotes.trim()]);
+}
+
 const round = (n: number) => Math.round(n * 100) / 100;
 /** The score inputs' step: marks keep at most MARK_DECIMALS decimals. */
 const MARK_STEP = 10 ** -MARK_DECIMALS;
@@ -139,7 +156,7 @@ function problems(d: Draft, criteria: Criterion[], maxMarks: number): Record<str
   return out;
 }
 
-export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, holdHours = null, embedded, mode, isToday, title, timezoneLabel, initialBookingId, now: serverNow, links }: Props) {
+export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOnSubmit, holdHours = null, embedded, mode, isToday, title, timezoneLabel, initialBookingId, now: serverNow, links }: Props) {
   const online = useOnline();
   const [now, setNow] = useState(() => new Date(serverNow).getTime());
   const [drafts, setDrafts] = useState<Draft[]>(() => rows.map(draftOf));
@@ -188,6 +205,19 @@ export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, holdHo
   const inflight = useRef(new Map<number, Promise<void>>());
   const again = useRef(new Set<number>());
 
+  // ─── Drafts kept on this device (IndexedDB) ───────────────────────────────
+  // Unsaved typing is also written to this device, so it survives a closed or crashed tab
+  // while offline. Each entry is deleted once the server has it.
+  const base = useRef(rows.map((r) => fingerprint(draftOf(r), r.evaluation?.status ?? null, criteria.length > 0)));
+  const idb = useRef<Promise<unknown>>(Promise.resolve());
+  const local = useCallback(
+    (fn: () => Promise<unknown>) => {
+      idb.current = idb.current.then(fn, fn);
+    },
+    [],
+  );
+  const [restorable, setRestorable] = useState<{ i: number; entry: StoredDraft<Draft> }[]>([]);
+
   const patchState = (i: number, patch: Partial<RowState>) => setState((s) => s.map((row, j) => (j === i ? { ...row, ...patch } : row)));
 
   const save = useCallback(
@@ -218,8 +248,10 @@ export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, holdHo
             privateNotes: d.privateNotes,
             noBookingReason: d.noBookingReason || undefined,
             earlyMarkReason: d.earlyMarkReason || undefined,
-          }).catch(() => ({ ok: false as const, error: "Couldn't reach Uniflow. Your marks are kept here — they'll save when you're back online." }));
+          }).catch(() => ({ ok: false as const, error: "Couldn't reach Uniflow. Your marks are kept on this device — they'll save when you're back online." }));
           if (r.ok) {
+            base.current[i] = fingerprint(d, r.value.status, criteria.length > 0);
+            if (!timers.current.has(i) && !again.current.has(i)) local(() => deleteDraft(offlineOwner, assignment.id, row.student.id));
             patchState(i, {
               evaluationId: r.value.evaluationId,
               evalStatus: r.value.status,
@@ -239,7 +271,7 @@ export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, holdHo
       await run;
       inflight.current.delete(i);
     },
-    [assignment.id, assignment.maxMarks, criteria, rows],
+    [assignment.id, assignment.maxMarks, criteria, rows, local, offlineOwner],
   );
 
   const schedule = (i: number) => {
@@ -265,6 +297,47 @@ export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, holdHo
       if (s.save.kind === "error" && !Object.keys(problems(draftsRef.current[i], criteria, assignment.maxMarks)).length) void save(i);
     });
   }, [online, save, criteria, assignment.maxMarks]);
+
+  // Write unsaved rows to this device whenever they change.
+  useEffect(() => {
+    state.forEach((s, i) => {
+      if (s.save.kind !== "dirty" && s.save.kind !== "error") return;
+      const entry = { owner: offlineOwner, assignmentId: assignment.id, studentId: rows[i].student.id, draft: drafts[i], base: base.current[i], at: Date.now() };
+      local(() => putDraft(entry));
+    });
+  }, [state, drafts, rows, assignment.id, offlineOwner, local]);
+
+  // On open: bring back drafts this device kept. Those typed on top of what the server still
+  // has come back and save as drafts; if the marks changed since, ask first.
+  const restore = useCallback(
+    (i: number, d: Draft) => {
+      setDrafts((ds) => ds.map((x, j) => (j === i ? d : x)));
+      patchState(i, { save: { kind: "dirty" } });
+      clearTimeout(timers.current.get(i));
+      timers.current.set(i, setTimeout(() => void save(i), SAVE_DELAY_MS));
+    },
+    [save],
+  );
+  useEffect(() => {
+    let cancelled = false;
+    void draftsFor<Draft>(offlineOwner, assignment.id).then((stored) => {
+      if (cancelled || stored.length === 0) return;
+      const ask: { i: number; entry: StoredDraft<Draft> }[] = [];
+      for (const entry of stored) {
+        const i = rows.findIndex((r) => r.student.id === entry.studentId);
+        if (i < 0) continue; // not on this sheet; kept for the sheet that shows them
+        if (fingerprint(entry.draft, stateRef.current[i].evalStatus, criteria.length > 0) === base.current[i]) local(() => deleteDraft(offlineOwner, assignment.id, entry.studentId));
+        else if (entry.base === base.current[i]) restore(i, entry.draft);
+        else ask.push({ i, entry });
+      }
+      if (ask.length) setRestorable(ask);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Once per sheet: later changes are this tab's own.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Don't lose typing to a closed tab.
   useEffect(() => {
@@ -374,6 +447,36 @@ export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, holdHo
   return (
     <div className={cn("space-y-4", !embedded && "mx-auto max-w-5xl")}>
       {!embedded && <TopBar links={links} assignment={assignment} title={title} />}
+
+      {restorable.length > 0 && (
+        <div role="alert" className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          <CloudOff className="size-4 shrink-0" aria-hidden />
+          <p className="flex-1">
+            This device has unsaved marks for {restorable.map((r) => rows[r.i].student.name).join(", ")} from{" "}
+            {new Date(Math.max(...restorable.map((r) => r.entry.at))).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}, but the
+            saved marks have changed since.
+          </p>
+          <Button
+            size="sm"
+            onClick={() => {
+              restorable.forEach((r) => restore(r.i, r.entry.draft));
+              setRestorable([]);
+            }}
+          >
+            Use this device&apos;s marks
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              restorable.forEach((r) => local(() => deleteDraft(offlineOwner, assignment.id, r.entry.studentId)));
+              setRestorable([]);
+            }}
+          >
+            Discard them
+          </Button>
+        </div>
+      )}
 
       {/* Progress: one segment per demo, coloured by state; the live one fills as time passes. */}
       <div className={cn("space-y-1.5", embedded && "hidden")}>
@@ -913,7 +1016,7 @@ function SaveIndicator({ state, online }: { state: SaveState; online: boolean })
   if (!online && state.kind !== "idle" && state.kind !== "saved") {
     return (
       <span className="flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
-        <CloudOff className="size-3.5" /> Offline — kept here, saves when you reconnect
+        <CloudOff className="size-3.5" /> Offline — kept on this device, saves when you reconnect
       </span>
     );
   }

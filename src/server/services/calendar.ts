@@ -1,4 +1,4 @@
-import { buildCalendar, calendarLinks, type CalendarEvent } from "@/domain/ics";
+import { buildCalendar, calendarLinks, DEMO_ALARMS_MINUTES, type CalendarEvent } from "@/domain/ics";
 import { DomainError } from "@/domain/result";
 import { db } from "@/server/db";
 import { absoluteUrl } from "@/server/app-url";
@@ -33,6 +33,7 @@ function studentEvent(b: BookingForCalendar): CalendarEvent {
     description: [`With ${b.slot.ta.name}`, b.slot.venue?.meetingUrl ? `Meeting link: ${b.slot.venue.meetingUrl}` : "", url].filter(Boolean).join("\n"),
     location: where(b.slot.venue),
     url,
+    alarmsMinutesBefore: DEMO_ALARMS_MINUTES,
   };
 }
 

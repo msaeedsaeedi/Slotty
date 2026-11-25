@@ -6,6 +6,7 @@ Newest first. One line per revision of this document; the pull request has the d
   \toprule
   \thead{Date} & \thead{Change}\\
   \midrule
+  2026-11-25 & Offline experience measured and engineered (issue \#142, ADR-038): saved pages show after 4\,s or on a 5xx instead of waiting (lie-fi 45\,s to 4\,s), a small ``Offline'' or ``Can't connect'' label in the header and disabled submits even when the browser says online, a clear message instead of the error page when a submit's connection drops, saved pages and device data tied to the account, marking drafts kept in IndexedDB, reminder pushes that expire at the demo with high urgency, \code{.ics} alerts, pages saved when a push arrives, and a capped build cache. Ch.~3, 4, 6, 7, 10, 11 and 14 updated; the rest of the offline work is \#160.\\
   2026-11-25 & \code{slotty-prod} retired (issue \#135): its database snapshotted as \code{slotty-final}, all 131 resources destroyed and the account swept clean. Ch.~8, 10 and 12 updated.\\
   2026-11-25 & Hotfix v1.0.0-beta.5.1: the support address on every page is \code{support@uniflow.msaeedsaeedi.com}; the old one stopped receiving mail with the move (\#134).\\
   2026-11-25 & Production moved (issues \#134, \#137): data copied into the standalone account and verified table by table, the new web and worker started, \code{slotty.msaeedsaeedi.com} redirected to \code{uniflow.msaeedsaeedi.com} by Cloudflare, and support mail moved to \code{support@uniflow.msaeedsaeedi.com}. Ch.~3, 8 and 10 updated.\\

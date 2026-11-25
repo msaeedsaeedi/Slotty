@@ -24,6 +24,7 @@ This chapter gathers the controls described elsewhere into one view an auditor c
   Public surface & Only \route{/} (landing, no data beyond the session check) and \route{/privacy} are public content; \code{robots.txt} keeps everything else out of search engines; unauthenticated visits aren't tracked & \src{src/app/page.tsx}, \src{src/app/robots.ts}\\
   Application access & Every service checks the actor's role per course, before reading anything the caller may not see; archived courses read-only; admins never course members and read-only inside courses; only instructors manage TAs; nobody switches between student and staff in a course (ADR-025) & \cref{ch:rules}\\
   Accounts & Argon2 password hashes, database sessions (30 days) behind a \code{__Host-} cookie that is always \code{Secure} and \code{HttpOnly} (ADR-033); no bearer links to personal data (the calendar feed is retired), reset links valid 2 hours (a new one voids the last), invites 14 days, silent success on unknown emails & \cref{ch:rules}\\
+  Data on the device & The service worker saves only the pages listed in ch.~4 (PWA), never management pages, Server Actions or RSC data; saved pages and offline marking drafts (IndexedDB) carry an opaque per-account key (a hash of the user id) and are wiped when another account signs in, and the sign-in, invite and reset pages clear saved pages; sign-out sends \code{Clear-Site-Data: "cache", "storage"}. Changes are never queued for replay (ADR-038) & \src{public/sw.js}, \src{src/components/pwa.tsx}, \src{src/lib/draft-store.ts}\\
   Abuse limits & Failed sign-ins back off exponentially per email and are capped per network; reset requests capped per network, reset emails per recipient; shared through PostgreSQL across web tasks, with hashed keys (ADR-026) & \cref{ch:rules}\\
   Retention & The worker prunes every hour (\code{pruneMessages}, \src{src/domain/retention.ts}): sent email bodies cleared after 30 days and email rows deleted after 180; delivered or failed push messages deleted after 7 days; read notifications after 90 days and any notification after 180; sessions as soon as they expire; used or expired invite and reset links after 7 days. Pending messages are never touched, and failed emails keep their body for a retry. Marks, scores and feedback are never put in an email or push: the release message only links to Uniflow & \src{src/server/services/retention.ts}\\
   Usage data & First-party only, stored in RDS; pseudonymous visitor key (HMAC with an SSM secret), route templates instead of paths, no IP or user agent, scrubbed error text; opt-out in Account; feedback and survey answers stored without the user and with coarsened times; raw events 90 days, totals 13 months & \cref{sec:rules-usage}, ADR-015\\
@@ -49,6 +50,13 @@ This chapter gathers the controls described elsewhere into one view an auditor c
   and can contain whatever a person types; the form asks them not to include personal details.
   With small courses, role plus page type plus time can narrow down who sent a message, which is
   why feedback times are rounded to the hour and survey answers to the day.
+\end{risk}
+\begin{risk}
+  \textbf{Offline data stays on a device that is left signed in.} Saved pages (a student's own
+  marks; a staff dashboard's demo list) and a marker's unsaved drafts, private notes included,
+  remain until sign-out, another account signing in, or the drafts being saved (ADR-038).
+  Safari's support for \code{Clear-Site-Data} is partial, so on iOS the next sign-in, not the
+  sign-out, is what reliably clears them; this is on the manual device checklist (ch.~10).
 \end{risk}
 \begin{risk}
   \textbf{The content security policy only reports.} It does not block injected scripts yet

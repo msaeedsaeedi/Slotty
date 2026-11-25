@@ -25,6 +25,10 @@ export interface NotificationInput {
   groupKey?: string;
   /** With `groupKey`: list the replaced items' titles under the new body ("Earlier: …"). */
   history?: boolean;
+  /** Push only: the push is pointless after this (e.g. the demo started); it's sent with a TTL ending here. */
+  pushExpiresAt?: Date;
+  /** Push only: ask the push service to deliver now even to a phone saving battery (reminders). */
+  pushUrgent?: boolean;
   /** Hold the email this long, so a quick follow-up change replaces it before it goes out. */
   emailDelayMinutes?: number;
 }
@@ -72,7 +76,7 @@ export async function notify(tx: Tx, userIds: string[], input: NotificationInput
     const devices = await tx.pushSubscription.findMany({ where: { userId: { in: ids }, user: { status: "ACTIVE" } }, select: { id: true } });
     if (devices.length) {
       await tx.pushMessage.createMany({
-        data: devices.map((d) => ({ subscriptionId: d.id, title: n.title, body: n.body.slice(0, 500), link: n.link })),
+        data: devices.map((d) => ({ subscriptionId: d.id, title: n.title, body: n.body.slice(0, 500), link: n.link, expiresAt: n.pushExpiresAt, urgent: n.pushUrgent ?? false })),
       });
       await signalOutbox(tx);
     }

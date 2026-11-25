@@ -161,11 +161,26 @@ nothing. \route{/health/live} answers without touching the database, for contain
 checks; \route{/health} also checks the database and reports the running release
 (\envvar{APP_VERSION}), for monitoring and for the deploy's last check (\cref{sec:deploy}).
 
+\section{Offline and the service worker}\label{sec:offline}
+The service worker (\src{public/sw.js}) caches two things: immutable build files, and the saved
+pages listed in ch.~4 (PWA). Saved pages are network-first with a 4\,s limit; a slow, failing or
+erroring server gets the saved copy, and the worker remembers which tab it answered that way so
+the page can ask (\code{saved-copy?}) and label itself in the header. Client code reads connectivity
+through \code{useConnection()} (\src{src/components/pwa.tsx}): \code{canSubmit} is false while
+the browser is offline \emph{or} the page is a saved copy, and \code{SubmitButton} follows it.
+\code{whenReachable()} waits for Uniflow to answer again (\code{online} event or a
+\route{/health/live} probe) and is how the header label and \code{ActionForm} refresh the page after
+an outage. Server Actions are never cached or queued (ADR-038); the marking sheet is the one
+place that keeps unsaved input on the device (\src{src/lib/draft-store.ts}). Anything stored
+on the device is keyed by \code{offlineOwner} (\src{src/server/offline-owner.ts}) and dropped
+when the account changes. Bump \code{VERSION} in \src{public/sw.js} when the caching rules
+change: the new worker deletes the old caches on activation.
+
 \begin{todo}
   \begin{itemize}
     \item Authentication and sessions in detail: password hashing (Argon2), session cookies and
       their flags, token lifetimes, sign-out behaviour.
-    \item Caching and revalidation in the App Router; what the PWA service worker caches.
+    \item Caching and revalidation in the App Router.
     \item Logging conventions and what must never be logged (tokens, passwords, marks).
   \end{itemize}
 \end{todo}
