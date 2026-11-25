@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { format } from "date-fns";
 import { EmptyState } from "@/components/page-header";
 import { Card } from "@/components/ui/card";

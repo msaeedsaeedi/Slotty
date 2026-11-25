@@ -57,6 +57,16 @@ discount of about 70\,\%.
   each on RDS. It stays inside the lines above.
 \end{note}
 
+\begin{note}
+  Offline pre-loading (issue \#162) asks for the account's page list when the app opens or comes
+  back to the screen, at most every 5 minutes, and downloads only pages whose version changed;
+  every saved page changes version once a day (its date). At 300 users, about 4 syncs a day and
+  10 pages each (TAs around 40) that is roughly 36\,000 list requests and 90\,000--120\,000 page
+  loads a month: about \$0.15 on API Gateway, a few minutes of web CPU, and a fixed 14 grouped
+  queries per list on RDS. Pages are 6--10\,KB compressed, so under 1.5\,GB a month through
+  CloudFront's free allowance. It stays inside the lines above.
+\end{note}
+
 \section{Growth}
 Each step is a variable change in \src{infra/aws/app/variables.tf} (some also need an SCP
 change in \src{infra/aws/org/scp.tf}):

@@ -19,6 +19,20 @@ const CSP_REPORT_ONLY = [
   "form-action 'self'",
 ].join("; ");
 
+/** Address patterns whose pages may be stored on a device for offline use (#162). */
+const OFFLINE_STORABLE = [
+  "/dashboard",
+  "/bookings",
+  "/notifications",
+  "/today",
+  "/courses/:courseId",
+  "/courses/:courseId/assignments/:assignmentId",
+  "/courses/:courseId/manage/today",
+  "/courses/:courseId/manage/review",
+  "/courses/:courseId/manage/assignments/:assignmentId/mark",
+  "/courses/:courseId/manage/assignments/:assignmentId/evaluate/:studentId",
+];
+
 const nextConfig: NextConfig = {
   // Lets the E2E server (port 3100, test DB) run next to `next dev` without sharing build output.
   distDir: process.env.NEXT_DIST_DIR || ".next",
@@ -48,6 +62,11 @@ const nextConfig: NextConfig = {
           ...(process.env.NODE_ENV === "production" ? [{ key: "Content-Security-Policy-Report-Only", value: CSP_REPORT_ONLY }] : []),
         ],
       },
+      // Pages the service worker may keep on the device (#162; docs ch. 4, PWA). The worker
+      // stores a page only if it's on the account's list from /api/offline/pages AND its
+      // response carries this header, so a bug in one check can't leak a page by itself.
+      // Admin, platform, account and sign-in pages are never listed here.
+      ...OFFLINE_STORABLE.map((source) => ({ source, headers: [{ key: "X-Uniflow-Offline", value: "store" }] })),
       {
         // The service worker must never be served stale, and may only run same-origin code.
         source: "/sw.js",

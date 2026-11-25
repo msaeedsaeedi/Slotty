@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { adminWithdrawMarksAction } from "@/app/actions/admin";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { EmptyState } from "@/components/page-header";

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AlertTriangle, Check, ChevronLeft, ChevronRight, CircleAlert, CloudOff, Loader2, MapPin, UserRound } from "lucide-react";

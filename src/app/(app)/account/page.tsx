@@ -1,5 +1,5 @@
 import { CalendarSync, Video } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { changePasswordAction, setEmailPreferencesAction, setShareUsageAction, setTimeFormatAction, signOutOthersAction, updateProfileAction } from "@/app/actions/account";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { PageHeader } from "@/components/page-header";
