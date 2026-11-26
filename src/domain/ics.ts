@@ -9,16 +9,7 @@ export interface CalendarEvent {
   description?: string;
   location?: string;
   url?: string;
-  /**
-   * Minutes before the start at which the calendar app should alert (VALARM). The
-   * device's calendar fires these offline and with the browser closed, which web
-   * push can't (ADR-038).
-   */
-  alarmsMinutesBefore?: number[];
 }
-
-/** Alerts on a downloaded demo: an hour before, and ten minutes before (like the push reminders). */
-export const DEMO_ALARMS_MINUTES = [60, 10];
 
 /** 20261005T090000Z */
 export function icsDate(d: Date): string {
@@ -74,9 +65,6 @@ export function buildCalendar(args: { name: string; events: CalendarEvent[]; now
     if (e.description) lines.push(`DESCRIPTION:${icsEscape(e.description)}`);
     if (e.location) lines.push(`LOCATION:${icsEscape(e.location)}`);
     if (e.url) lines.push(`URL:${e.url}`);
-    for (const m of e.alarmsMinutesBefore ?? []) {
-      lines.push("BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${icsEscape(e.summary)}`, `TRIGGER:-PT${Math.max(0, Math.round(m))}M`, "END:VALARM");
-    }
     lines.push("END:VEVENT");
   }
   lines.push("END:VCALENDAR");

@@ -4,7 +4,7 @@ import { requireUser } from "@/server/auth/session";
 import { attempt, run, str, type ActionState } from "@/server/action-utils";
 import { markAttendance } from "@/server/services/bookings";
 import { claimSurvey } from "@/server/services/feedback";
-import { clearMarks, reviewEvaluation, submitEvaluations, unlockEvaluation, finalizeMany, withdrawEvaluation } from "@/server/services/evaluations";
+import { clearMarks, reviewEvaluation, saveDraft, submitEvaluations, unlockEvaluation, finalizeMany, withdrawEvaluation } from "@/server/services/evaluations";
 import { RELEASE_HOLD_HOURS } from "@/domain/evaluation";
 
 export async function submitManyAction(_: ActionState, fd: FormData): Promise<ActionState> {
@@ -58,6 +58,28 @@ export async function finalizeManyAction(_: ActionState, fd: FormData): Promise<
     if (ids.length === 0) return "Nothing to finalize.";
     const n = await finalizeMany(await requireUser(), ids);
     return `${n} mark${n === 1 ? "" : "s"} released to students.`;
+  });
+}
+
+export interface DraftInput {
+  assignmentId: string;
+  studentId: string;
+  scores: { criterionId: string; points: number; comment?: string }[];
+  totalMarks: number | null;
+  totalOverride: boolean;
+  overrideNote?: string;
+  feedback?: string;
+  privateNotes?: string;
+  noBookingReason?: string;
+  earlyMarkReason?: string;
+}
+
+/** Autosave from the marking sheet (no page refresh). */
+export async function saveDraftAction(input: DraftInput) {
+  return attempt(async () => {
+    const { assignmentId, studentId, ...data } = input;
+    const r = await saveDraft(await requireUser(), assignmentId, studentId, data);
+    return { ...r, savedAt: new Date().toISOString() };
   });
 }
 

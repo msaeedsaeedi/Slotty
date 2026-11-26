@@ -2,7 +2,6 @@ import { addDays, format, parseISO } from "date-fns";
 import { RELEASE_HOLD_HOURS } from "@/domain/evaluation";
 import { fmt, fmtData, fmtTimeRange, tzLabel } from "@/lib/time";
 import { requireUser } from "@/server/auth/session";
-import { offlineOwner } from "@/server/offline-owner";
 import { load } from "@/server/page-utils";
 import { getMarkingSheet, markingSheetFocus } from "@/server/services/evaluations";
 import { TrackView } from "@/components/analytics";
@@ -79,7 +78,6 @@ export default async function MarkPage({ params, searchParams }: PageProps<"/cou
     <>
       <TrackView flow="marking" />
       <MarkingSheet
-        offlineOwner={offlineOwner(user.id)}
         // Remount after a submit refreshes the page, so statuses come from the server again.
         key={sheet.rows.map((r) => `${r.student.id}:${r.evaluation?.status}:${r.booking?.status}`).join("|")}
         assignment={{ id: sheet.assignment.id, title: sheet.assignment.title, maxMarks: sheet.assignment.maxMarks, courseId, courseCode: sheet.assignment.course.code }}

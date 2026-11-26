@@ -1,4 +1,4 @@
-import Link from "@/components/app-link";
+import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 
 export function PageHeader({

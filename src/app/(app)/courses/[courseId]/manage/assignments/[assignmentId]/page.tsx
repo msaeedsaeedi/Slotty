@@ -1,6 +1,6 @@
 import { plural } from "@/lib/utils";
 import { RELEASE_HOLD_HOURS } from "@/domain/evaluation";
-import Link from "@/components/app-link";
+import Link from "next/link";
 import { CalendarRange, Clock, PenLine, Repeat, Settings2, Target } from "lucide-react";
 import { closeAssignmentAction, publishAssignmentAction } from "@/app/actions/scheduling";
 import { ActionForm, SubmitButton } from "@/components/action-form";

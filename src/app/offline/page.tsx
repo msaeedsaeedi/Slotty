@@ -11,10 +11,18 @@ export default function OfflinePage() {
       <UniflowMark className="size-10 text-primary" />
       <WifiOff className="size-6 text-muted-foreground" aria-hidden />
       <h1 className="text-xl font-semibold">You&apos;re offline</h1>
-      <p className="text-sm text-muted-foreground">This page isn&apos;t on this device.</p>
-      <Link className="text-sm text-primary underline" href="/dashboard" prefetch={false}>
-        Back to the dashboard
-      </Link>
+      <p className="text-sm text-muted-foreground">
+        This page hasn&apos;t been saved on this device. Pages you&apos;ve opened recently — your dashboard, bookings and demo details — are
+        available offline.
+      </p>
+      <nav className="flex gap-4 text-sm">
+        <Link className="text-primary underline" href="/dashboard" prefetch={false}>
+          Dashboard
+        </Link>
+        <Link className="text-primary underline" href="/bookings" prefetch={false}>
+          My bookings
+        </Link>
+      </nav>
     </main>
   );
 }

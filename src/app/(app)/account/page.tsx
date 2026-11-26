@@ -1,5 +1,5 @@
 import { CalendarSync, Video } from "lucide-react";
-import Link from "@/components/app-link";
+import Link from "next/link";
 import { changePasswordAction, setEmailPreferencesAction, setShareUsageAction, setTimeFormatAction, signOutOthersAction, updateProfileAction } from "@/app/actions/account";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { PageHeader } from "@/components/page-header";
@@ -149,10 +149,7 @@ export default async function AccountPage() {
             <CardDescription>
               {student ? "Reminders and booking changes" : "New requests and changes to your demos"} as phone or desktop notifications, even when Uniflow
               isn&apos;t open.
-              {pushDevices > 0 && ` On for ${pushDevices} device${pushDevices === 1 ? "" : "s"}.`} Signing out of a device turns them off there. They
-              need the device to be online; on a computer, only while the browser is running (it can be in the background), and on iPhone only in the
-              app added to the Home Screen.
-              {student && " For a reminder that works offline, use “Add to calendar” on a booked demo."}
+              {pushDevices > 0 && ` On for ${pushDevices} device${pushDevices === 1 ? "" : "s"}.`} Signing out of a device turns them off there.
             </CardDescription>
           </CardHeader>
           <CardContent>

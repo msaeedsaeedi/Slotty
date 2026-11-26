@@ -1,4 +1,4 @@
-import Link from "@/components/app-link";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CalendarClock, ExternalLink, MapPin, User } from "lucide-react";
 import { AddToCalendar } from "@/components/add-to-calendar";
@@ -26,7 +26,6 @@ import { getMyResult } from "@/server/services/evaluations";
 import { listMyRequests } from "@/server/services/requests";
 import { listOpenSlots } from "@/server/services/slots";
 import { isOnWaitlist } from "@/server/services/waitlist";
-import { UpdatedAt } from "@/components/updated-at";
 import { RequestPanel } from "./request-panel";
 
 export async function generateMetadata({ params }: PageProps<"/courses/[courseId]/assignments/[assignmentId]">) {
@@ -256,7 +255,6 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
             <p className="text-sm text-muted-foreground">
               Each demo takes {policy.slotDurationMin} minutes.
               {policy.freezeHours > 0 && ` You can change your booking until ${policy.freezeHours} hours before it starts.`}
-              <UpdatedAt at={now} prefix=" Free slots " />
             </p>
           </div>
           {(dayOptions.length > 1 || hostOptions.length > 1) && (
@@ -275,13 +273,9 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
             </Alert>
           ) : noSlotsToBook ? (
             <EmptyState title={fullSlots > 0 ? "All slots are taken right now" : "No slots available right now"}>
-              <UpdatedAt at={now} prefix="" className="block" />
               {waiting ? (
                 <ActionForm action={leaveWaitlistAction} compact className="mt-2 space-y-2">
-                  <p>
-                    You&apos;re on the list — we&apos;ll notify you as soon as a slot frees up.
-                    <UpdatedAt at={now} />
-                  </p>
+                  <p>You&apos;re on the list — we&apos;ll notify you as soon as a slot frees up.</p>
                   <input type="hidden" name="assignmentId" value={assignmentId} />
                   <SubmitButton size="sm" variant="ghost">
                     Stop alerts
@@ -335,12 +329,7 @@ export default async function StudentAssignmentPage({ params, searchParams }: Pa
                             <p className="truncate text-muted-foreground">
                               {s.venue?.name ?? "Venue TBA"} · {s.ta.name}
                             </p>
-                            {s.capacity > 1 && (
-                              <p className="text-xs text-muted-foreground">
-                                {s.seatsLeft} of {s.capacity} places left
-                                <UpdatedAt at={now} />
-                              </p>
-                            )}
+                            {s.capacity > 1 && <p className="text-xs text-muted-foreground">{s.seatsLeft} of {s.capacity} places left</p>}
                             {!rule.ok && <p className="text-xs text-muted-foreground">{rule.reason}</p>}
                           </div>
                           <SubmitButton

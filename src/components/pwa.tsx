@@ -1,100 +1,43 @@
 "use client";
 
 import { trackFeature } from "@/lib/analytics";
-import { useEffect, useState } from "react";
-import { BellRing, Download, X } from "lucide-react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { BellRing, Download, WifiOff, X } from "lucide-react";
 import { toast } from "sonner";
 import { subscribePushAction, unsubscribePushAction } from "@/app/actions/push";
 import { Button } from "@/components/ui/button";
-import { sealDrafts } from "@/lib/draft-store";
-import { syncAllDrafts } from "@/lib/draft-sync";
 
-// ─── Saved data belongs to one account ───────────────────────────────────────
+// ─── Connectivity ─────────────────────────────────────────────────────────────
 
-// Not cleared by sign-in: only by sign-out (Clear-Site-Data) or a different account.
-const OWNER_KEY = "uniflow.offline-owner";
+function subscribeOnline(cb: () => void) {
+  window.addEventListener("online", cb);
+  window.addEventListener("offline", cb);
+  return () => {
+    window.removeEventListener("online", cb);
+    window.removeEventListener("offline", cb);
+  };
+}
 
-function clearSavedPageCaches() {
-  // The worker also forgets the account's list it keeps in memory.
-  navigator.serviceWorker?.controller?.postMessage({ type: "clear-pages" });
-  if (!("caches" in window)) return;
-  caches
-    .keys()
-    .then((keys) => keys.filter((k) => /^(uniflow|slotty)-pages-/.test(k)).forEach((k) => caches.delete(k)))
-    .catch(() => {});
+/** True while the browser reports no connection (always true during SSR). */
+export function useOnline() {
+  return useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
 }
 
 /**
- * In every signed-in page: if this device's saved pages belong to another account (someone
- * else signed in without signing out first), forget them. Another account's marking drafts
- * are sealed instead (#163): hidden, never uploaded under this account, deleted after 7 days.
- * Then this account's waiting drafts upload. `owner` is an opaque per-account key
- * (`offlineOwner`), never the user id.
+ * Explains offline mode: the page is the last saved copy and changes are paused.
+ * Changes are never queued — replaying a booking later could hit a slot that has
+ * since been taken or cancelled.
  */
-export function OfflineOwner({ owner }: { owner: string }) {
-  useEffect(() => {
-    let previous: string | null = null;
-    try {
-      previous = localStorage.getItem(OWNER_KEY);
-    } catch {}
-    const changed = previous !== owner;
-    if (changed) {
-      clearSavedPageCaches();
-      try {
-        localStorage.setItem(OWNER_KEY, owner);
-      } catch {}
-    }
-    // Marking drafts kept on this device upload by themselves: now, when the app comes back to
-    // the screen and when the connection returns (with Uniflow closed, Background Sync does it).
-    const drafts = sealDrafts(owner).then(() => syncAllDrafts(owner));
-    const uploadDrafts = () => void drafts.then(() => syncAllDrafts(owner));
-    // Load this account's pages ahead of time (#162): now (forced after a sign-in, so the day
-    // starts prepared), when the app comes back to the screen and when the connection
-    // returns. The worker itself waits 5 minutes between syncs unless forced.
-    syncOfflinePages(changed);
-    const onVisible = () => {
-      if (document.visibilityState !== "visible") return;
-      syncOfflinePages(false);
-      uploadDrafts();
-    };
-    const onOnline = () => {
-      syncOfflinePages(false);
-      // Straight away, not when the last try's gap is up.
-      void drafts.then(() => syncAllDrafts(owner, { force: true }));
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("online", onOnline);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("online", onOnline);
-    };
-  }, [owner]);
-  return null;
-}
-
-let preparedOnce = false;
-
-/** Ask the service worker to sync this account's offline pages. */
-function syncOfflinePages(force: boolean) {
-  if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.ready
-    .then((reg) => {
-      reg.active?.postMessage({ type: "sync-pages", force });
-      if (preparedOnce) return;
-      preparedOnce = true;
-      // Keep saved pages (and marking drafts) from being cleared when the disk runs low.
-      void navigator.storage?.persist?.().catch(() => {});
-      // Installed Chrome apps: refresh saved pages even when the app isn't opened (about every
-      // 12 hours, when Chrome decides). A bonus: nothing relies on it.
-      const periodic = (reg as ServiceWorkerRegistration & { periodicSync?: { register(tag: string, o: { minInterval: number }): Promise<void> } }).periodicSync;
-      if (periodic) {
-        void navigator.permissions
-          ?.query({ name: "periodic-background-sync" as PermissionName })
-          .then((p) => (p.state === "granted" ? periodic.register("uniflow-pages", { minInterval: 12 * 60 * 60 * 1000 }) : undefined))
-          .catch(() => {});
-      }
-    })
-    .catch(() => {});
+export function OfflineBanner({ renderedAt }: { renderedAt: string }) {
+  const online = useOnline();
+  if (online) return null;
+  const saved = new Date(renderedAt).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return (
+    <div role="status" className="sticky top-14 z-20 border-b border-amber-300 bg-amber-50 px-4 py-2 text-center text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+      <WifiOff className="mr-1.5 inline size-4 align-text-bottom" aria-hidden />
+      You&apos;re offline — showing what was saved {saved}. Booking and other changes are paused until you reconnect.
+    </div>
+  );
 }
 
 // ─── Service worker ──────────────────────────────────────────────────────────
@@ -120,13 +63,12 @@ export function ServiceWorkerRegistrar() {
   return null;
 }
 
-/**
- * On the sign-in, invite and password pages: forget pages saved for whoever used this
- * browser before. Marking drafts stay: they may be this person's unsaved work after their
- * session expired; `OfflineOwner` seals them if a different account signs in.
- */
+/** On the sign-in page: forget pages saved for whoever used this browser before. */
 export function ClearSavedPages() {
-  useEffect(clearSavedPageCaches, []);
+  useEffect(() => {
+    if (!("caches" in window)) return;
+    caches.keys().then((keys) => keys.filter((k) => /^(uniflow|slotty)-pages-/.test(k)).forEach((k) => caches.delete(k)));
+  }, []);
   return null;
 }
 
@@ -185,7 +127,7 @@ export function InstallHint() {
       <div className="flex-1 space-y-2">
         <p className="font-medium">Install Uniflow on this device</p>
         <p className="text-muted-foreground">
-          Open it like an app, see the demo details you&apos;ve opened even offline, and get reminders as notifications.
+          Open it like an app, see your demo details offline, and get reminders as notifications.
           {ios && !prompt && " On iPhone or iPad: tap the Share button, then “Add to Home Screen”."}
         </p>
         {prompt && (
@@ -318,7 +260,6 @@ export function PushPrompt({ publicKey }: { publicKey: string | null }) {
       <BellRing className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
       <div className="flex-1 space-y-2">
         <p>Get your demo reminders and any changes as notifications on this device?</p>
-        <p className="text-xs text-muted-foreground">They need a connection when they&apos;re sent. For a reminder that works offline, add the demo to your calendar.</p>
         <div className="flex gap-2">
           <Button size="sm" onClick={enable}>
             Turn on

@@ -1,4 +1,4 @@
-import Link from "@/components/app-link";
+import Link from "next/link";
 import { DemoDayView } from "@/components/demo-day";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { requireUser } from "@/server/auth/session";
