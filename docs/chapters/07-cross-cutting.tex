@@ -181,9 +181,19 @@ through \code{useConnection()} (\src{src/components/connection.tsx}; \cref{sec:c
 \code{whenReachable()} waits for Uniflow to answer again (\code{online} event or a
 \route{/health/live} probe) and is how the header label and \code{ActionForm} refresh the page after
 an outage. Server Actions are never cached or queued (ADR-038); the marking sheet is the one
-place that keeps unsaved input on the device (\src{src/lib/draft-store.ts}). Anything stored
-on the device is keyed by \code{offlineOwner} (\src{src/server/offline-owner.ts}) and dropped
-when the account changes. Bump \code{VERSION} in \src{public/sw.js} when the caching rules
+place that keeps unsaved input on the device (\src{src/lib/draft-store.ts}) and uploads it
+by itself (\#163). Its uploads don't use a Server Action, whose ID changes with each build, but
+\route{/api/marking/drafts}, whose address doesn't, so a sheet open across a release still
+saves; the open sheet, the app-wide \code{syncAllDrafts} and the worker's \code{sync} handler
+all go through it. The upload logic is written twice, once in \src{src/lib/draft-sync.ts} and
+once in plain JavaScript in \src{public/sw.js} (the worker isn't bundled): keep the reply
+handling in step. Writes to IndexedDB use \code{\{durability: "strict"\}}; a read-modify-write
+(\code{updateDraft}) runs in one transaction, so a reply never overwrites an edit made
+meanwhile. Web Locks: \code{uniflow-draft:<key>} lets one uploader at a time send a draft,
+and an open sheet holds \code{uniflow-sheet:<owner>:<assignment>} (shared), which the others
+check with \code{locks.query()} to leave its drafts alone. Anything stored
+on the device is keyed by \code{offlineOwner} (\src{src/server/offline-owner.ts}); saved pages
+are dropped when the account changes and marking drafts sealed (ADR-039). Bump \code{VERSION} in \src{public/sw.js} when the caching rules
 change: the new worker deletes the old caches on activation.
 
 \begin{todo}

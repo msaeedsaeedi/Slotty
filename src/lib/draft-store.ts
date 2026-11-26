@@ -1,17 +1,23 @@
 /**
  * Unsaved marking-sheet drafts kept on this device (IndexedDB), so marks typed
- * offline survive a closed or crashed tab (#142, ADR-038).
+ * offline survive a closed or crashed tab and upload by themselves (#142, #163;
+ * agreed design: step 3 on #160).
  *
  * - Only what hasn't reached the server yet: an entry is deleted as soon as the
- *   server confirms the save.
- * - Bound to the signed-in account: entries carry the offline owner key, and
- *   `OfflineOwner` deletes the whole database when another account signs in.
- *   Signing out wipes it too (`Clear-Site-Data: "storage"`).
+ *   server confirms the save (`draft-sync.ts`; the service worker reads the same
+ *   entries, public/sw.js).
+ * - Writes use strict durability, so a power cut doesn't lose the last ones.
+ * - Bound to the signed-in account: entries carry the offline owner key. When another
+ *   account signs in, `sealDrafts` seals the earlier account's entries: hidden, never
+ *   uploaded under the new account, deleted after SEALED_DRAFT_DAYS (back to normal
+ *   if that account signs in again first). Signing out wipes them
+ *   (`Clear-Site-Data: "storage"`), after the sign-out guard has tried to upload them.
  * - Restoring never releases anything: a restored draft is saved as a draft.
  *
  * Every call fails soft (private windows, blocked storage): the sheet then works
  * as before, with drafts in memory only.
  */
+import { sealedExpired } from "@/domain/draft-upload";
 
 export const DRAFT_DB = "uniflow-drafts";
 const STORE = "drafts";
@@ -23,14 +29,31 @@ export interface StoredDraft<D = unknown> {
   assignmentId: string;
   studentId: string;
   draft: D;
-  /** Fingerprint of the server's evaluation this draft was typed on top of (see `serverFingerprint`). */
-  base: string;
+  /**
+   * Fingerprint of the server's marks this draft was typed on top of. Entries from before
+   * #163 have only this (no `version`): the sheet compares it on open.
+   */
+  base?: string;
+  /** The server's evaluation version the draft started from (`evaluationVersion`, #163). */
+  version?: string;
+  /** New for every edit; the server recognises a repeat of an upload it already saved. */
+  changeId?: string;
+  /** What the upload sends (`DraftUploadBody["draft"]`), so the service worker needn't know the sheet. */
+  payload?: unknown;
+  /** On a conflict: what the server has, for the sheet to show next to this draft. */
+  server?: unknown;
+  /** Failed uploads (network, server errors) so far, and not before when to try again. */
+  attempts?: number;
+  nextTry?: number;
+  /** When another account signed in on this device (hidden, not uploaded; deleted after 7 days). */
+  sealedAt?: number;
   /** When it was last typed (ms since epoch). */
   at: number;
   /**
-   * Where it stands (#161): `waiting` to reach the server, `error` (the server refused it;
-   * `message` says why) or `conflict` (the saved marks changed since it was typed).
-   * Missing on entries written before #161: treated as `waiting`.
+   * Where it stands (#161, #163): `waiting` to reach the server, `error` (Needs attention:
+   * a rule refused it, `message` says why; never retried by itself) or `conflict` (the saved
+   * marks changed since it was typed; `server` has them). Missing on entries written before
+   * #161: treated as `waiting`.
    */
   state?: DraftState;
   message?: string;
@@ -64,7 +87,9 @@ async function withStore<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore
   if (!db) return null;
   return new Promise((resolve) => {
     try {
-      const tx = db.transaction(STORE, mode);
+      // Strict: a write is reported done only once it's on disk (Chrome's default may lose the
+      // last writes on a power cut).
+      const tx = db.transaction(STORE, mode, mode === "readwrite" ? { durability: "strict" } : undefined);
       const req = fn(tx.objectStore(STORE));
       tx.oncomplete = () => {
         db.close();
@@ -91,30 +116,88 @@ export function deleteDraft(owner: string, assignmentId: string, studentId: stri
   return withStore("readwrite", (s) => s.delete(draftKey(owner, assignmentId, studentId)));
 }
 
-/** Every draft this device keeps for the account, for the header's waiting count and list. */
-export async function draftsOf<D>(owner: string): Promise<StoredDraft<D>[]> {
-  const all = ((await withStore("readonly", (s) => s.getAll())) as StoredDraft<D>[] | null) ?? [];
-  return all.filter((d) => d.owner === owner);
+export function getDraft<D>(key: string): Promise<StoredDraft<D> | null> {
+  return withStore("readonly", (s) => s.get(key)) as Promise<StoredDraft<D> | null>;
 }
 
-export async function draftsFor<D>(owner: string, assignmentId: string): Promise<StoredDraft<D>[]> {
-  return ((await withStore("readonly", (s) => s.index("assignment").getAll([owner, assignmentId]))) as StoredDraft<D>[] | null) ?? [];
-}
-
-/** Forget every stored draft on this device (another account signed in). */
-export function deleteAllDrafts(): Promise<void> {
-  return new Promise((resolve) => {
+/**
+ * Change one entry in a single transaction (read, then write or delete), so a change typed
+ * in another tab meanwhile isn't overwritten: `fn` sees the entry as it is now. Returning
+ * null deletes it; undefined leaves it.
+ */
+export async function updateDraft<D>(key: string, fn: (now: StoredDraft<D> | null) => StoredDraft<D> | null | undefined): Promise<void> {
+  const db = await openDb();
+  if (!db) return;
+  await new Promise<void>((resolve) => {
     try {
-      if (typeof indexedDB === "undefined") return resolve();
-      const req = indexedDB.deleteDatabase(DRAFT_DB);
-      req.onsuccess = req.onerror = req.onblocked = () => {
-        announceDrafts({ type: "changed" });
+      const tx = db.transaction(STORE, "readwrite", { durability: "strict" });
+      const store = tx.objectStore(STORE);
+      const req = store.get(key);
+      req.onsuccess = () => {
+        const next = fn((req.result as StoredDraft<D> | undefined) ?? null);
+        if (next === null) store.delete(key);
+        else if (next) store.put(next);
+      };
+      tx.oncomplete = tx.onerror = tx.onabort = () => {
+        db.close();
         resolve();
       };
     } catch {
+      db.close();
       resolve();
     }
   });
+}
+
+/** Every draft this device keeps for the account, for the header's waiting count and list. */
+export async function draftsOf<D>(owner: string): Promise<StoredDraft<D>[]> {
+  const all = ((await withStore("readonly", (s) => s.getAll())) as StoredDraft<D>[] | null) ?? [];
+  return all.filter((d) => d.owner === owner && !d.sealedAt);
+}
+
+export async function draftsFor<D>(owner: string, assignmentId: string): Promise<StoredDraft<D>[]> {
+  const all = ((await withStore("readonly", (s) => s.index("assignment").getAll([owner, assignmentId]))) as StoredDraft<D>[] | null) ?? [];
+  return all.filter((d) => !d.sealedAt);
+}
+
+/**
+ * Who is signed in on this device now (agreed step 3, point 10): seal other accounts'
+ * drafts, unseal this account's, and delete sealed drafts past their 7 days.
+ */
+export async function sealDrafts(owner: string, now = Date.now()): Promise<void> {
+  const db = await openDb();
+  if (!db) return;
+  let changed = false;
+  await new Promise<void>((resolve) => {
+    try {
+      const tx = db.transaction(STORE, "readwrite", { durability: "strict" });
+      const req = tx.objectStore(STORE).openCursor();
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (!cursor) return;
+        const d = cursor.value as StoredDraft;
+        if (d.owner === owner && d.sealedAt) {
+          cursor.update({ ...d, sealedAt: undefined });
+          changed = true;
+        } else if (d.owner !== owner && !d.sealedAt) {
+          cursor.update({ ...d, sealedAt: now });
+          changed = true;
+        } else if (d.owner !== owner && d.sealedAt && sealedExpired(d.sealedAt, now)) {
+          cursor.delete();
+          changed = true;
+        }
+        cursor.continue();
+      };
+      tx.oncomplete = tx.onerror = tx.onabort = () => {
+        db.close();
+        resolve();
+      };
+    } catch {
+      db.close();
+      resolve();
+    }
+  });
+  if (changed) announceDrafts({ type: "changed" });
 }
 
 // ─── Changes, across tabs ────────────────────────────────────────────────────

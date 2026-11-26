@@ -276,7 +276,7 @@ test("marks typed offline survive a closed tab and save on reconnect, as a draft
   await open(again, markUrl);
   await expect(again.getByLabel("Feedback for the student")).toHaveValue("Typed offline");
   await expect(again.getByText("Saved", { exact: true })).toBeVisible();
-  await expect(again.getByText(/This device has unsaved marks/)).toHaveCount(0);
+  await expect(again.getByText(/Changed elsewhere/)).toHaveCount(0);
   await again.reload();
   await expect(again.getByLabel("Feedback for the student")).toHaveValue("Typed offline");
 });
@@ -358,4 +358,91 @@ test("each account's pages are loaded ahead of time, work offline unopened, and 
   await expect(ta.getByRole("row").filter({ hasText: "Ria Student" })).toHaveCount(0);
   await sync();
   await expect.poll(async () => (await savedPaths()).some((p) => p.startsWith(coursePage)), { timeout: 30_000 }).toBe(false);
+});
+
+/** Marking drafts kept on this device (IndexedDB), read from any page of the site. */
+const draftCount = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<number>((r) => {
+        const q = indexedDB.open("uniflow-drafts");
+        q.onsuccess = () => {
+          try {
+            const c = q.result.transaction("drafts").objectStore("drafts").count();
+            c.onsuccess = () => {
+              r(c.result);
+              q.result.close();
+            };
+          } catch {
+            r(0);
+          }
+        };
+        q.onerror = () => r(0);
+      }),
+  );
+
+test("marks reach Uniflow by themselves: after a crash before the upload, and by Background Sync with Uniflow closed (#163)", async ({ browser }) => {
+  test.setTimeout(400_000);
+  const ta = await login(browser, "ta@e2e.test");
+  const courseId = await createCourse(ta, "SYNC163");
+  await importRoster(ta, "email,role\nsam@e2e.test,student");
+  // Late slots: other specs give this TA earlier ones.
+  const assignmentId = await createPublishedAssignment(ta, courseId, "Sync demo", { from: "21:00", to: "22:00" });
+  const sam = await login(browser, "sam@e2e.test");
+  await open(sam, `/courses/${courseId}/assignments/${assignmentId}`);
+  await sam.getByRole("button", { name: "Book" }).first().click();
+  await expect(sam.getByText("Your demo", { exact: true })).toBeVisible();
+
+  await open(ta, `/courses/${courseId}/manage/assignments/${assignmentId}?tab=students`);
+  await ta.getByRole("link", { name: "Mark", exact: true }).click();
+  await ta.getByLabel("Reason for marking before the demo").fill("Demoed early by arrangement");
+  await ta.getByRole("button", { name: "Start marking" }).click();
+  await ta.getByLabel("Functionality").fill("4");
+  await expect(ta.getByText("Saved", { exact: true })).toBeVisible();
+  await controlled(ta);
+  const markUrl = new URL(ta.url()).pathname + new URL(ta.url()).search;
+  const context = ta.context();
+
+  // A crash after the marks reached the device, before the upload got through: the upload
+  // never answers, and the tab dies without its unload handlers.
+  await context.route("**/api/marking/drafts", () => {});
+  await ta.getByLabel("Feedback for the student").fill("Before the crash");
+  await expect.poll(() => draftCount(ta)).toBe(1);
+  await ta.close({ runBeforeUnload: false });
+  await context.unroute("**/api/marking/drafts");
+  const back = await context.newPage();
+  await open(back, markUrl);
+  await expect(back.getByLabel("Feedback for the student")).toHaveValue("Before the crash");
+  await expect(back.getByText("Saved", { exact: true })).toBeVisible();
+  await expect.poll(() => draftCount(back)).toBe(0);
+
+  // Offline, typing is kept on this device; then every Uniflow tab closes.
+  await context.setOffline(true);
+  await back.getByLabel("Feedback for the student").fill("Synced in the background");
+  await expect(back.getByText("Saved on this device", { exact: true })).toBeVisible();
+  await expect.poll(() => draftCount(back)).toBe(1);
+  await back.close();
+
+  // Connection back, no Uniflow page open (/offline has no app shell, so nothing in a page
+  // uploads): the browser's Background Sync runs the worker's upload.
+  const shell = await context.newPage();
+  await shell.goto("/offline");
+  await context.setOffline(false);
+  const cdp = await context.newCDPSession(shell);
+  const registrations = new Set<string>();
+  cdp.on("ServiceWorker.workerRegistrationUpdated", (e) => e.registrations.forEach((r) => !r.isDeleted && registrations.add(r.registrationId)));
+  await cdp.send("ServiceWorker.enable");
+  await expect.poll(() => registrations.size).toBeGreaterThan(0);
+  expect(await draftCount(shell)).toBe(1);
+  await cdp.send("ServiceWorker.dispatchSyncEvent", { origin: new URL(shell.url()).origin, registrationId: [...registrations][0], tag: "marking-drafts", lastChance: false });
+  await expect.poll(() => draftCount(shell), { timeout: 15_000 }).toBe(0);
+
+  // The marks are on the server, as a draft: a fresh sheet shows them with nothing on the device.
+  // (A new tab: navigating away from the worker's /offline page can abort in Chromium.)
+  await cdp.detach();
+  await shell.close();
+  const fresh = await context.newPage();
+  await open(fresh, markUrl);
+  await expect(fresh.getByLabel("Feedback for the student")).toHaveValue("Synced in the background");
+  await expect(fresh.getByText("Changed elsewhere")).toHaveCount(0);
 });
