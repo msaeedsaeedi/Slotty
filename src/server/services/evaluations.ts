@@ -2,6 +2,7 @@ import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { canReadPrivateNote, canSubmit, canTransition, canWithdraw, checkTotalMarks, computeTotal, nextStatus, releaseAtFor, submitRoute, validateScores, type EvaluationStatus } from "@/domain/evaluation";
 import { checkReason } from "@/domain/text";
+import { checkDraftUpload, evaluationVersion } from "@/domain/draft-upload";
 import { assertRule, DomainError } from "@/domain/result";
 import { visibleMarks, type VisibleMarks } from "@/domain/student-demo";
 import { dayRange, fmtData } from "@/lib/time";
@@ -231,48 +232,107 @@ export async function saveDraft(
   actor: Actor,
   assignmentId: string,
   studentId: string,
-  input: z.input<typeof evaluationInput> & { noBookingReason?: string; earlyMarkReason?: string },
+  input: DraftData,
   now = new Date(),
 ) {
+  return db.$transaction((tx) => saveDraftIn(tx, actor, assignmentId, studentId, input, now));
+}
+
+type DraftData = z.input<typeof evaluationInput> & { noBookingReason?: string; earlyMarkReason?: string };
+
+async function saveDraftIn(tx: Tx, actor: Actor, assignmentId: string, studentId: string, input: DraftData, now: Date) {
   const data = evaluationInput.parse(input);
+  const { assignment } = await assertAssignmentRole(tx, actor, assignmentId, STAFF, { write: true });
+  const enrollment = await tx.enrollment.findUnique({ where: { courseId_userId: { courseId: assignment.courseId, userId: studentId } } });
+  if (!enrollment || enrollment.role !== "STUDENT") throw new DomainError("Student not found in this course.", "NOT_FOUND");
+  const booking = await tx.booking.findFirst({ where: { assignmentId, studentId, status: { in: [...ACTIVE_BOOKING] } }, include: { slot: true } });
+  if (booking?.status === "NO_SHOW") throw new DomainError("This student was marked as a no-show. Undo that first if they did their demo.");
+
+  let evaluation = await tx.evaluation.findUnique({ where: { assignmentId_studentId: { assignmentId, studentId } } });
+  if (!evaluation) {
+    const reason = input.noBookingReason?.trim();
+    if (!booking) assertRule(checkReason(reason, { missing: "This student has no demo booking. Say why you're marking them anyway — it's recorded." }), "INVALID", "noBookingReason");
+    evaluation = await tx.evaluation.create({
+      data: { assignmentId, studentId, evaluatorId: actor.id, bookingId: booking?.id, noBookingReason: booking ? null : reason },
+    });
+    if (!booking) {
+      await audit(tx, actor, { action: "evaluation.no_booking", entityType: "Evaluation", entityId: evaluation.id, after: { studentId, reason } });
+    }
+  } else if (booking && evaluation.bookingId !== booking.id) {
+    await tx.evaluation.update({ where: { id: evaluation.id }, data: { bookingId: booking.id } });
+  }
+  // Marking before the demo has happened is unusual: it needs a reason, kept with the marks.
+  if (booking && booking.slot.startsAt > now && !evaluation.earlyMarkReason) {
+    const reason = input.earlyMarkReason?.trim();
+    assertRule(checkReason(reason, { missing: "This demo hasn't started yet. Say why you're marking it early — it's recorded." }), "INVALID", "earlyMarkReason");
+    evaluation = await tx.evaluation.update({ where: { id: evaluation.id }, data: { earlyMarkReason: reason } });
+    await audit(tx, actor, { action: "evaluation.early", entityType: "Evaluation", entityId: evaluation.id, after: { studentId, reason, demoAt: booking.slot.startsAt } });
+  }
+
+  const criteria = await tx.rubricCriterion.findMany({ where: { assignmentId } });
+  const totalMarks = await writeEvaluation(tx, actor, { ...evaluation, assignment: { maxMarks: assignment.maxMarks, criteria } }, data);
+
+  let bookingStatus = booking?.status ?? null;
+  if (booking?.status === "BOOKED" && booking.slot.startsAt <= now && data.scores.length > 0) {
+    await tx.booking.update({ where: { id: booking.id }, data: { status: "COMPLETED" } });
+    await audit(tx, actor, { action: "booking.attendance", entityType: "Booking", entityId: booking.id, before: "BOOKED", after: "COMPLETED" });
+    bookingStatus = "COMPLETED";
+  }
+  return { evaluationId: evaluation.id, status: evaluation.status, totalMarks, bookingStatus };
+}
+
+/** What the server has for one student, sent back on a conflict so the TA can compare. */
+export interface ServerMarks {
+  status: EvaluationStatus | null;
+  totalMarks: number | null;
+  feedback: string | null;
+  /** The uploader's own private note (ADR-031): nobody else's. */
+  privateNotes: string | null;
+  scores: { criterionId: string; points: number }[];
+}
+
+export type DraftUpload =
+  | { result: "saved"; version: string; evaluationId: string; status: EvaluationStatus; totalMarks: number | null; bookingStatus: string | null }
+  | { result: "conflict"; version: string; server: ServerMarks };
+
+/**
+ * A marking draft uploaded from a device (#163; agreed design: step 3 on #160): by the open
+ * marking sheet, or by the service worker with Uniflow closed. The same rules, access checks
+ * and audit as `saveDraft`, plus:
+ * - It saves only on top of the version the device started from (`checkDraftUpload`);
+ *   otherwise nothing is saved and the current marks come back, for the TA to choose.
+ * - A repeat of an upload already saved (`changeId`, kept on the evaluation) answers saved.
+ * The evaluation row is locked for the check and the save, so two uploads can't both pass.
+ * Drafts only: never submits or releases.
+ */
+export async function uploadDraft(
+  actor: Actor,
+  upload: { assignmentId: string; studentId: string; baseVersion: string; changeId: string; draft: DraftData },
+  now = new Date(),
+): Promise<DraftUpload> {
+  const { assignmentId, studentId, baseVersion, changeId } = upload;
   return db.$transaction(async (tx) => {
-    const { assignment } = await assertAssignmentRole(tx, actor, assignmentId, STAFF, { write: true });
-    const enrollment = await tx.enrollment.findUnique({ where: { courseId_userId: { courseId: assignment.courseId, userId: studentId } } });
-    if (!enrollment || enrollment.role !== "STUDENT") throw new DomainError("Student not found in this course.", "NOT_FOUND");
-    const booking = await tx.booking.findFirst({ where: { assignmentId, studentId, status: { in: [...ACTIVE_BOOKING] } }, include: { slot: true } });
-    if (booking?.status === "NO_SHOW") throw new DomainError("This student was marked as a no-show. Undo that first if they did their demo.");
-
-    let evaluation = await tx.evaluation.findUnique({ where: { assignmentId_studentId: { assignmentId, studentId } } });
-    if (!evaluation) {
-      const reason = input.noBookingReason?.trim();
-      if (!booking) assertRule(checkReason(reason, { missing: "This student has no demo booking. Say why you're marking them anyway — it's recorded." }), "INVALID", "noBookingReason");
-      evaluation = await tx.evaluation.create({
-        data: { assignmentId, studentId, evaluatorId: actor.id, bookingId: booking?.id, noBookingReason: booking ? null : reason },
-      });
-      if (!booking) {
-        await audit(tx, actor, { action: "evaluation.no_booking", entityType: "Evaluation", entityId: evaluation.id, after: { studentId, reason } });
-      }
-    } else if (booking && evaluation.bookingId !== booking.id) {
-      await tx.evaluation.update({ where: { id: evaluation.id }, data: { bookingId: booking.id } });
+    await assertAssignmentRole(tx, actor, assignmentId, STAFF, { write: true });
+    await tx.$queryRaw`SELECT 1 FROM "Evaluation" WHERE "assignmentId" = ${assignmentId} AND "studentId" = ${studentId} FOR UPDATE`;
+    const current = await tx.evaluation.findUnique({
+      where: { assignmentId_studentId: { assignmentId, studentId } },
+      select: { id: true, status: true, totalMarks: true, feedback: true, updatedAt: true, lastClientChangeId: true, scores: { select: { criterionId: true, points: true } }, booking: { select: { status: true } } },
+    });
+    const check = checkDraftUpload(current && { version: evaluationVersion(current), lastClientChangeId: current.lastClientChangeId }, { baseVersion, changeId });
+    if (check === "repeat" && current) {
+      return { result: "saved", version: evaluationVersion(current), evaluationId: current.id, status: current.status, totalMarks: current.totalMarks, bookingStatus: current.booking?.status ?? null };
     }
-    // Marking before the demo has happened is unusual: it needs a reason, kept with the marks.
-    if (booking && booking.slot.startsAt > now && !evaluation.earlyMarkReason) {
-      const reason = input.earlyMarkReason?.trim();
-      assertRule(checkReason(reason, { missing: "This demo hasn't started yet. Say why you're marking it early — it's recorded." }), "INVALID", "earlyMarkReason");
-      evaluation = await tx.evaluation.update({ where: { id: evaluation.id }, data: { earlyMarkReason: reason } });
-      await audit(tx, actor, { action: "evaluation.early", entityType: "Evaluation", entityId: evaluation.id, after: { studentId, reason, demoAt: booking.slot.startsAt } });
+    if (check === "conflict") {
+      const note = current ? await tx.evaluationNote.findFirst({ where: { evaluationId: current.id, authorId: actor.id }, select: { body: true } }) : null;
+      return {
+        result: "conflict",
+        version: evaluationVersion(current),
+        server: { status: current?.status ?? null, totalMarks: current?.totalMarks ?? null, feedback: current?.feedback ?? null, privateNotes: note?.body ?? null, scores: current?.scores ?? [] },
+      };
     }
-
-    const criteria = await tx.rubricCriterion.findMany({ where: { assignmentId } });
-    const totalMarks = await writeEvaluation(tx, actor, { ...evaluation, assignment: { maxMarks: assignment.maxMarks, criteria } }, data);
-
-    let bookingStatus = booking?.status ?? null;
-    if (booking?.status === "BOOKED" && booking.slot.startsAt <= now && data.scores.length > 0) {
-      await tx.booking.update({ where: { id: booking.id }, data: { status: "COMPLETED" } });
-      await audit(tx, actor, { action: "booking.attendance", entityType: "Booking", entityId: booking.id, before: "BOOKED", after: "COMPLETED" });
-      bookingStatus = "COMPLETED";
-    }
-    return { evaluationId: evaluation.id, status: evaluation.status, totalMarks, bookingStatus };
+    const saved = await saveDraftIn(tx, actor, assignmentId, studentId, upload.draft, now);
+    const after = await tx.evaluation.update({ where: { id: saved.evaluationId }, data: { lastClientChangeId: changeId }, select: { updatedAt: true } });
+    return { result: "saved", version: evaluationVersion(after), ...saved };
   });
 }
 
@@ -354,6 +414,9 @@ export async function getMarkingSheet(
           reviewComment: e.reviewComment,
           releaseAt: e.releaseAt,
           scores: e.scores.map((s) => ({ criterionId: s.criterionId, points: s.points, comment: s.comment })),
+          /** What a device's draft of these marks is checked against on upload (#163). */
+          version: evaluationVersion(e),
+          lastClientChangeId: e.lastClientChangeId,
         },
       };
     }),

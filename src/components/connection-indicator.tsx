@@ -73,6 +73,13 @@ export function ConnectionIndicator({ owner, renderedAt }: { owner: string; rend
   const waiting = entries.filter((e) => e.state !== "error" && e.state !== "conflict");
   const busy = syncing.size > 0;
 
+  // The installed app's icon counts the marks still on this device (Badging API; #163).
+  const onDevice = entries.length;
+  useEffect(() => {
+    const nav = navigator as Navigator & { setAppBadge?: (n: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
+    void (onDevice ? nav.setAppBadge?.(onDevice) : nav.clearAppBadge?.())?.catch(() => {});
+  }, [onDevice]);
+
   // A check for 2 s once everything that was waiting has reached Uniflow.
   const [synced, setSynced] = useState(false);
   const hadPending = useRef(false);
