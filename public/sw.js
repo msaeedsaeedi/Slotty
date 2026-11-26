@@ -2,7 +2,7 @@
  *
  * Caching rules (see the system documentation, Business rules → PWA, ch. 7, and ADR-038;
  * agreed design: steps 1 and 2 on issue #160):
- * - Only GET requests. Server Actions (POST) are never cached or replayed.
+ * - Only GET requests are answered. Server Actions (POST) are never cached or replayed.
  * - Build assets (/_next/static) are cache-first, but only responses marked `immutable` are
  *   stored. The newest STATIC_MAX are kept, plus every file a saved page needs (pinned for as
  *   long as the page is saved), so a page saved before a release still renders.
@@ -24,7 +24,11 @@
  * - Saved pages belong to one account: the list carries an opaque owner key and a different
  *   owner wipes them; pages also ask the worker to forget them (`clear-pages`), and signing
  *   out wipes everything (Clear-Site-Data).
+ * - Marking drafts kept on the device (IndexedDB) upload on Background Sync (`marking-drafts`),
+ *   with Uniflow closed, through POST /api/marking/drafts (#163; see "Marking drafts" below).
+ *   This is the only thing the worker ever POSTs, and only drafts: never a submit or release.
  */
+// The version names the caches; the marking-draft sync (#163) needs no new caches, so it stays v6.
 const VERSION = "v6"; // v6: pages from the server's list, loaded ahead of time, pinned build files (#162)
 const STATIC_CACHE = `uniflow-static-${VERSION}`;
 const PAGE_CACHE = `uniflow-pages-${VERSION}`;
@@ -324,6 +328,170 @@ self.addEventListener("message", (event) => {
 // Fresh pages even when the app wasn't opened (installed Chrome apps only, when Chrome decides).
 self.addEventListener("periodicsync", (event) => {
   if (event.tag === "uniflow-pages") event.waitUntil(syncPages());
+});
+
+// ─── Marking drafts, uploaded with Uniflow closed (#163) ─────────────────────
+// The page asks for a Background Sync (tag `marking-drafts`) when an upload can't reach
+// Uniflow; Chrome fires it once there's a connection, with no Uniflow window open. This
+// mirrors src/lib/draft-sync.ts (`syncAllDrafts`, `applyReply`): keep the two in step.
+// - Same route and replies: saved → delete (unless edited meanwhile), conflict → keep with
+//   the server's marks, refused → Needs attention, signed out / another account → wait,
+//   network or server error → reject, so Chrome tries again later.
+// - Sealed drafts (another account signed in since) are never uploaded; the server also
+//   checks the account key against the signed-in account.
+// - Drafts of a marking sheet open in some tab are left to that sheet (Web Lock).
+
+const DRAFT_DB = "uniflow-drafts";
+const DRAFT_STORE = "drafts";
+
+function draftDb() {
+  return new Promise((resolve) => {
+    try {
+      const req = indexedDB.open(DRAFT_DB, 1);
+      req.onupgradeneeded = () => {
+        const store = req.result.createObjectStore(DRAFT_STORE, { keyPath: "key" });
+        store.createIndex("assignment", ["owner", "assignmentId"]);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = req.onblocked = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function allDrafts() {
+  const db = await draftDb();
+  if (!db) return [];
+  return new Promise((resolve) => {
+    try {
+      const req = db.transaction(DRAFT_STORE).objectStore(DRAFT_STORE).getAll();
+      req.onsuccess = () => {
+        db.close();
+        resolve(req.result || []);
+      };
+      req.onerror = () => {
+        db.close();
+        resolve([]);
+      };
+    } catch {
+      db.close();
+      resolve([]);
+    }
+  });
+}
+
+/** Read-modify-write one entry in one transaction; fn returns the new entry, null (delete) or undefined (leave). */
+async function updateDraftEntry(key, fn) {
+  const db = await draftDb();
+  if (!db) return;
+  await new Promise((resolve) => {
+    try {
+      const tx = db.transaction(DRAFT_STORE, "readwrite", { durability: "strict" });
+      const store = tx.objectStore(DRAFT_STORE);
+      const req = store.get(key);
+      req.onsuccess = () => {
+        const next = fn(req.result || null);
+        if (next === null) store.delete(key);
+        else if (next) store.put(next);
+      };
+      tx.oncomplete = tx.onerror = tx.onabort = () => {
+        db.close();
+        resolve();
+      };
+    } catch {
+      db.close();
+      resolve();
+    }
+  });
+}
+
+const retryDelay = (attempts) => Math.min(5000 * 2 ** Math.max(0, attempts - 1), 10 * 60_000);
+
+async function uploadDraftEntry(entry) {
+  let res;
+  try {
+    res = await fetch("/api/marking/drafts", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner: entry.owner, assignmentId: entry.assignmentId, studentId: entry.studentId, baseVersion: entry.version, changeId: entry.changeId, draft: entry.payload }),
+    });
+  } catch {
+    return { result: "network" };
+  }
+  const body = await res.json().catch(() => null);
+  if (res.ok && body && body.result === "saved") return body;
+  if (res.status === 409 && body && body.result === "conflict") return body;
+  if (res.status === 401) return { result: "signed-out" };
+  if (res.status === 403 && body && body.result === "other-account") return { result: "other-account" };
+  if ([400, 413, 422].includes(res.status) && body && body.result === "refused") return body;
+  return { result: "network" };
+}
+
+async function applyDraftReply(entry, reply) {
+  await updateDraftEntry(entry.key, (now) => {
+    if (!now) return undefined;
+    const edited = now.changeId !== entry.changeId;
+    if (reply.result === "saved") return edited ? { ...now, version: reply.version, state: "waiting", attempts: 0, nextTry: undefined } : null;
+    if (reply.result === "conflict") return { ...now, state: "conflict", server: { ...reply.server, version: reply.version }, message: undefined };
+    if (reply.result === "refused") return edited ? undefined : { ...now, state: "error", message: reply.message };
+    if (reply.result === "network") {
+      const attempts = (now.attempts || 0) + 1;
+      return { ...now, attempts, nextTry: Date.now() + retryDelay(attempts) };
+    }
+    return undefined;
+  });
+}
+
+function tellPages(event) {
+  try {
+    const ch = new BroadcastChannel("uniflow-drafts");
+    ch.postMessage(event);
+    ch.close();
+  } catch {}
+}
+
+const lockFor = (name, fn) => (self.navigator.locks ? self.navigator.locks.request(name, fn) : fn());
+
+/** Upload every waiting draft not owned by an open sheet. Rejects if any couldn't reach Uniflow. */
+async function syncDrafts() {
+  let openSheets = new Set();
+  try {
+    const held = (await self.navigator.locks?.query())?.held || [];
+    openSheets = new Set(held.map((l) => l.name));
+  } catch {}
+  let unreachable = false;
+  for (const entry of await allDrafts()) {
+    if (!entry.payload || !entry.version || !entry.changeId || entry.sealedAt) continue;
+    if ((entry.state || "waiting") !== "waiting") continue;
+    if (openSheets.has(`uniflow-sheet:${entry.owner}:${entry.assignmentId}`)) continue;
+    const reply = await lockFor(`uniflow-draft:${entry.key}`, async () => {
+      tellPages({ type: "syncing", key: entry.key, on: true });
+      const r = await uploadDraftEntry(entry);
+      await applyDraftReply(entry, r);
+      tellPages({ type: "syncing", key: entry.key, on: false });
+      return r;
+    });
+    if (reply.result === "network") {
+      unreachable = true;
+      break;
+    }
+    if (reply.result === "signed-out" || reply.result === "other-account") break;
+  }
+  tellPages({ type: "changed" });
+  // The installed app's icon shows how many marks are still on this device.
+  const left = (await allDrafts()).filter((d) => !d.sealedAt).length;
+  try {
+    if (left) await self.navigator.setAppBadge?.(left);
+    else await self.navigator.clearAppBadge?.();
+  } catch {}
+  if (unreachable) throw new Error("Uniflow unreachable: try again later");
+}
+
+self.addEventListener("sync", (event) => {
+  if (event.tag === "marking-drafts") event.waitUntil(syncDrafts());
 });
 
 self.addEventListener("push", (event) => {

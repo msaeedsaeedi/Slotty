@@ -6,7 +6,8 @@ import { BellRing, Download, X } from "lucide-react";
 import { toast } from "sonner";
 import { subscribePushAction, unsubscribePushAction } from "@/app/actions/push";
 import { Button } from "@/components/ui/button";
-import { deleteAllDrafts } from "@/lib/draft-store";
+import { sealDrafts } from "@/lib/draft-store";
+import { syncAllDrafts } from "@/lib/draft-sync";
 
 // ─── Saved data belongs to one account ───────────────────────────────────────
 
@@ -24,9 +25,11 @@ function clearSavedPageCaches() {
 }
 
 /**
- * In every signed-in page: if this device's saved pages and marking drafts belong to
- * another account (someone else signed in without signing out first), forget them.
- * `owner` is an opaque per-account key (`offlineOwner`), never the user id.
+ * In every signed-in page: if this device's saved pages belong to another account (someone
+ * else signed in without signing out first), forget them. Another account's marking drafts
+ * are sealed instead (#163): hidden, never uploaded under this account, deleted after 7 days.
+ * Then this account's waiting drafts upload. `owner` is an opaque per-account key
+ * (`offlineOwner`), never the user id.
  */
 export function OfflineOwner({ owner }: { owner: string }) {
   useEffect(() => {
@@ -37,17 +40,28 @@ export function OfflineOwner({ owner }: { owner: string }) {
     const changed = previous !== owner;
     if (changed) {
       clearSavedPageCaches();
-      void deleteAllDrafts();
       try {
         localStorage.setItem(OWNER_KEY, owner);
       } catch {}
     }
+    // Marking drafts kept on this device upload by themselves: now, when the app comes back to
+    // the screen and when the connection returns (with Uniflow closed, Background Sync does it).
+    const drafts = sealDrafts(owner).then(() => syncAllDrafts(owner));
+    const uploadDrafts = () => void drafts.then(() => syncAllDrafts(owner));
     // Load this account's pages ahead of time (#162): now (forced after a sign-in, so the day
     // starts prepared), when the app comes back to the screen and when the connection
     // returns. The worker itself waits 5 minutes between syncs unless forced.
     syncOfflinePages(changed);
-    const onVisible = () => document.visibilityState === "visible" && syncOfflinePages(false);
-    const onOnline = () => syncOfflinePages(false);
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      syncOfflinePages(false);
+      uploadDrafts();
+    };
+    const onOnline = () => {
+      syncOfflinePages(false);
+      // Straight away, not when the last try's gap is up.
+      void drafts.then(() => syncAllDrafts(owner, { force: true }));
+    };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("online", onOnline);
     return () => {
@@ -109,7 +123,7 @@ export function ServiceWorkerRegistrar() {
 /**
  * On the sign-in, invite and password pages: forget pages saved for whoever used this
  * browser before. Marking drafts stay: they may be this person's unsaved work after their
- * session expired; `OfflineOwner` removes them if a different account signs in.
+ * session expired; `OfflineOwner` seals them if a different account signs in.
  */
 export function ClearSavedPages() {
   useEffect(clearSavedPageCaches, []);

@@ -1,5 +1,6 @@
 import Link from "@/components/app-link";
-import { BarChart3, CalendarClock, LogOut, Shield, UserRound } from "lucide-react";
+import { BarChart3, CalendarClock, Shield, UserRound } from "lucide-react";
+import { SignOutButton } from "@/components/sign-out-button";
 import { UniflowMark } from "@/components/uniflow-mark";
 import { FeedbackButton } from "@/components/feedback-button";
 import { LiveBell } from "@/components/live-bell";
@@ -69,11 +70,7 @@ export async function AppHeader({ user }: { user: Actor }) {
               <UserRound />
             </Link>
           </Button>
-          <form action="/logout" method="post">
-            <Button type="submit" variant="ghost" size="icon" aria-label="Sign out">
-              <LogOut />
-            </Button>
-          </form>
+          <SignOutButton owner={offlineOwner(user.id)} />
         </div>
       </div>
     </header>

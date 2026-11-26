@@ -425,38 +425,41 @@ enum EvaluationStatus {
 }
 
 model Evaluation {
-  id              String           @id @default(cuid())
-  assignmentId    String
-  studentId       String
-  bookingId       String?          @unique
-  evaluatorId     String
-  totalMarks      Float?
-  totalOverride   Boolean          @default(false)
-  overrideNote    String?
-  feedback        String?
+  id                 String           @id @default(cuid())
+  assignmentId       String
+  studentId          String
+  bookingId          String?          @unique
+  evaluatorId        String
+  totalMarks         Float?
+  totalOverride      Boolean          @default(false)
+  overrideNote       String?
+  feedback           String?
   // The column "privateNotes" still exists in the database for the previous release (rollback)
   // but is no longer modeled, so no query can return it. Notes live in EvaluationNote (ADR-031).
   // `prisma migrate dev` proposes dropping it: leave that out until the contract release.
   /// Why staff marked a student who had no demo booking (unusual, so it's recorded).
-  noBookingReason String?
+  noBookingReason    String?
   /// Why staff marked the demo before it started (also unusual, also recorded).
-  earlyMarkReason String?
-  status          EvaluationStatus @default(DRAFT)
-  submittedAt     DateTime?
+  earlyMarkReason    String?
+  status             EvaluationStatus @default(DRAFT)
+  submittedAt        DateTime?
   /// Who submitted the marks last: the only TA who may withdraw them while they're held.
-  submittedById   String?
+  submittedById      String?
   /// Held marks (ADR-032): a TA's submit in a course without an instructor stays SUBMITTED until
   /// this time, then the worker releases it. Null when nothing is held.
-  releaseAt       DateTime?
-  reviewedById    String?
-  reviewedAt      DateTime?
-  reviewComment   String?
+  releaseAt          DateTime?
+  reviewedById       String?
+  reviewedAt         DateTime?
+  reviewComment      String?
   /// The marks the student last saw ({totalMarks, feedback, scores}), kept while
   /// staff correct them after unlocking so the result doesn't vanish; cleared
   /// when the marks are released again.
-  released        Json?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  released           Json?
+  /// The last marking-sheet upload saved (an ID made by the device, #163): a retry of it is
+  /// recognised as already saved instead of conflicting with itself.
+  lastClientChangeId String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 
   assignment  Assignment        @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   student     User              @relation("EvaluationStudent", fields: [studentId], references: [id])
