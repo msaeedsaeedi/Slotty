@@ -8,14 +8,6 @@ const MAX_ATTEMPTS = 3;
 const CONCURRENCY = 10;
 /** Pushes about something hours old are noise; drop them instead of delivering late. */
 const STALE_MS = 6 * 3_600_000;
-/** How long the push service keeps trying an offline device, unless the message expires sooner. */
-const DEFAULT_TTL_S = 3600;
-
-/** Seconds the push service may hold this message for an offline device; 0 or less means it has expired. */
-export function pushTtlSeconds(expiresAt: Date | null, now = new Date()): number {
-  if (!expiresAt) return DEFAULT_TTL_S;
-  return Math.min(DEFAULT_TTL_S, Math.floor((expiresAt.getTime() - now.getTime()) / 1000));
-}
 
 let configured = false;
 function configure() {
@@ -52,17 +44,12 @@ export async function deliverPendingPush(batchSize = 100): Promise<{ sent: numbe
       data: { attempts: { increment: 1 } },
     });
     if (claimed.count === 0) return "skipped" as const;
-    const ttl = pushTtlSeconds(msg.expiresAt);
-    if (ttl <= 0) {
-      await db.pushMessage.updateMany({ where: { id: msg.id }, data: { status: "FAILED", lastError: "expired" } });
-      return "expired" as const;
-    }
     const { endpoint, p256dh, auth } = msg.subscription;
     try {
       await webpush.sendNotification(
         { endpoint, keys: { p256dh, auth } },
         JSON.stringify({ title: msg.title, body: msg.body, url: msg.link ?? "/notifications", tag: msg.id }),
-        { TTL: ttl, urgency: msg.urgent ? "high" : "normal" },
+        { TTL: 3600 },
       );
       await db.pushMessage.updateMany({ where: { id: msg.id }, data: { status: "SENT", sentAt: new Date(), lastError: null } });
       return "sent" as const;
@@ -83,7 +70,7 @@ export async function deliverPendingPush(batchSize = 100): Promise<{ sent: numbe
   });
   return {
     sent: outcomes.filter((o) => o === "sent").length,
-    failed: outcomes.filter((o) => o === "failed" || o === "expired").length,
+    failed: outcomes.filter((o) => o === "failed").length,
     fetched: batch.length,
   };
 }

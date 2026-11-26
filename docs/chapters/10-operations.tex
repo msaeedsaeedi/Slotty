@@ -268,47 +268,6 @@ app keeps working. Rotating the secret
 (\code{terraform apply -replace=random_password.analytics}, then a deploy) makes every person
 count as new from then on. No alarm is spent on analytics: it is not part of the service.
 
-\subsection{Offline behaviour: baseline and device checks}\label{sec:ops-offline}
-\src{tests/e2e/offline.spec.ts} measures the service worker on every e2e run (Chromium, production
-build, local server) and prints the numbers as \code{OFFLINE\_BASELINE}. ``Lie-fi'' is a connection
-that never answers, ``slow'' a server that answers after 8\,s; both are simulated by holding the
-worker's request, because DevTools throttling doesn't reach a service worker. Before and after
-issue \#142 (ADR-038), on 2026-11-25:
-
-{\tablefont
-\begin{xltabular}{\linewidth}{@{}L r r@{}}
-  \toprule
-  \thead{Case (time until the page shows)} & \thead{Before (v4)} & \thead{After (v5)}\\
-  \midrule
-  \endhead
-  Dashboard, first visit / repeat & 319 / 209\,ms & 309 / 263\,ms\\
-  Offline, saved page / page not saved (\route{/offline}) & 164 / 94\,ms & 284 / 143\,ms\\
-  Lie-fi, saved page & 45.3\,s & 4.2\,s\\
-  Slow server, saved page & 8.3\,s & 4.2\,s (copy, then refreshed)\\
-  Server answers 503, saved page & error shown & saved copy, 147\,ms\\
-  Submit whose connection drops & error page & message, input kept\\
-  \bottomrule
-\end{xltabular}}
-
-Build files cached after one dashboard visit: 22 (the cap is 400). Real devices are checked by hand
-before a release that changes \src{public/sw.js} or \src{src/components/pwa.tsx}; record the result
-in the release pull request:
-\begin{itemize}
-  \item Android Chrome, installed app: open the dashboard, a course and an assignment; airplane
-    mode; reopen each from the app (saved copy, ``Offline'' in the header), open the account page
-    (\route{/offline}); turn the network back on (the page refreshes by itself).
-  \item iPhone, Home Screen app (iOS 16.4+): the same, plus a reminder push with the app closed
-    and the device offline until just before the demo (the push arrives on reconnect unless the
-    demo has started).
-  \item Desktop Chrome or Edge: the same with DevTools offline; with the browser closed, no push
-    arrives until it runs again.
-  \item Shared device: sign out, sign in as another account through an invite link, then go
-    offline: none of the first account's pages open. On iOS also check that sign-out cleared them
-    (Safari's \code{Clear-Site-Data} support is partial).
-  \item Marking: type marks offline, close the tab, reopen the sheet online: the marks come back
-    and save as a draft.
-\end{itemize}
-
 \subsection{An alarm fired}
 \begin{xltabular}{\linewidth}{@{}P{40mm} L@{}}
   \toprule

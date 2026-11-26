@@ -1,4 +1,4 @@
-import Link from "@/components/app-link";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /** A row of filter links that keep the other query params (e.g. the search box). */

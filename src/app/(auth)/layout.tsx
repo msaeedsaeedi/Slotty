@@ -1,4 +1,3 @@
-import { ClearSavedPages } from "@/components/pwa";
 import { PublicShell } from "@/components/public/public-shell";
 import { SUPPORT_EMAIL, supportMailto } from "@/lib/site";
 
@@ -8,8 +7,6 @@ const help = "text-[var(--text-2)] underline decoration-[var(--line-strong)] und
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <PublicShell>
-      {/* Signing in, accepting an invite or resetting a password: forget the last person's saved pages. */}
-      <ClearSavedPages />
       <main id="main" className="flex flex-1 flex-col items-center px-5 pt-10 pb-16 sm:pt-16 sm:pb-24">
         <div className="relative isolate w-full max-w-[400px]">
           {/* The landing hero's background mark: a giant faint split-flap behind the panel. */}

@@ -1,4 +1,4 @@
-import Link from "@/components/app-link";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { StatusBadge } from "@/components/status-badge";
 import { db } from "@/server/db";

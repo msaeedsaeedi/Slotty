@@ -1,12 +1,12 @@
 "use client";
 
-import Link from "@/components/app-link";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, Check, ChevronLeft, ChevronRight, CircleAlert, Loader2, MapPin, UserRound } from "lucide-react";
-import { sheetAttendanceAction, submitManyAction } from "@/app/actions/evaluations";
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, CircleAlert, CloudOff, Loader2, MapPin, UserRound } from "lucide-react";
+import { saveDraftAction, sheetAttendanceAction, submitManyAction } from "@/app/actions/evaluations";
 import { ActionForm, SubmitButton } from "@/components/action-form";
-import { reportReachable, reportUnreachable, useConnection, useNetworkGuard } from "@/components/connection";
+import { useOnline } from "@/components/pwa";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PrivateNotes, type VisibleNote } from "@/components/private-notes";
@@ -15,9 +15,6 @@ import { formatLeft, formatUntil } from "@/domain/demo-day";
 import { hasMarkPrecision, MARK_DECIMALS } from "@/domain/evaluation";
 import { REASON_MAX_LENGTH } from "@/domain/text";
 import { cn } from "@/lib/utils";
-import { NEW_EVALUATION } from "@/domain/draft-upload";
-import { announceDrafts, deleteDraft, draftKey, draftsFor, putDraft, type StoredDraft } from "@/lib/draft-store";
-import { newChangeId, sheetLock, syncDraft, type StoredConflict } from "@/lib/draft-sync";
 
 export interface SheetRow {
   student: { id: string; name: string; email: string };
@@ -46,10 +43,6 @@ export interface SheetRow {
     /** When released marks waiting out their hold reach the student, in the course timezone (ADR-032). */
     releasesOn: string | null;
     scores: { criterionId: string; points: number; comment: string | null }[];
-    /** The version a draft typed here starts from (#163). */
-    version: string;
-    /** The last device upload saved: a device copy with this ID is already on the server. */
-    lastClientChangeId: string | null;
   } | null;
 }
 
@@ -60,8 +53,6 @@ interface Criterion {
 }
 
 interface Props {
-  /** Opaque key of the signed-in account (`offlineOwner`): unsaved drafts on this device are kept under it. */
-  offlineOwner: string;
   assignment: { id: string; title: string; maxMarks: number; courseId: string; courseCode: string };
   criteria: Criterion[];
   rows: SheetRow[];
@@ -99,22 +90,7 @@ interface Draft {
   earlyMarkReason: string;
 }
 
-/**
- * One row's sync state (#161, #163): `dirty` typed, not yet uploaded (`onDevice` once it's
- * written to this device), `local` kept on this device because Uniflow couldn't be reached,
- * `saving` on its way, `saved` reached Uniflow, `conflict` changed elsewhere since (both
- * versions shown), `error` refused by Uniflow (needs attention; not retried by itself).
- */
-type SaveState = { kind: "idle" } | { kind: "dirty" } | { kind: "local" } | { kind: "saving" } | { kind: "saved"; at: string } | { kind: "conflict" } | { kind: "error"; message: string };
-
-/** A device copy that doesn't match what Uniflow has now: the TA chooses (agreed step 3, point 4). */
-interface Conflict {
-  i: number;
-  draft: Draft;
-  /** When the device copy was last typed. */
-  at: number;
-  server: StoredConflict;
-}
+type SaveState = { kind: "idle" } | { kind: "dirty" } | { kind: "saving" } | { kind: "saved"; at: string } | { kind: "error"; message: string };
 
 interface RowState {
   bookingStatus: SheetRow["booking"] extends infer B ? (B extends { status: infer S } ? S : never) | null : never;
@@ -124,13 +100,9 @@ interface RowState {
   /** A reason is on record for marking this demo before it started. */
   earlyOk: boolean;
   save: SaveState;
-  /** What's typed is written to this device (shown as "Saved on this device" only then). */
-  onDevice: boolean;
 }
 
 const SAVE_DELAY_MS = 800;
-/** Typing reaches this device at least this often (and at once when the tab is hidden). */
-const DEVICE_WRITE_MS = 300;
 const TICK_MS = 10_000;
 
 function draftOf(r: SheetRow): Draft {
@@ -142,33 +114,6 @@ function draftOf(r: SheetRow): Draft {
     total: e?.totalMarks?.toString() ?? "",
     noBookingReason: "",
     earlyMarkReason: "",
-  };
-}
-
-/**
- * What the server has for one student, comparable with a draft typed on top of it: a draft
- * kept on this device is restored silently only while this still matches.
- */
-function fingerprint(d: Draft, status: string | null, rubric: boolean): string {
-  const points = Object.entries(d.points)
-    .filter(([, v]) => v.trim())
-    .map(([k, v]) => [k, Number(v)])
-    .sort(([a], [b]) => String(a).localeCompare(String(b)));
-  // With a rubric the total is computed from the points (the server sends it, typing doesn't).
-  const total = !rubric && d.total.trim() ? Number(d.total) : null;
-  return JSON.stringify([status, points, total, d.feedback.trim(), d.privateNotes.trim()]);
-}
-
-/** What Uniflow has for one row, as a conflict shows it next to the device's copy. */
-function serverMarksOf(r: SheetRow): StoredConflict {
-  const e = r.evaluation;
-  return {
-    status: e?.status ?? null,
-    totalMarks: e?.totalMarks ?? null,
-    feedback: e?.feedback ?? null,
-    privateNotes: e?.notes.find((n) => n.mine)?.body ?? null,
-    scores: (e?.scores ?? []).map((s) => ({ criterionId: s.criterionId, points: s.points })),
-    version: e?.version ?? NEW_EVALUATION,
   };
 }
 
@@ -194,8 +139,8 @@ function problems(d: Draft, criteria: Criterion[], maxMarks: number): Record<str
   return out;
 }
 
-export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOnSubmit, holdHours = null, embedded, mode, isToday, title, timezoneLabel, initialBookingId, now: serverNow, links }: Props) {
-  const { online } = useConnection();
+export function MarkingSheet({ assignment, criteria, rows, finalOnSubmit, holdHours = null, embedded, mode, isToday, title, timezoneLabel, initialBookingId, now: serverNow, links }: Props) {
+  const online = useOnline();
   const [now, setNow] = useState(() => new Date(serverNow).getTime());
   const [drafts, setDrafts] = useState<Draft[]>(() => rows.map(draftOf));
   const [state, setState] = useState<RowState[]>(() =>
@@ -206,7 +151,6 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
       totalMarks: r.evaluation?.totalMarks ?? null,
       earlyOk: Boolean(r.evaluation?.earlyMarkReason),
       save: { kind: "idle" },
-      onDevice: false,
     })),
   );
 
@@ -244,78 +188,7 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
   const inflight = useRef(new Map<number, Promise<void>>());
   const again = useRef(new Set<number>());
 
-  // ─── Drafts kept on this device (IndexedDB), uploaded by themselves (#163) ─
-  // Every edit is written to this device first (within DEVICE_WRITE_MS, at once when the tab
-  // is hidden), then uploaded through POST /api/marking/drafts. The upload carries the version
-  // it started from, so marks changed elsewhere meanwhile are never overwritten.
-  const base = useRef(rows.map((r) => fingerprint(draftOf(r), r.evaluation?.status ?? null, criteria.length > 0)));
-  const version = useRef(rows.map((r) => r.evaluation?.version ?? NEW_EVALUATION));
-  /** The upload ID of what's typed now: new whenever the draft changes. */
-  const change = useRef(rows.map(() => ({ id: "", content: "" })));
-  const deviceTimers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
-  const idb = useRef<Promise<unknown>>(Promise.resolve());
-  const local = useCallback(
-    (fn: () => Promise<unknown>) => {
-      idb.current = idb.current.then(fn, fn);
-    },
-    [],
-  );
-  const [conflicts, setConflicts] = useState<Conflict[]>([]);
-
   const patchState = (i: number, patch: Partial<RowState>) => setState((s) => s.map((row, j) => (j === i ? { ...row, ...patch } : row)));
-
-  const entryOf = useCallback(
-    (i: number): StoredDraft<Draft> => {
-      const d = draftsRef.current[i];
-      const row = rows[i];
-      const content = JSON.stringify(d);
-      if (!change.current[i].id || change.current[i].content !== content) change.current[i] = { id: newChangeId(), content };
-      return {
-        key: draftKey(offlineOwner, assignment.id, row.student.id),
-        owner: offlineOwner,
-        assignmentId: assignment.id,
-        studentId: row.student.id,
-        draft: d,
-        payload: {
-          scores: criteria.filter((c) => d.points[c.id]?.trim()).map((c) => ({ criterionId: c.id, points: Number(d.points[c.id]) })),
-          totalMarks: criteria.length === 0 && d.total.trim() ? Number(d.total) : null,
-          totalOverride: row.evaluation?.totalOverride ?? false,
-          overrideNote: row.evaluation?.overrideNote ?? undefined,
-          feedback: d.feedback,
-          privateNotes: d.privateNotes,
-          noBookingReason: d.noBookingReason || undefined,
-          earlyMarkReason: d.earlyMarkReason || undefined,
-        },
-        version: version.current[i],
-        changeId: change.current[i].id,
-        base: base.current[i],
-        at: Date.now(),
-        state: "waiting",
-        label: row.student.name,
-        href: `/courses/${assignment.courseId}/manage/assignments/${assignment.id}/mark?student=${row.student.id}`,
-      };
-    },
-    [rows, criteria, offlineOwner, assignment.id, assignment.courseId],
-  );
-
-  /** Write what's typed for row i to this device; resolves once it's on disk. */
-  const writeDevice = useCallback(
-    (i: number): Promise<StoredDraft<Draft>> => {
-      clearTimeout(deviceTimers.current.get(i));
-      deviceTimers.current.delete(i);
-      const entry = entryOf(i);
-      return new Promise((resolve) =>
-        local(() =>
-          putDraft(entry).then(() => {
-            announceDrafts({ type: "changed" });
-            if (JSON.stringify(draftsRef.current[i]) === change.current[i].content) patchState(i, { onDevice: true });
-            resolve(entry);
-          }),
-        ),
-      );
-    },
-    [entryOf, local],
-  );
 
   const save = useCallback(
     async (i: number): Promise<void> => {
@@ -328,60 +201,50 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
       const run = (async () => {
         do {
           const d = draftsRef.current[i];
+          const row = rows[i];
           if (Object.keys(problems(d, criteria, assignment.maxMarks)).length) {
             patchState(i, { save: { kind: "error", message: "Fix the highlighted marks to save." } });
             return;
           }
           patchState(i, { save: { kind: "saving" } });
-          const entry = await writeDevice(i);
-          const r = await syncDraft(entry);
-          if (r.result === "network") {
-            // Not an error: the marks stay on this device and upload when Uniflow answers,
-            // with Uniflow closed too where the browser supports Background Sync.
-            reportUnreachable();
-            patchState(i, { save: { kind: "local" } });
+          const r = await saveDraftAction({
+            assignmentId: assignment.id,
+            studentId: row.student.id,
+            scores: criteria.filter((c) => d.points[c.id]?.trim()).map((c) => ({ criterionId: c.id, points: Number(d.points[c.id]) })),
+            totalMarks: criteria.length === 0 && d.total.trim() ? Number(d.total) : null,
+            totalOverride: row.evaluation?.totalOverride ?? false,
+            overrideNote: row.evaluation?.overrideNote ?? undefined,
+            feedback: d.feedback,
+            privateNotes: d.privateNotes,
+            noBookingReason: d.noBookingReason || undefined,
+            earlyMarkReason: d.earlyMarkReason || undefined,
+          }).catch(() => ({ ok: false as const, error: "Couldn't reach Uniflow. Your marks are kept here — they'll save when you're back online." }));
+          if (r.ok) {
+            patchState(i, {
+              evaluationId: r.value.evaluationId,
+              evalStatus: r.value.status,
+              totalMarks: r.value.totalMarks,
+              bookingStatus: r.value.bookingStatus ?? stateRef.current[i].bookingStatus,
+              earlyOk: stateRef.current[i].earlyOk || Boolean(d.earlyMarkReason.trim()),
+              // More typing may already be waiting to save.
+              save: timers.current.has(i) ? { kind: "dirty" } : { kind: "saved", at: r.value.savedAt },
+            });
+          } else {
+            patchState(i, { save: { kind: "error", message: r.error } });
             return;
           }
-          reportReachable();
-          if (r.result === "signed-out" || r.result === "other-account") {
-            const message = r.result === "signed-out" ? "Signed out: sign in again to save. These marks are kept on this device." : "Another account is signed in: these marks are kept for the one that typed them.";
-            patchState(i, { save: { kind: "error", message } });
-            return;
-          }
-          if (r.result === "conflict") {
-            setConflicts((cs) => [...cs.filter((c) => c.i !== i), { i, draft: entry.draft, at: entry.at, server: { ...r.server, version: r.version } }]);
-            patchState(i, { save: { kind: "conflict" } });
-            return;
-          }
-          if (r.result === "refused") {
-            patchState(i, { save: { kind: "error", message: r.message } });
-            return;
-          }
-          version.current[i] = r.version;
-          base.current[i] = fingerprint(entry.draft, r.status, criteria.length > 0);
-          patchState(i, {
-            evaluationId: r.evaluationId,
-            evalStatus: r.status,
-            totalMarks: r.totalMarks,
-            bookingStatus: r.bookingStatus ?? stateRef.current[i].bookingStatus,
-            earlyOk: stateRef.current[i].earlyOk || Boolean(entry.draft.earlyMarkReason.trim()),
-            // More typing may already be waiting to save.
-            save: timers.current.has(i) ? { kind: "dirty" } : { kind: "saved", at: r.savedAt },
-          });
         } while (again.current.delete(i));
       })();
       inflight.current.set(i, run);
       await run;
       inflight.current.delete(i);
     },
-    [assignment.maxMarks, criteria, writeDevice],
+    [assignment.id, assignment.maxMarks, criteria, rows],
   );
 
   const schedule = (i: number) => {
     clearTimeout(timers.current.get(i));
     timers.current.set(i, setTimeout(() => void save(i), SAVE_DELAY_MS));
-    // On this device within DEVICE_WRITE_MS while typing goes on (not only once it stops).
-    if (!deviceTimers.current.has(i)) deviceTimers.current.set(i, setTimeout(() => void writeDevice(i), DEVICE_WRITE_MS));
   };
   const flush = useCallback(async (i: number) => {
     if (!timers.current.has(i)) return inflight.current.get(i);
@@ -391,128 +254,17 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
 
   const edit = (i: number, patch: Partial<Draft> | ((d: Draft) => Partial<Draft>)) => {
     setDrafts((ds) => ds.map((d, j) => (j === i ? { ...d, ...(typeof patch === "function" ? patch(d) : patch) } : d)));
-    patchState(i, { save: { kind: "dirty" }, onDevice: false });
+    patchState(i, { save: { kind: "dirty" } });
     schedule(i);
   };
 
-  // Save what's kept on this device once Uniflow answers again. A refusal by Uniflow
-  // (`error`) needs attention and isn't retried by itself.
+  // Retry failed saves when the connection comes back.
   useEffect(() => {
     if (!online) return;
     stateRef.current.forEach((s, i) => {
-      if (s.save.kind === "local" && !Object.keys(problems(draftsRef.current[i], criteria, assignment.maxMarks)).length) void save(i);
+      if (s.save.kind === "error" && !Object.keys(problems(draftsRef.current[i], criteria, assignment.maxMarks)).length) void save(i);
     });
   }, [online, save, criteria, assignment.maxMarks]);
-
-  // Hidden or closing tab: whatever is typed goes to this device now.
-  useEffect(() => {
-    const now = () => deviceTimers.current.forEach((_, i) => void writeDevice(i));
-    const onHide = () => document.visibilityState === "hidden" && now();
-    document.addEventListener("visibilitychange", onHide);
-    window.addEventListener("pagehide", now);
-    return () => {
-      document.removeEventListener("visibilitychange", onHide);
-      window.removeEventListener("pagehide", now);
-    };
-  }, [writeDevice]);
-
-  // While this sheet is open it uploads its own drafts: the app-wide sync and the service
-  // worker leave this assignment's alone (a shared Web Lock marks it open, in every tab).
-  // The first sheet also asks the browser not to clear this device's storage when space runs
-  // low: the one way marks kept here could otherwise vanish without anyone noticing.
-  const [persisted, setPersisted] = useState<boolean | null>(null);
-  useEffect(() => {
-    let release: (() => void) | undefined;
-    void navigator.locks
-      ?.request(sheetLock(offlineOwner, assignment.id), { mode: "shared" }, () => new Promise<void>((r) => (release = r)))
-      .catch(() => {});
-    void navigator.storage
-      ?.persist?.()
-      .then(setPersisted)
-      .catch(() => {});
-    return () => release?.();
-  }, [offlineOwner, assignment.id]);
-
-  // On open: bring back drafts this device kept (agreed step 3). Those typed on top of what
-  // Uniflow still has come back and upload; one already uploaded is dropped; if the marks
-  // changed since, both versions are shown and the TA chooses. Refused ones come back with
-  // the reason, and wait for the TA.
-  const restore = useCallback(
-    (i: number, d: Draft, kind: "upload" | "hold" = "upload") => {
-      setDrafts((ds) => ds.map((x, j) => (j === i ? d : x)));
-      clearTimeout(timers.current.get(i));
-      if (kind === "hold") return;
-      patchState(i, { save: { kind: "dirty" } });
-      timers.current.set(i, setTimeout(() => void save(i), SAVE_DELAY_MS));
-    },
-    [save],
-  );
-  useEffect(() => {
-    let cancelled = false;
-    void draftsFor<Draft>(offlineOwner, assignment.id).then((stored) => {
-      if (cancelled || stored.length === 0) return;
-      const found: Conflict[] = [];
-      for (const entry of stored) {
-        const i = rows.findIndex((r) => r.student.id === entry.studentId);
-        if (i < 0) continue; // not on this sheet; kept for the sheet that shows them
-        const row = rows[i];
-        const forget = () => local(() => deleteDraft(offlineOwner, assignment.id, entry.studentId).then(() => announceDrafts({ type: "changed" })));
-        if (entry.state === "conflict" && entry.server) {
-          found.push({ i, draft: entry.draft, at: entry.at, server: entry.server as StoredConflict });
-          continue;
-        }
-        if (entry.changeId && row.evaluation?.lastClientChangeId === entry.changeId) {
-          forget(); // uploaded already (by the service worker, or a reply that got lost)
-          continue;
-        }
-        const sameBase = entry.version ? entry.version === version.current[i] : entry.base === base.current[i];
-        if (fingerprint(entry.draft, stateRef.current[i].evalStatus, criteria.length > 0) === base.current[i]) forget();
-        else if (sameBase && entry.state === "error") {
-          restore(i, entry.draft, "hold");
-          patchState(i, { save: { kind: "error", message: entry.message ?? "Uniflow refused these marks." }, onDevice: true });
-        } else if (sameBase) restore(i, entry.draft);
-        else found.push({ i, draft: entry.draft, at: entry.at, server: serverMarksOf(row) });
-      }
-      if (found.length) {
-        setConflicts(found);
-        found.forEach((c) => patchState(c.i, { save: { kind: "conflict" } }));
-        // Changed elsewhere since this device kept them: the header lists them as conflicts.
-        for (const c of found) {
-          local(() => putDraft({ ...stored.find((e) => e.studentId === rows[c.i].student.id)!, state: "conflict", server: c.server, message: undefined }).then(() => announceDrafts({ type: "changed" })));
-        }
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-    // Once per sheet: later changes are this tab's own.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  /** Keep this device's marks: upload them on top of what Uniflow has now. */
-  const keepDevice = (c: Conflict) => {
-    version.current[c.i] = c.server.version;
-    setConflicts((cs) => cs.filter((x) => x.i !== c.i));
-    restore(c.i, c.draft);
-  };
-  /** Use Uniflow's marks: forget this device's copy. */
-  const takeServer = (c: Conflict) => {
-    const d: Draft = {
-      points: Object.fromEntries(c.server.scores.map((s) => [s.criterionId, String(s.points)])),
-      feedback: c.server.feedback ?? "",
-      privateNotes: c.server.privateNotes ?? "",
-      total: c.server.totalMarks?.toString() ?? "",
-      noBookingReason: "",
-      earlyMarkReason: "",
-    };
-    version.current[c.i] = c.server.version;
-    base.current[c.i] = fingerprint(d, c.server.status, criteria.length > 0);
-    change.current[c.i] = { id: "", content: JSON.stringify(d) };
-    setConflicts((cs) => cs.filter((x) => x.i !== c.i));
-    restore(c.i, d, "hold");
-    patchState(c.i, { save: { kind: "idle" }, evalStatus: c.server.status ?? stateRef.current[c.i].evalStatus, totalMarks: c.server.totalMarks });
-    local(() => deleteDraft(offlineOwner, assignment.id, rows[c.i].student.id).then(() => announceDrafts({ type: "changed" })));
-  };
 
   // Don't lose typing to a closed tab.
   useEffect(() => {
@@ -590,7 +342,7 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
   };
 
   const ready = useMemo(
-    () => state.flatMap((s, i) => (s.evaluationId && (s.evalStatus === "DRAFT" || s.evalStatus === "RETURNED") && s.save.kind !== "error" && s.save.kind !== "conflict" && complete(i) ? [s.evaluationId] : [])),
+    () => state.flatMap((s, i) => (s.evaluationId && (s.evalStatus === "DRAFT" || s.evalStatus === "RETURNED") && s.save.kind !== "error" && complete(i) ? [s.evaluationId] : [])),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [state, drafts],
   );
@@ -616,18 +368,12 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
   const needsReason = !row.booking && !st.evaluationId;
   const needsEarlyReason = Boolean(row.booking) && phase === "future" && !st.earlyOk && !locked(current);
   const noShow = st.bookingStatus === "NO_SHOW";
-  // A row changed elsewhere waits for the TA's choice before any more typing.
-  const conflicted = conflicts.some((c) => c.i === current);
-  const readOnly = locked(current) || noShow || needsReason || needsEarlyReason || conflicted;
-  const canSubmitThis = embedded && st.evaluationId && (st.evalStatus === "DRAFT" || st.evalStatus === "RETURNED") && complete(current) && st.save.kind !== "error" && st.save.kind !== "conflict";
+  const readOnly = locked(current) || noShow || needsReason || needsEarlyReason;
+  const canSubmitThis = embedded && st.evaluationId && (st.evalStatus === "DRAFT" || st.evalStatus === "RETURNED") && complete(current) && st.save.kind !== "error";
 
   return (
     <div className={cn("space-y-4", !embedded && "mx-auto max-w-5xl")}>
       {!embedded && <TopBar links={links} assignment={assignment} title={title} />}
-
-      {conflicts.map((c) => (
-        <ConflictView key={rows[c.i].student.id} name={rows[c.i].student.name} conflict={c} criteria={criteria} onKeep={() => keepDevice(c)} onUseServer={() => takeServer(c)} />
-      ))}
 
       {/* Progress: one segment per demo, coloured by state; the live one fills as time passes. */}
       <div className={cn("space-y-1.5", embedded && "hidden")}>
@@ -689,7 +435,7 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
               </Link>
             </p>
           </div>
-          <SaveIndicator state={st.save} onDevice={st.onDevice} persisted={persisted} />
+          <SaveIndicator state={st.save} online={online} />
         </div>
 
         {needsEarlyReason && (
@@ -1114,8 +860,6 @@ function Attendance({
 }) {
   const [pending, setPending] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  // Attendance needs Uniflow (it tells the student and changes their booking): never queued.
-  const net = useNetworkGuard();
   const set = async (s: "BOOKED" | "COMPLETED" | "NO_SHOW") => {
     setPending(true);
     setConfirming(false);
@@ -1133,9 +877,8 @@ function Attendance({
           type="button"
           disabled={pending || locked}
           aria-pressed={status === "COMPLETED"}
-          {...net.props}
-          onClick={net.guard(() => void set(status === "COMPLETED" ? "BOOKED" : "COMPLETED"))}
-          className={cn("flex items-center gap-1 rounded-md px-3 py-1 data-[offline=blocked]:cursor-not-allowed data-[offline=blocked]:text-offline", status === "COMPLETED" ? "bg-emerald-600 text-white" : "hover:bg-muted")}
+          onClick={() => void set(status === "COMPLETED" ? "BOOKED" : "COMPLETED")}
+          className={cn("flex items-center gap-1 rounded-md px-3 py-1", status === "COMPLETED" ? "bg-emerald-600 text-white" : "hover:bg-muted")}
         >
           <Check className="size-3.5" /> Present
         </button>
@@ -1143,9 +886,8 @@ function Attendance({
           type="button"
           disabled={pending || locked}
           aria-pressed={status === "NO_SHOW"}
-          {...net.props}
-          onClick={net.guard(() => (status === "NO_SHOW" ? void set("BOOKED") : setConfirming(true)))}
-          className={cn("flex items-center gap-1 rounded-md px-3 py-1 data-[offline=blocked]:cursor-not-allowed data-[offline=blocked]:text-offline", status === "NO_SHOW" ? "bg-foreground text-background" : "hover:bg-muted")}
+          onClick={() => (status === "NO_SHOW" ? void set("BOOKED") : setConfirming(true))}
+          className={cn("flex items-center gap-1 rounded-md px-3 py-1", status === "NO_SHOW" ? "bg-foreground text-background" : "hover:bg-muted")}
         >
           <UserRound className="size-3.5" /> No-show
         </button>
@@ -1155,7 +897,7 @@ function Attendance({
       {confirming && (
         <span className="flex flex-wrap items-center gap-2 rounded-lg bg-muted px-2 py-1 text-xs">
           {name} will get an email saying they missed their demo.
-          <Button type="button" size="xs" variant="destructive" offline="network" onClick={() => void set("NO_SHOW")}>
+          <Button type="button" size="xs" variant="destructive" onClick={() => void set("NO_SHOW")}>
             Mark no-show
           </Button>
           <Button type="button" size="xs" variant="ghost" onClick={() => setConfirming(false)}>
@@ -1167,57 +909,32 @@ function Attendance({
   );
 }
 
-/**
- * One row's sync state (#161, agreed design: step 4 on #160), styled through `data-sync`:
- * Saved on this device (neutral dot), Syncing (spinner), Saved (success colour for 2 s,
- * then nothing), or the server's message when it refused the marks (needs attention).
- */
-function SaveIndicator({ state, onDevice, persisted }: { state: SaveState; onDevice: boolean; persisted: boolean | null }) {
-  const savedAt = state.kind === "saved" ? state.at : null;
-  const [faded, setFaded] = useState<string | null>(null);
-  useEffect(() => {
-    if (!savedAt) return;
-    const t = setTimeout(() => setFaded(savedAt), 2000);
-    return () => clearTimeout(t);
-  }, [savedAt]);
-  const fresh = savedAt !== null && faded !== savedAt;
+function SaveIndicator({ state, online }: { state: SaveState; online: boolean }) {
+  if (!online && state.kind !== "idle" && state.kind !== "saved") {
+    return (
+      <span className="flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
+        <CloudOff className="size-3.5" /> Offline — kept here, saves when you reconnect
+      </span>
+    );
+  }
   switch (state.kind) {
     case "dirty":
-    case "local":
-      // Only once it's actually written to this device (strict durability: on disk).
-      if (state.kind === "dirty" && !onDevice) return null;
-      return (
-        <span
-          data-sync="saved-local"
-          className="flex items-center gap-1.5 text-xs text-muted-foreground"
-          role="status"
-          title={persisted === false ? "This browser may clear marks kept on this device if it runs low on space. They upload as soon as Uniflow can be reached." : "Kept on this device until Uniflow has them."}
-        >
-          <span className="size-1.5 rounded-full bg-offline" aria-hidden /> Saved on this device
-        </span>
-      );
-    case "conflict":
-      return (
-        <span data-sync="conflict" className="flex items-center gap-1 text-xs text-warning" role="status">
-          <AlertTriangle className="size-3.5" aria-hidden /> Changed elsewhere
-        </span>
-      );
     case "saving":
       return (
-        <span data-sync="syncing" className="flex items-center gap-1 text-xs text-muted-foreground" role="status">
-          <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden /> Syncing
+        <span className="flex items-center gap-1 text-xs text-muted-foreground" role="status">
+          <Loader2 className="size-3.5 animate-spin" /> Saving…
         </span>
       );
     case "saved":
-      return fresh ? (
-        <span data-sync="synced" className="flex items-center gap-1 text-xs text-success" role="status">
-          <Check className="size-3.5" aria-hidden /> Saved
+      return (
+        <span className="flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400" role="status">
+          <Check className="size-3.5" /> Draft saved
         </span>
-      ) : null;
+      );
     case "error":
       return (
-        <span data-sync="error" className="flex max-w-xs items-center gap-1 text-xs text-destructive" role="alert">
-          <CircleAlert className="size-3.5 shrink-0" aria-hidden /> {state.message}
+        <span className="flex max-w-xs items-center gap-1 text-xs text-destructive" role="alert">
+          <CircleAlert className="size-3.5 shrink-0" /> {state.message}
         </span>
       );
     default:
@@ -1268,7 +985,6 @@ function attendanceLabel(status: RowState["bookingStatus"], phase: "past" | "liv
 
 function marksLabel(s: RowState, complete: boolean, held: boolean) {
   if (s.save.kind === "error") return <span className="text-destructive">Not saved</span>;
-  if (s.save.kind === "conflict") return <span className="text-warning">Changed elsewhere</span>;
   if (s.evalStatus === "FINALIZED") return <span className="text-emerald-700 dark:text-emerald-400">Final</span>;
   if (s.evalStatus === "SUBMITTED") return <span className="text-emerald-700 dark:text-emerald-400">{held ? "Released (held)" : "Submitted"}</span>;
   if (s.evalStatus === "RETURNED") return <span className="text-amber-700 dark:text-amber-400">Returned</span>;
@@ -1276,58 +992,3 @@ function marksLabel(s: RowState, complete: boolean, held: boolean) {
   return <span className="text-muted-foreground">—</span>;
 }
 
-
-/** "Total 7 · Design 3, Code 4 · “Good work”": one version of a student's marks, in one line. */
-function marksSummary(m: { points: Record<string, string>; total: string; feedback: string }, criteria: Criterion[]): string {
-  const parts: string[] = [];
-  if (criteria.length) {
-    const scored = criteria.filter((c) => m.points[c.id]?.trim());
-    const total = scored.reduce((sum, c) => sum + (Number(m.points[c.id]) || 0), 0);
-    parts.push(scored.length ? `Total ${round(total)}` : "No marks");
-    if (scored.length) parts.push(criteria.map((c) => `${c.label} ${m.points[c.id]?.trim() || "–"}`).join(", "));
-  } else parts.push(m.total.trim() ? `Total ${m.total.trim()}` : "No marks");
-  const fb = m.feedback.trim();
-  if (fb) parts.push(`“${fb.length > 80 ? `${fb.slice(0, 79)}…` : fb}”`);
-  return parts.join(" · ");
-}
-
-/**
- * Changed elsewhere (#163): this device kept marks that Uniflow no longer has underneath
- * them (a colleague or an instructor changed them meanwhile). Nothing was overwritten; both
- * versions are shown and the TA chooses, rather than "newest wins", which would quietly drop
- * an instructor's correction.
- */
-function ConflictView({ name, conflict, criteria, onKeep, onUseServer }: { name: string; conflict: Conflict; criteria: Criterion[]; onKeep: () => void; onUseServer: () => void }) {
-  const s = conflict.server;
-  const server = { points: Object.fromEntries(s.scores.map((x) => [x.criterionId, String(x.points)])), total: s.totalMarks?.toString() ?? "", feedback: s.feedback ?? "" };
-  const locked = s.status === "SUBMITTED" || s.status === "FINALIZED";
-  return (
-    <div role="alert" data-sync="conflict" className="space-y-2 rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm">
-      <p className="flex items-start gap-2 text-warning">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
-        <span>
-          <strong>Changed elsewhere:</strong> {name}&apos;s marks changed in Uniflow after this device kept its copy (
-          {new Date(conflict.at).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}). Nothing was overwritten.
-        </span>
-      </p>
-      <dl className="grid gap-2 sm:grid-cols-2">
-        <div className="rounded-lg border bg-card p-2">
-          <dt className="text-xs font-medium text-muted-foreground">This device</dt>
-          <dd>{marksSummary(conflict.draft, criteria)}</dd>
-        </div>
-        <div className="rounded-lg border bg-card p-2">
-          <dt className="text-xs font-medium text-muted-foreground">In Uniflow{locked ? " (submitted)" : ""}</dt>
-          <dd>{marksSummary(server, criteria)}</dd>
-        </div>
-      </dl>
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" onClick={onKeep} disabled={locked} title={locked ? "These marks were submitted: unlock them first to change them." : undefined}>
-          Keep this device&apos;s
-        </Button>
-        <Button size="sm" variant="outline" onClick={onUseServer}>
-          Use Uniflow&apos;s
-        </Button>
-      </div>
-    </div>
-  );
-}

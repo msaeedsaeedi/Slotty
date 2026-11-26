@@ -1,4 +1,4 @@
-import Link from "@/components/app-link";
+import Link from "next/link";
 import { finalizeManyAction, reviewAction } from "@/app/actions/evaluations";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { EmptyState } from "@/components/page-header";

@@ -1,4 +1,4 @@
-import Link from "@/components/app-link";
+import Link from "next/link";
 import { format } from "date-fns";
 import { setFeedbackStatusAction } from "@/app/actions/feedback";
 import { ActionForm, SubmitButton } from "@/components/action-form";

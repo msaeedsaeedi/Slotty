@@ -7,6 +7,7 @@ import { PublicHeading } from "@/components/public/public-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ClearSavedPages } from "@/components/pwa";
 import { getCurrentUser } from "@/server/auth/session";
 
 export const metadata = { title: "Sign in" };
@@ -20,6 +21,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const { next } = await searchParams;
   return (
     <>
+      <ClearSavedPages />
       <PublicHeading title="Sign in" center />
       <Card>
         <CardContent>
