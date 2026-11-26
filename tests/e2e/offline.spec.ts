@@ -352,6 +352,9 @@ test("each account's pages are loaded ahead of time, work offline unopened, and 
   await open(ta, `${coursePage}/manage/roster`);
   await ta.getByRole("row").filter({ hasText: "Ria Student" }).getByRole("button", { name: "Remove" }).click();
   await ta.getByRole("dialog").getByRole("button", { name: "Remove" }).click();
+  // Wait for the server's answer first: while the dialog is open or closing, the page behind it
+  // is aria-hidden, so a role query finds no row even though Ria hasn't been removed yet.
+  await expect(ta.getByText("Removed from course", { exact: false })).toBeVisible();
   await expect(ta.getByRole("row").filter({ hasText: "Ria Student" })).toHaveCount(0);
   await sync();
   await expect.poll(async () => (await savedPaths()).some((p) => p.startsWith(coursePage)), { timeout: 30_000 }).toBe(false);
