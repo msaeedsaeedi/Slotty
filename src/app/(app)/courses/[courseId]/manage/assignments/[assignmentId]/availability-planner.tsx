@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { useMemo, useState } from "react";
 import { addAvailabilityAction } from "@/app/actions/scheduling";
 import { ActionForm, SubmitButton } from "@/components/action-form";

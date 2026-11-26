@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { useState } from "react";
 import { Download } from "lucide-react";
 import { submitManyAction } from "@/app/actions/evaluations";

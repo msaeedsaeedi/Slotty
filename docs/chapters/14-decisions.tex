@@ -628,3 +628,62 @@ Add one for every deliberate trade-off.
    no check can see.}
   {The account moves to the Paid plan and the credits are spent (then weigh moving back against
    staying), or AWS changes the new experience's policies.}
+
+\adr{038}{Offline: read-only saved pages, network actions never queued, marking drafts kept on the device}{2026-11-25}{Accepted; amended by ADR-039 (marking drafts)}
+  {Students open Uniflow on phones on campus Wi-Fi that drops or stalls, and staff mark demos in
+   rooms with poor coverage. A baseline (issue \#142, ch.~10) showed that offline navigation
+   already worked, but a stalled connection kept a saved page waiting for the browser's own
+   timeout, a server error hid the saved copy, a dropped submit ended on the error page, and
+   another account signing in through an invite or reset link still saw the previous account's
+   saved pages. A web app also can't schedule a notification on the device.}
+  {Saved pages stay read-only: the worker serves the saved copy when the server fails, takes
+   longer than 4\,s, or answers 5xx, and tells the page, which shows a small label in the header
+   and disables every submit. \textbf{Actions that need the network are never queued or
+   replayed}: a booking, mark release or roster
+   change made later could hit a slot, rule or roster that has since changed, and replaying it
+   safely would need idempotency keys, conflict handling, a fresh authorization check and the
+   person's confirmation. A dropped submit says it may not have gone through, keeps the input,
+   and refreshes the page once Uniflow answers. The one exception is the marking sheet: unsaved
+   marks are kept in IndexedDB on the device and saved \emph{as drafts} on reconnect, never
+   submitted or released, asking first if the saved marks changed meanwhile. Uploading them in
+   the background, with conflict and repeat-upload checks, is \#163 (part of \#160). Everything kept on the device is
+   tied to an opaque per-account key and wiped when another account signs in, and by
+   \code{Clear-Site-Data} on sign-out. Offline reminders come from the device's calendar
+   (\code{.ics} alerts); reminder pushes expire at the demo's start and are sent with high
+   urgency.}
+  {Grades and private notes can sit on a staff member's device until they're saved, the tab is
+   reopened, another account signs in, or they sign out; a shared computer left signed in
+   exposes them, as it already exposes the open page. A student's own released marks are in
+   their saved pages. Pages are saved only once opened (or linked from a push) until
+   pre-loading each role's pages lands (\#162). The saved-copy flag lives in the worker's
+   memory, so a worker restarted between the answer and the page's question only hides the
+   label. Rejected: queuing actions that need the network (above); saving management, admin
+   or account pages (they show rosters, settings and sessions); storing drafts without an
+   account key.}
+  {Users ask to book or change things offline, or a shared-device incident involves drafts.}
+
+\adr{039}{Marking drafts upload by themselves; another account's are sealed, not deleted}{2026-11-26}{Accepted; amends ADR-038}
+  {Marks typed offline were kept on the device (ADR-038) but uploaded only from an open marking
+   sheet, overwrote changes made meanwhile, and went through a Server Action, which a service
+   worker can't call and a page open across a release can't reach. ``No data loss'' for a TA's
+   marks (issue \#163, agreed design: step 3 on \#160) means they must survive a closed tab, a
+   crash, a restart and a day offline, and upload without anyone reopening the app. Signing out
+   and another account signing in both wiped them.}
+  {One upload route, \route{/api/marking/drafts}, for the sheet and the worker's Background
+   Sync, calling \code{saveDraft}'s rules, drafts only. Each upload carries the version it
+   started from (a changed evaluation is a conflict: nothing saved, both versions shown, the TA
+   chooses) and an upload ID (a repeat is recognised as saved). The device's account key must
+   match the signed-in account. Sign-out uploads first and asks before deleting what it can't.
+   When another account signs in, the earlier account's drafts are \textbf{sealed}: hidden,
+   never uploaded under the new account, deleted after 7 days, and back to normal if their
+   account returns first. Attendance, submit and release stay online only.}
+  {Private grades and notes of one TA can stay on a possibly shared computer for up to 7 days
+   after someone else signs in, unreadable in the app but present in browser storage; against
+   that, a session that expired mid-marking no longer loses the marks when a colleague signs in
+   on the same lab machine. The sign-out warning makes the case rare. Background Sync exists
+   only in Chromium browsers: on iPhone, Safari and Firefox drafts wait on the device until the
+   app is opened. The upload logic is written twice (page and worker). Rejected: deleting at
+   once (loses work); keeping them indefinitely; ``newest wins'' on a conflict, which would
+   quietly drop an instructor's correction; queuing attendance, which tells the student and
+   changes their booking hours late.}
+  {A shared-device incident involves sealed drafts, or browsers drop Background Sync.}

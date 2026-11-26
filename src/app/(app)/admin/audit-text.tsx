@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/app-link";
 
 /** Plain-language verbs for audit actions; unknown actions fall back to the raw code. */
 const VERBS: Record<string, string> = {

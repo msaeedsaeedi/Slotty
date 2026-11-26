@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { DemoStateBadge } from "@/components/demo-state";
 import { StatusBadge } from "@/components/status-badge";

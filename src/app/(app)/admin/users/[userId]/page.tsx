@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { sendAccessEmailAction, setAdminAction, setDisabledAction, updateUserAction } from "@/app/actions/admin";
 import { ActionForm, SubmitButton } from "@/components/action-form";

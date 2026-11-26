@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { CalendarClock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink, MapPin, PenLine } from "lucide-react";
 import { markAttendanceAction } from "@/app/actions/bookings";
 import { ActionForm, SubmitButton } from "@/components/action-form";

@@ -161,11 +161,46 @@ nothing. \route{/health/live} answers without touching the database, for contain
 checks; \route{/health} also checks the database and reports the running release
 (\envvar{APP_VERSION}), for monitoring and for the deploy's last check (\cref{sec:deploy}).
 
+\section{Offline and the service worker}\label{sec:offline}
+The service worker (\src{public/sw.js}) caches two things: immutable build files, and the pages
+on the account's list from \route{/api/offline/pages} (ch.~4, PWA). It loads those pages ahead of
+time (\code{syncPages}): it fetches the list, wipes everything if the owner key changed, deletes
+pages no longer listed or expired, and downloads pages whose version changed, two at a time at
+low priority, storing each only if the response carries \code{X-Uniflow-Offline: store}. Each
+stored copy records when it was saved, its version and the build files it references, which are
+cached too and kept while the page is. Pages ask for a sync from \code{OfflineOwner} (forced after
+a sign-in) and when they come back to the screen or the connection returns; the worker waits
+5 minutes between syncs otherwise. One sync runs at a time: an ordinary request joins the running
+one, but a forced one runs again once it ends, since the running sync may have fetched the list
+before the change (a sign-in, a removal from a course) that prompted the request. Saved pages are network-first with a 4\,s limit; a slow, failing or
+erroring server gets the saved copy, and the worker remembers which tab it answered that way so
+the page can ask (\code{saved-copy?}) and label itself in the header. Client code reads connectivity
+through \code{useConnection()} (\src{src/components/connection.tsx}; \cref{sec:component-states}):
+\code{canSubmit} is false while the browser is offline \emph{or} the page is a saved copy, and
+\code{SubmitButton} follows it.
+\code{whenReachable()} waits for Uniflow to answer again (\code{online} event or a
+\route{/health/live} probe) and is how the header label and \code{ActionForm} refresh the page after
+an outage. Server Actions are never cached or queued (ADR-038); the marking sheet is the one
+place that keeps unsaved input on the device (\src{src/lib/draft-store.ts}) and uploads it
+by itself (\#163). Its uploads don't use a Server Action, whose ID changes with each build, but
+\route{/api/marking/drafts}, whose address doesn't, so a sheet open across a release still
+saves; the open sheet, the app-wide \code{syncAllDrafts} and the worker's \code{sync} handler
+all go through it. The upload logic is written twice, once in \src{src/lib/draft-sync.ts} and
+once in plain JavaScript in \src{public/sw.js} (the worker isn't bundled): keep the reply
+handling in step. Writes to IndexedDB use \code{\{durability: "strict"\}}; a read-modify-write
+(\code{updateDraft}) runs in one transaction, so a reply never overwrites an edit made
+meanwhile. Web Locks: \code{uniflow-draft:<key>} lets one uploader at a time send a draft,
+and an open sheet holds \code{uniflow-sheet:<owner>:<assignment>} (shared), which the others
+check with \code{locks.query()} to leave its drafts alone. Anything stored
+on the device is keyed by \code{offlineOwner} (\src{src/server/offline-owner.ts}); saved pages
+are dropped when the account changes and marking drafts sealed (ADR-039). Bump \code{VERSION} in \src{public/sw.js} when the caching rules
+change: the new worker deletes the old caches on activation.
+
 \begin{todo}
   \begin{itemize}
     \item Authentication and sessions in detail: password hashing (Argon2), session cookies and
       their flags, token lifetimes, sign-out behaviour.
-    \item Caching and revalidation in the App Router; what the PWA service worker caches.
+    \item Caching and revalidation in the App Router.
     \item Logging conventions and what must never be logged (tokens, passwords, marks).
   \end{itemize}
 \end{todo}
