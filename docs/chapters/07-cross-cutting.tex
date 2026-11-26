@@ -170,7 +170,9 @@ low priority, storing each only if the response carries \code{X-Uniflow-Offline:
 stored copy records when it was saved, its version and the build files it references, which are
 cached too and kept while the page is. Pages ask for a sync from \code{OfflineOwner} (forced after
 a sign-in) and when they come back to the screen or the connection returns; the worker waits
-5 minutes between syncs otherwise. Saved pages are network-first with a 4\,s limit; a slow, failing or
+5 minutes between syncs otherwise. One sync runs at a time: an ordinary request joins the running
+one, but a forced one runs again once it ends, since the running sync may have fetched the list
+before the change (a sign-in, a removal from a course) that prompted the request. Saved pages are network-first with a 4\,s limit; a slow, failing or
 erroring server gets the saved copy, and the worker remembers which tab it answered that way so
 the page can ask (\code{saved-copy?}) and label itself in the header. Client code reads connectivity
 through \code{useConnection()} (\src{src/components/connection.tsx}; \cref{sec:component-states}):

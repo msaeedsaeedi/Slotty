@@ -180,14 +180,27 @@ async function trimStatic(cache) {
 // ─── Loading pages ahead of time ─────────────────────────────────────────────
 
 let syncing = null;
+/** A forced sync asked for while another was running: it runs once that one ends. */
+let forcedNext = null;
 
 /**
  * Bring this device's saved pages in line with the account's list: wipe them if the owner
  * changed, delete pages no longer listed or expired, and download pages that are missing or
  * whose version changed, gently. A signed-out account (401) stops refreshing; its copies stay
  * until they expire, someone else signs in, or sign-out wipes them.
+ *
+ * One sync at a time. An ordinary request joins the running one; a forced one (sign-in)
+ * runs again after it, because the running one may have fetched the list before the change
+ * that prompted it.
  */
 function syncPages({ force = false } = {}) {
+  if (syncing && force) {
+    forcedNext ??= syncing.catch(() => {}).then(() => {
+      forcedNext = null;
+      return syncPages({ force: true });
+    });
+    return forcedNext;
+  }
   if (syncing) return syncing;
   syncing = (async () => {
     const before = await readList();
