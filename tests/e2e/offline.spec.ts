@@ -435,7 +435,11 @@ test("marks reach Uniflow by themselves: after a crash before the upload, and by
   await expect.poll(() => draftCount(shell), { timeout: 15_000 }).toBe(0);
 
   // The marks are on the server, as a draft: a fresh sheet shows them with nothing on the device.
-  await open(shell, markUrl);
-  await expect(shell.getByLabel("Feedback for the student")).toHaveValue("Synced in the background");
-  await expect(shell.getByText("Changed elsewhere")).toHaveCount(0);
+  // (A new tab: navigating away from the worker's /offline page can abort in Chromium.)
+  await cdp.detach();
+  await shell.close();
+  const fresh = await context.newPage();
+  await open(fresh, markUrl);
+  await expect(fresh.getByLabel("Feedback for the student")).toHaveValue("Synced in the background");
+  await expect(fresh.getByText("Changed elsewhere")).toHaveCount(0);
 });
