@@ -91,7 +91,7 @@ Both clear on the first request that gets an answer (an \code{online} event, or 
   Unconfirmed & A \code{network} action cut off mid-request & \code{--warning} alert (\code{data-state="unconfirmed"}) & ``Couldn't confirm --- check before trying again''\\
   \bottomrule
 \end{xltabular}
-Unavailable offline (links to pages not on the device) comes with pre-loading (\#162).
+Unavailable offline: links to pages not on the device (\code{Link} from \src{src/components/app-link.tsx}, which every signed-in page uses in place of Next's) show muted with a crossed cloud and ``Not available offline'', and don't navigate (\#162). Freshness: values that go stale quickly (free slots, places left, the waitlist) add ``updated 10:42'' on a saved copy (\code{UpdatedAt}, \src{src/components/updated-at.tsx}).
 
 \paragraph{Which state wins} (\code{controlState}, \src{src/lib/control-state.ts}, unit-tested):
 a business-rule \emph{disabled} first, so a connection is never promised to fix it; then

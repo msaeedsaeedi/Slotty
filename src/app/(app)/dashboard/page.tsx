@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { redirect } from "next/navigation";
 import { CalendarClock, ExternalLink, GraduationCap, MapPin, Plus, Presentation, Users } from "lucide-react";
 import { AddToCalendar } from "@/components/add-to-calendar";

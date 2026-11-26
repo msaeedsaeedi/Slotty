@@ -173,6 +173,8 @@ model Venue {
   location   String?
   meetingUrl String?
   createdAt  DateTime @default(now())
+  /// When this row last changed: part of the offline page versions (#162).
+  updatedAt  DateTime @default(now()) @updatedAt
 
   course Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
   slots  Slot[]
@@ -212,11 +214,13 @@ model Assignment {
 }
 
 model RubricCriterion {
-  id           String @id @default(cuid())
+  id           String   @id @default(cuid())
   assignmentId String
   label        String
   maxPoints    Float
   order        Int
+  /// When this row last changed: part of the offline page versions (#162).
+  updatedAt    DateTime @default(now()) @updatedAt
 
   assignment Assignment        @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   scores     EvaluationScore[]
@@ -237,6 +241,8 @@ model DemoPolicy {
   openAnnouncedAt    DateTime?
   /// When unbooked students were nudged that the demo window is about to end.
   nudgeSentAt        DateTime?
+  /// When this row last changed: part of the offline page versions (#162).
+  updatedAt          DateTime  @default(now()) @updatedAt
 
   assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
 }
@@ -274,6 +280,8 @@ model Slot {
   capacity     Int
   status       SlotStatus @default(DRAFT)
   createdAt    DateTime   @default(now())
+  /// When this row last changed: part of the offline page versions (#162).
+  updatedAt    DateTime   @default(now()) @updatedAt
 
   assignment Assignment         @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   block      AvailabilityBlock? @relation(fields: [blockId], references: [id], onDelete: SetNull)

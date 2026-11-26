@@ -162,12 +162,20 @@ checks; \route{/health} also checks the database and reports the running release
 (\envvar{APP_VERSION}), for monitoring and for the deploy's last check (\cref{sec:deploy}).
 
 \section{Offline and the service worker}\label{sec:offline}
-The service worker (\src{public/sw.js}) caches two things: immutable build files, and the saved
-pages listed in ch.~4 (PWA). Saved pages are network-first with a 4\,s limit; a slow, failing or
+The service worker (\src{public/sw.js}) caches two things: immutable build files, and the pages
+on the account's list from \route{/api/offline/pages} (ch.~4, PWA). It loads those pages ahead of
+time (\code{syncPages}): it fetches the list, wipes everything if the owner key changed, deletes
+pages no longer listed or expired, and downloads pages whose version changed, two at a time at
+low priority, storing each only if the response carries \code{X-Uniflow-Offline: store}. Each
+stored copy records when it was saved, its version and the build files it references, which are
+cached too and kept while the page is. Pages ask for a sync from \code{OfflineOwner} (forced after
+a sign-in) and when they come back to the screen or the connection returns; the worker waits
+5 minutes between syncs otherwise. Saved pages are network-first with a 4\,s limit; a slow, failing or
 erroring server gets the saved copy, and the worker remembers which tab it answered that way so
 the page can ask (\code{saved-copy?}) and label itself in the header. Client code reads connectivity
-through \code{useConnection()} (\src{src/components/pwa.tsx}): \code{canSubmit} is false while
-the browser is offline \emph{or} the page is a saved copy, and \code{SubmitButton} follows it.
+through \code{useConnection()} (\src{src/components/connection.tsx}; \cref{sec:component-states}):
+\code{canSubmit} is false while the browser is offline \emph{or} the page is a saved copy, and
+\code{SubmitButton} follows it.
 \code{whenReachable()} waits for Uniflow to answer again (\code{online} event or a
 \route{/health/live} probe) and is how the header label and \code{ActionForm} refresh the page after
 an outage. Server Actions are never cached or queued (ADR-038); the marking sheet is the one

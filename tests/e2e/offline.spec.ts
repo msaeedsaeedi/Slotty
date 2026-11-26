@@ -102,7 +102,7 @@ test("saved pages work offline and on a stalled or failing server, read-only and
   await open(page, "/dashboard");
   await controlled(page);
   await open(page, "/dashboard");
-  await open(page, "/bookings");
+  await open(page, "/notifications");
 
   // Offline: the saved copy, labelled in the header; an unsaved page gets /offline.
   await context.setOffline(true);
@@ -125,9 +125,10 @@ test("saved pages work offline and on a stalled or failing server, read-only and
   await expect(page.getByRole("status").filter({ hasText: "Can't connect" })).toHaveCount(0, { timeout: 20_000 });
 
   // A server error on a saved page shows the saved copy, not the error.
-  const down = await network(context, "/bookings", "503");
-  await page.goto("/bookings");
-  await expect(page.getByRole("heading", { name: "My demos" })).toBeVisible();
+  // (/notifications: every account has it; /bookings is only a student's, #162.)
+  const down = await network(context, "/notifications", "503");
+  await page.goto("/notifications");
+  await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible();
   await expect(page.getByText("Service Unavailable")).toHaveCount(0);
   await down.stop();
 });
@@ -229,10 +230,12 @@ test("saved pages and drafts don't outlive the account: sign-out, and another ac
   await sam.getByLabel("Confirm password").fill("password123");
   await sam.getByRole("button", { name: /password/i }).click();
   await expect(sam).toHaveURL(/dashboard/);
-  // Sam's saved pages are gone; only Ria's own (if any) remain.
+  // Sam's saved pages are gone: offline, /bookings is Ria's own copy (pre-loaded for her, #162)
+  // or the offline page, never Sam's.
   await context.setOffline(true);
   await sam.goto("/bookings");
-  await expect(sam.getByRole("heading", { name: "You're offline" })).toBeVisible();
+  await expect(sam.getByRole("heading", { name: /My demos|You're offline/ })).toBeVisible();
+  await expect(sam.getByText("Sam Student")).toHaveCount(0);
   await context.setOffline(false);
 });
 
@@ -290,6 +293,11 @@ test("a push saves the page it links to, for offline use", async ({ browser }) =
   await cdp.send("ServiceWorker.enable");
   await expect.poll(() => registrations.size).toBeGreaterThan(0);
   const saved = () => page.evaluate(async () => Boolean(await caches.match("/notifications")));
+  // Pre-loading (#162) already saved it at sign-in; drop it so the push is what brings it back.
+  await expect.poll(saved).toBe(true);
+  await page.evaluate(async () => {
+    for (const k of await caches.keys()) await (await caches.open(k)).delete("/notifications");
+  });
   expect(await saved()).toBe(false);
   await cdp.send("ServiceWorker.deliverPushMessage", {
     origin: new URL(page.url()).origin,
@@ -302,4 +310,49 @@ test("a push saves the page it links to, for offline use", async ({ browser }) =
   await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible();
   await expect(page.getByRole("status").filter({ hasText: /Offline|Can't connect/ })).toBeVisible();
   await context.setOffline(false);
+});
+
+test("each account's pages are loaded ahead of time, work offline unopened, and leave when access ends", async ({ browser }) => {
+  test.setTimeout(400_000);
+  const ta = await login(browser, "ta@e2e.test");
+  const courseId = await createCourse(ta, "PRE162");
+  await importRoster(ta, "email,role\nria@e2e.test,student");
+  // Late slots: other specs give this TA morning, afternoon and evening ones.
+  const assignmentId = await createPublishedAssignment(ta, courseId, "Preload demo", { from: "20:00", to: "21:00" });
+  const coursePage = `/courses/${courseId}`;
+  const assignmentPage = `${coursePage}/assignments/${assignmentId}`;
+
+  const ria = await login(browser, "ria@e2e.test");
+  await open(ria, "/dashboard");
+  await controlled(ria);
+  const savedPaths = () =>
+    ria.evaluate(async () => {
+      const out: string[] = [];
+      for (const k of await caches.keys()) if (/-pages-/.test(k)) for (const r of await (await caches.open(k)).keys()) out.push(new URL(r.url).pathname);
+      return out;
+    });
+  // The worker syncs at most every 5 minutes unless asked to (sign-in does); ask, as sign-in would.
+  const sync = () => ria.evaluate(() => navigator.serviceWorker.controller?.postMessage({ type: "sync-pages", force: true }));
+  await sync();
+  await expect.poll(savedPaths, { timeout: 30_000 }).toEqual(expect.arrayContaining([coursePage, assignmentPage]));
+
+  // Offline, the never-opened assignment page shows with its styles (its build files are on the
+  // device), free slots say when they were updated, and links to pages not on the device say so.
+  await ria.context().setOffline(true);
+  await ria.goto(assignmentPage);
+  await expect(ria.getByRole("heading", { name: "Preload demo" })).toBeVisible();
+  expect(await ria.evaluate(() => [...document.styleSheets].reduce((n, s) => n + s.cssRules.length, 0))).toBeGreaterThan(0);
+  await expect(ria.locator("[data-fresh]").first()).toContainText("updated");
+  const account = ria.locator('a[href="/account"]').first();
+  await expect(account).toHaveAttribute("data-offline", "unavailable");
+  await expect(account).toHaveAttribute("aria-disabled", "true");
+  await ria.context().setOffline(false);
+
+  // Removed from the course: its pages leave the device at the next sync.
+  await open(ta, `${coursePage}/manage/roster`);
+  await ta.getByRole("row").filter({ hasText: "Ria Student" }).getByRole("button", { name: "Remove" }).click();
+  await ta.getByRole("dialog").getByRole("button", { name: "Remove" }).click();
+  await expect(ta.getByRole("row").filter({ hasText: "Ria Student" })).toHaveCount(0);
+  await sync();
+  await expect.poll(async () => (await savedPaths()).some((p) => p.startsWith(coursePage)), { timeout: 30_000 }).toBe(false);
 });

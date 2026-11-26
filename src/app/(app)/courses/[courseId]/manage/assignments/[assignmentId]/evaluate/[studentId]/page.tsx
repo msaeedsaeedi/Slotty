@@ -1,6 +1,6 @@
 import { currentClock } from "@/lib/time";
 import { RELEASE_HOLD_HOURS } from "@/domain/evaluation";
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { AlertTriangle } from "lucide-react";
 import { clearMarksAction, reviewAction, unlockAction, withdrawAction } from "@/app/actions/evaluations";
 import { ActionForm, SubmitButton } from "@/components/action-form";

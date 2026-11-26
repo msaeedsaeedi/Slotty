@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { Plus } from "lucide-react";
 import { assignStaffAction, createCourseAction, removeStaffAction, setCourseArchivedAction } from "@/app/actions/admin";
 import { ActionForm, SubmitButton } from "@/components/action-form";

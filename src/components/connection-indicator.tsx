@@ -18,7 +18,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { useRouter } from "next/navigation";
 import { Check, CloudOff, Loader2, TriangleAlert } from "lucide-react";
 import { useConnectionStatus, whenReachable } from "@/components/connection";

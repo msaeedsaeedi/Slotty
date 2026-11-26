@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { ChevronRight, Plus } from "lucide-react";
 import { BookingStageBadge } from "@/components/booking-stage";
 import { EmptyState } from "@/components/page-header";

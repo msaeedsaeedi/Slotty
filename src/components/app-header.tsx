@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { BarChart3, CalendarClock, LogOut, Shield, UserRound } from "lucide-react";
 import { UniflowMark } from "@/components/uniflow-mark";
 import { FeedbackButton } from "@/components/feedback-button";

@@ -14,6 +14,8 @@ import { deleteAllDrafts } from "@/lib/draft-store";
 const OWNER_KEY = "uniflow.offline-owner";
 
 function clearSavedPageCaches() {
+  // The worker also forgets the account's list it keeps in memory.
+  navigator.serviceWorker?.controller?.postMessage({ type: "clear-pages" });
   if (!("caches" in window)) return;
   caches
     .keys()
@@ -28,20 +30,57 @@ function clearSavedPageCaches() {
  */
 export function OfflineOwner({ owner }: { owner: string }) {
   useEffect(() => {
-    let previous: string | null;
+    let previous: string | null = null;
     try {
       previous = localStorage.getItem(OWNER_KEY);
-    } catch {
-      return;
-    }
-    if (previous === owner) return;
-    clearSavedPageCaches();
-    void deleteAllDrafts();
-    try {
-      localStorage.setItem(OWNER_KEY, owner);
     } catch {}
+    const changed = previous !== owner;
+    if (changed) {
+      clearSavedPageCaches();
+      void deleteAllDrafts();
+      try {
+        localStorage.setItem(OWNER_KEY, owner);
+      } catch {}
+    }
+    // Load this account's pages ahead of time (#162): now (forced after a sign-in, so the day
+    // starts prepared), when the app comes back to the screen and when the connection
+    // returns. The worker itself waits 5 minutes between syncs unless forced.
+    syncOfflinePages(changed);
+    const onVisible = () => document.visibilityState === "visible" && syncOfflinePages(false);
+    const onOnline = () => syncOfflinePages(false);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
+    };
   }, [owner]);
   return null;
+}
+
+let preparedOnce = false;
+
+/** Ask the service worker to sync this account's offline pages. */
+function syncOfflinePages(force: boolean) {
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.ready
+    .then((reg) => {
+      reg.active?.postMessage({ type: "sync-pages", force });
+      if (preparedOnce) return;
+      preparedOnce = true;
+      // Keep saved pages (and marking drafts) from being cleared when the disk runs low.
+      void navigator.storage?.persist?.().catch(() => {});
+      // Installed Chrome apps: refresh saved pages even when the app isn't opened (about every
+      // 12 hours, when Chrome decides). A bonus: nothing relies on it.
+      const periodic = (reg as ServiceWorkerRegistration & { periodicSync?: { register(tag: string, o: { minInterval: number }): Promise<void> } }).periodicSync;
+      if (periodic) {
+        void navigator.permissions
+          ?.query({ name: "periodic-background-sync" as PermissionName })
+          .then((p) => (p.state === "granted" ? periodic.register("uniflow-pages", { minInterval: 12 * 60 * 60 * 1000 }) : undefined))
+          .catch(() => {});
+      }
+    })
+    .catch(() => {});
 }
 
 // ─── Service worker ──────────────────────────────────────────────────────────

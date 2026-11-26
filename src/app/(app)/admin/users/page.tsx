@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { ChevronRight, UserPlus } from "lucide-react";
 import { inviteUserAction } from "@/app/actions/admin";
 import { ActionForm, SubmitButton } from "@/components/action-form";
