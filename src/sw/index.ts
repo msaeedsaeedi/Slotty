@@ -18,6 +18,9 @@
  *   to the screen (at most every 5 minutes), when the connection returns, on a push (that
  *   page only) and on periodic background sync where Chrome allows it. Two at a time, low
  *   priority; only pages whose version changed; with data saver on, only the key pages.
+ * - Pages are saved by path. An address with a query opens the saved page only if its query
+ *   doesn't change the content (`savedPageKey`, src/lib/offline-urls.ts, #173): `?day=` and
+ *   the like are other pages, which are never saved, so they never get a saved copy.
  * - Page navigations to a listed page are network-first. The saved copy is served when the
  *   network fails, takes longer than NETWORK_TIMEOUT_MS, or the server answers 5xx; the
  *   network answer still refreshes the copy. Pages served from a copy are told so
@@ -35,6 +38,7 @@
  *   drafts: never a submit or release.
  */
 import { DRAFT_SYNC_TAG, syncWaiting } from "@/lib/draft-sync";
+import { savedPageKey } from "@/lib/offline-urls";
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -316,9 +320,11 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     (async (): Promise<Response> => {
       const offlinePage = async () => (await caches.match(OFFLINE_URL)) ?? Response.error();
+      // The saved page this address shows, if any: never another day's address for today's copy.
+      const key = savedPageKey(url);
       const l = await readList();
-      const entry = l?.pages.find((p) => p.url === url.pathname);
-      const saved = await savedPage(url.pathname);
+      const entry = key === null ? undefined : l?.pages.find((p) => p.url === key);
+      const saved = key === null ? undefined : await savedPage(key);
       if (!entry && !saved) {
         try {
           return await fetch(request);
@@ -331,7 +337,7 @@ self.addEventListener("fetch", (event) => {
       // Whatever happens to this navigation, a good answer refreshes the saved copy.
       event.waitUntil(
         network
-          .then((res) => (entry ? storePage(url.pathname, res.clone(), entry.version) : null))
+          .then((res) => (entry && key ? storePage(key, res.clone(), entry.version) : null))
           .catch(() => {}),
       );
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -414,7 +420,7 @@ self.addEventListener("push", (event) => {
     data = { title: "Uniflow", body: event.data.text() };
   }
   const link = data.url || "/notifications";
-  const path = new URL(link, self.location.origin).pathname;
+  const path = savedPageKey(new URL(link, self.location.origin));
   event.waitUntil(
     Promise.all([
       self.registration.showNotification(data.title || "Uniflow", {
@@ -429,8 +435,8 @@ self.addEventListener("push", (event) => {
       // Refresh the page the notification opens (e.g. the demo's room, link and TA before a
       // reminder), so it's current if the device is offline when the student taps it.
       readList().then((l) => {
-        const entry = l?.pages.find((p) => p.url === path);
-        if (!entry) return null;
+        const entry = path === null ? undefined : l?.pages.find((p) => p.url === path);
+        if (!entry || path === null) return null;
         return fetch(path, { credentials: "same-origin", headers: { Accept: "text/html" } })
           .then((res) => storePage(path, res, entry.version))
           .catch(() => {});

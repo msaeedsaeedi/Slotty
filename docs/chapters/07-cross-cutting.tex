@@ -166,7 +166,9 @@ The service worker (\src{src/sw/index.ts}, bundled to \src{public/sw.js} by \cod
 on the account's list from \route{/api/offline/pages} (ch.~4, PWA). It loads those pages ahead of
 time (\code{syncPages}): it fetches the list, wipes everything if the owner key changed, deletes
 pages no longer listed or expired, and downloads pages whose version changed, two at a time at
-low priority, storing each only if the response carries \code{X-Uniflow-Offline: store}. Each
+low priority, storing each only if the response carries \code{X-Uniflow-Offline: store}. Pages are kept by path; which saved page an address opens is one rule, \code{savedPageKey}
+(\src{src/lib/offline-urls.ts}), used by both the worker and \code{AppLink}, so what a link shows
+as available is what the worker serves (\#173). Each
 stored copy records when it was saved, its version and the build files it references, which are
 cached too and kept while the page is. Pages ask for a sync from \code{OfflineOwner} (forced after
 a sign-in) and when they come back to the screen or the connection returns; the worker waits

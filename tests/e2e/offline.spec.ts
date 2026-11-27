@@ -446,3 +446,37 @@ test("marks reach Uniflow by themselves: after a crash before the upload, and by
   await expect(fresh.getByLabel("Feedback for the student")).toHaveValue("Synced in the background");
   await expect(fresh.getByText("Changed elsewhere")).toHaveCount(0);
 });
+
+test("offline, an address whose query changes the page is never served today's copy (#173)", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const ta = await login(browser, "ta@e2e.test");
+  // Staff of a course have Demo day on their list.
+  await createCourse(ta, "Q173");
+  await open(ta, "/dashboard");
+  await controlled(ta);
+  const savedPaths = () =>
+    ta.evaluate(async () => {
+      const out: string[] = [];
+      for (const k of await caches.keys()) if (/-pages-/.test(k)) for (const r of await (await caches.open(k)).keys()) out.push(new URL(r.url).pathname);
+      return out;
+    });
+  await ta.evaluate(() => navigator.serviceWorker.controller?.postMessage({ type: "sync-pages", force: true }));
+  await expect.poll(savedPaths, { timeout: 30_000 }).toContain("/today");
+
+  const context = ta.context();
+  await context.setOffline(true);
+  await ta.goto("/today");
+  await expect(ta.getByRole("heading", { name: "Demo day" })).toBeVisible();
+  // Another day's link is a page that isn't on the device: it says so and doesn't navigate.
+  const otherDay = ta.locator('main a[href*="day="]').first();
+  await expect(otherDay).toHaveAttribute("data-offline", "unavailable");
+  await otherDay.click({ force: true });
+  await expect(ta.getByText("Not available offline").first()).toBeVisible();
+  expect(new URL(ta.url()).search).toBe("");
+  // Opened by address, it's the offline page, not today's copy under another day's address.
+  await ta.goto("/today?day=2030-01-07");
+  await expect(ta.getByRole("heading", { name: "You're offline" })).toBeVisible();
+  await ta.goto("/today?scope=everyone");
+  await expect(ta.getByRole("heading", { name: "You're offline" })).toBeVisible();
+  await context.setOffline(false);
+});
