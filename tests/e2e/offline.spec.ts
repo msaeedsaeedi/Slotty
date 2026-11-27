@@ -480,3 +480,42 @@ test("offline, an address whose query changes the page is never served today's c
   await expect(ta.getByRole("heading", { name: "You're offline" })).toBeVisible();
   await context.setOffline(false);
 });
+
+test("offline, a notification opens the saved page it's about, not the offline page (#174)", async ({ browser }) => {
+  test.setTimeout(400_000);
+  const ta = await login(browser, "ta@e2e.test");
+  const courseId = await createCourse(ta, "N174");
+  await importRoster(ta, "email,role\nria@e2e.test,student");
+  // Late slots (the window can start today, so not in the morning); other specs use earlier ones.
+  const assignmentId = await createPublishedAssignment(ta, courseId, "Notified demo", { from: "22:00", to: "23:00" });
+  const assignmentPage = `/courses/${courseId}/assignments/${assignmentId}`;
+
+  // Opening booking sent Ria a "Book your demo" notification about the assignment page.
+  const ria = await login(browser, "ria@e2e.test");
+  await open(ria, "/dashboard");
+  await controlled(ria);
+  const savedPaths = () =>
+    ria.evaluate(async () => {
+      const out: string[] = [];
+      for (const k of await caches.keys()) if (/-pages-/.test(k)) for (const r of await (await caches.open(k)).keys()) out.push(new URL(r.url).pathname);
+      return out;
+    });
+  await ria.evaluate(() => navigator.serviceWorker.controller?.postMessage({ type: "sync-pages", force: true }));
+  await expect.poll(savedPaths, { timeout: 30_000 }).toEqual(expect.arrayContaining(["/notifications", assignmentPage]));
+
+  // Online, the item goes through the route that marks it read.
+  await open(ria, "/notifications");
+  const item = ria.getByRole("link").filter({ hasText: "Book your demo: Notified demo" });
+  await expect(item).toHaveAttribute("href", /^\/notifications\//);
+
+  // Offline, it links straight to the saved page and opens it.
+  const context = ria.context();
+  await context.setOffline(true);
+  await ria.goto("/notifications");
+  await expect(item).toHaveAttribute("href", assignmentPage);
+  await item.click();
+  await expect(ria).toHaveURL(new RegExp(`${assignmentPage}$`));
+  await expect(ria.getByRole("heading", { name: "Notified demo" })).toBeVisible();
+  await expect(ria.getByRole("heading", { name: "You're offline" })).toHaveCount(0);
+  await context.setOffline(false);
+});

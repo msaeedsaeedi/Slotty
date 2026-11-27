@@ -1,6 +1,7 @@
 import { markAllReadAction } from "@/app/actions/admin";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { EmptyState, PageHeader } from "@/components/page-header";
+import { NotificationLink } from "@/components/notification-link";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
@@ -52,11 +53,11 @@ export default async function NotificationsPage() {
                       </div>
                     </div>
                   );
-                  // A plain link (not <Link>) so prefetching never marks anything read.
+                  // Marks the item read on the way (online), or goes straight to the page offline (#174).
                   return n.link ? (
-                    <a key={n.id} href={`/notifications/${n.id}`} className="block hover:bg-muted/50">
+                    <NotificationLink key={n.id} id={n.id} target={n.link} className="block hover:bg-muted/50">
                       {body}
-                    </a>
+                    </NotificationLink>
                   ) : (
                     <div key={n.id}>{body}</div>
                   );
