@@ -1,10 +1,10 @@
 /**
  * Uploading marking drafts kept on this device (#163; agreed design: step 3 on #160).
  *
- * One route for every upload (`POST /api/marking/drafts`), used here by the open marking
- * sheet and by `syncAllDrafts` (app open, reconnect, back on screen), and by the service
- * worker's Background Sync with Uniflow closed (public/sw.js mirrors `applyReply`; keep the
- * two in step).
+ * One route for every upload (`POST /api/marking/drafts`), used by the open marking sheet
+ * (`syncDraft`), by `syncAllDrafts` (app open, reconnect, back on screen), and by the service
+ * worker's Background Sync with Uniflow closed (src/sw, through `syncWaiting`). Page and
+ * worker run this same code (#188); the worker is bundled from TypeScript.
  *
  * - One uploader at a time per draft, across tabs and the worker (Web Locks).
  * - An open marking sheet owns its assignment's drafts (it holds `sheetLock`): the others
@@ -15,7 +15,7 @@
  *   itself; signed out or another account → keep it and wait; network or server error →
  *   retry with growing gaps, and ask for a Background Sync.
  */
-import { announceDrafts, draftsOf, updateDraft, type StoredDraft } from "@/lib/draft-store";
+import { announceDrafts, draftsOf, openDrafts, updateDraft, type StoredDraft } from "@/lib/draft-store";
 
 export const DRAFT_SYNC_TAG = "marking-drafts";
 const UPLOAD_URL = "/api/marking/drafts";
@@ -61,6 +61,44 @@ export function newChangeId(): string {
   }
 }
 
+/**
+ * What the server's answer means (agreed step 3, point 7). Anything unexpected (a 5xx, a
+ * proxy's error page, a captive portal) counts as `network`: try again later.
+ */
+export function readReply(status: number, body: unknown): UploadReply {
+  const b = (body && typeof body === "object" ? body : null) as { result?: string } | null;
+  if (status >= 200 && status < 300 && b?.result === "saved") return b as UploadReply;
+  if (status === 409 && b?.result === "conflict") return b as UploadReply;
+  if (status === 401) return { result: "signed-out" };
+  if (status === 403 && b?.result === "other-account") return { result: "other-account" };
+  if ((status === 400 || status === 413 || status === 422) && b?.result === "refused") return b as UploadReply;
+  return { result: "network" };
+}
+
+/**
+ * The entry after a reply, given the entry as it is now (it may have been edited during the
+ * upload, which gave it a new `changeId`): the new entry, null to delete it, or undefined to
+ * leave it as it is.
+ */
+export function afterReply(now: StoredDraft | null, uploaded: { changeId?: string }, reply: UploadReply, at = Date.now()): StoredDraft | null | undefined {
+  if (!now) return undefined;
+  const edited = now.changeId !== uploaded.changeId;
+  switch (reply.result) {
+    case "saved":
+      return edited ? { ...now, version: reply.version, state: "waiting", attempts: 0, nextTry: undefined } : null;
+    case "conflict":
+      return { ...now, state: "conflict", server: { ...reply.server, version: reply.version } satisfies StoredConflict, message: undefined };
+    case "refused":
+      return edited ? undefined : { ...now, state: "error", message: reply.message };
+    case "network": {
+      const attempts = (now.attempts ?? 0) + 1;
+      return { ...now, attempts, nextTry: at + retryDelay(attempts) };
+    }
+    default:
+      return undefined; // signed out or another account: keep it and wait
+  }
+}
+
 async function send(entry: StoredDraft): Promise<UploadReply> {
   let res: Response;
   try {
@@ -74,41 +112,21 @@ async function send(entry: StoredDraft): Promise<UploadReply> {
   } catch {
     return { result: "network" };
   }
-  const body = (await res.json().catch(() => null)) as { result?: string } | null;
-  if (res.ok && body?.result === "saved") return body as UploadReply;
-  if (res.status === 409 && body?.result === "conflict") return body as UploadReply;
-  if (res.status === 401) return { result: "signed-out" };
-  if (res.status === 403 && body?.result === "other-account") return { result: "other-account" };
-  if ((res.status === 422 || res.status === 400 || res.status === 413) && body?.result === "refused") return body as UploadReply;
-  return { result: "network" }; // 5xx, a proxy's error page, a captive portal: try again later
+  return readReply(res.status, await res.json().catch(() => null));
 }
 
 /** Record what the server said on the entry as it is now (it may have been edited meanwhile). */
 async function applyReply(entry: StoredDraft, reply: UploadReply): Promise<void> {
-  await updateDraft(entry.key, (now) => {
-    if (!now) return undefined;
-    const edited = now.changeId !== entry.changeId;
-    switch (reply.result) {
-      case "saved":
-        return edited ? { ...now, version: reply.version, state: "waiting", attempts: 0, nextTry: undefined } : null;
-      case "conflict":
-        return { ...now, state: "conflict", server: { ...reply.server, version: reply.version } satisfies StoredConflict, message: undefined };
-      case "refused":
-        return edited ? undefined : { ...now, state: "error", message: reply.message };
-      case "network": {
-        const attempts = (now.attempts ?? 0) + 1;
-        return { ...now, attempts, nextTry: Date.now() + retryDelay(attempts) };
-      }
-      default:
-        return undefined; // signed out or another account: keep it and wait
-    }
-  });
+  await updateDraft(entry.key, (now) => afterReply(now, entry, reply));
   announceDrafts({ type: "changed" });
 }
 
-/** Ask the service worker to upload when the connection returns, even with Uniflow closed. */
+/**
+ * Ask the service worker to upload when the connection returns, even with Uniflow closed.
+ * Pages only: inside the worker, rejecting the sync event makes the browser try again.
+ */
 export function requestBackgroundSync(): void {
-  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+  if (!("document" in globalThis) || typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
   navigator.serviceWorker.ready
     .then((reg) => (reg as ServiceWorkerRegistration & { sync?: { register(tag: string): Promise<void> } }).sync?.register(DRAFT_SYNC_TAG))
     .catch(() => {});
@@ -143,19 +161,32 @@ async function openSheets(): Promise<Set<string>> {
 }
 
 /**
- * Upload every waiting draft of this account that's due and not owned by an open sheet
- * (`force`: due or not; `includeOpenSheets`: those too, for signing out). Returns how many of
- * the account's drafts are still on this device afterwards.
+ * Upload every waiting draft that's due and not owned by an open sheet: this account's
+ * (`owner`), or every account's unsealed drafts (the worker, which doesn't know who is signed
+ * in; the server refuses a draft whose account isn't). `force`: due or not; `includeOpenSheets`:
+ * those too, for signing out. Stops at the first sign that Uniflow can't take uploads now.
+ * Returns how many drafts are still on this device, and whether Uniflow couldn't be reached.
  */
-export async function syncAllDrafts(owner: string, { force = false, includeOpenSheets = false } = {}): Promise<number> {
+export async function syncWaiting({ owner, force = false, includeOpenSheets = false }: { owner?: string; force?: boolean; includeOpenSheets?: boolean } = {}): Promise<{ left: number; unreachable: boolean }> {
   const sheets = includeOpenSheets ? new Set<string>() : await openSheets();
-  for (const entry of await draftsOf(owner)) {
+  const entries = () => (owner ? draftsOf(owner) : openDrafts());
+  let unreachable = false;
+  for (const entry of await entries()) {
     if (!entry.payload || !entry.version || !entry.changeId) continue; // from before #163: the sheet handles it
     if ((entry.state ?? "waiting") !== "waiting") continue;
     if (!force && entry.nextTry && entry.nextTry > Date.now()) continue;
-    if (sheets.has(sheetLock(owner, entry.assignmentId))) continue;
+    if (sheets.has(sheetLock(entry.owner, entry.assignmentId))) continue;
     const reply = await syncDraft(entry);
-    if (reply.result === "network" || reply.result === "signed-out" || reply.result === "other-account") break;
+    if (reply.result === "network") {
+      unreachable = true;
+      break;
+    }
+    if (reply.result === "signed-out" || reply.result === "other-account") break;
   }
-  return (await draftsOf(owner)).length;
+  return { left: (await entries()).length, unreachable };
+}
+
+/** Upload this account's waiting drafts (see `syncWaiting`); returns how many are still on this device. */
+export async function syncAllDrafts(owner: string, opts: { force?: boolean; includeOpenSheets?: boolean } = {}): Promise<number> {
+  return (await syncWaiting({ owner, ...opts })).left;
 }

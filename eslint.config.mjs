@@ -25,6 +25,8 @@ const eslintConfig = defineConfig([
     // Default ignores of eslint-config-next:
     ".next/**",
     ".next-e2e/**",
+    // Generated from src/sw (#188).
+    "public/sw.js",
     "test-results/**",
     "playwright-report/**",
     "out/**",

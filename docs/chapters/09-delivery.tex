@@ -101,7 +101,9 @@ workflow creates them, after a healthy rollout. Hotfixes and reverts are in \cre
 \subsection{Build}
 One Buildx run (\src{docker-bake.hcl}) builds both images natively on GitHub's ARM64 runner,
 matching Fargate's Graviton CPUs, and pushes them to ECR tagged with the commit SHA. Their shared
-stages build once; layers are cached in GitHub's cache between runs.
+stages build once; layers are cached in GitHub's cache between runs. \code{bun run build} first
+bundles the service worker (\src{src/sw} to \src{public/sw.js}, \code{bun build}; \#188), then
+runs \code{next build}; the e2e tests build the same way.
 
 \begin{xltabular}{\linewidth}{@{}P{30mm} P{28mm} L@{}}
   \toprule
