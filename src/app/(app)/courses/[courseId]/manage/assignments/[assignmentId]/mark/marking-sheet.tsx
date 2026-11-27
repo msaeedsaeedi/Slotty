@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "@/components/app-link";
+import { courseFallbacks } from "@/lib/offline-urls";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AlertTriangle, Check, ChevronLeft, ChevronRight, CircleAlert, Loader2, MapPin, UserRound } from "lucide-react";
@@ -993,17 +994,17 @@ function TopBar({ links, assignment, title }: { links: Props["links"]; assignmen
     <header className="flex flex-wrap items-center gap-x-3 gap-y-2">
       <Button asChild variant="ghost" size="icon-sm" aria-label="Back">
         {/* Offline, ways out land on the course's saved Today page instead of a dead end (#175). */}
-        <Link href={links.back} offlineFallback={`/courses/${assignment.courseId}/manage/today`}>
+        <Link href={links.back} offlineFallback={courseFallbacks(assignment.courseId)}>
           <ChevronLeft />
         </Link>
       </Button>
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs text-muted-foreground">
-          <Link href={links.course} offlineFallback={`/courses/${assignment.courseId}/manage/today`} className="hover:underline">
+          <Link href={links.course} offlineFallback={courseFallbacks(assignment.courseId)} className="hover:underline">
             {assignment.courseCode}
           </Link>
           {" › "}
-          <Link href={links.assignment} offlineFallback={`/courses/${assignment.courseId}/manage/today`} className="hover:underline">
+          <Link href={links.assignment} offlineFallback={courseFallbacks(assignment.courseId)} className="hover:underline">
             {assignment.title}
           </Link>
         </p>

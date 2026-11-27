@@ -27,3 +27,12 @@ export function savedPageKey(url: URL): string | null {
   for (const name of url.searchParams.keys()) if (!keep.includes(name)) return null;
   return path;
 }
+
+/**
+ * Where a staff member's links into a course go offline when the page they point at isn't
+ * saved (`AppLink`'s `offlineFallback`, #175): the course's Today page, or for an instructor who
+ * hosts no demos there (no Today page saved, #181), the review queue. First saved one wins.
+ */
+export function courseFallbacks(courseId: string): string[] {
+  return [`/courses/${courseId}/manage/today`, `/courses/${courseId}/manage/review`];
+}

@@ -8,7 +8,9 @@
  * - TA: dashboard, notifications, Demo day (`/today`), each course's Today page, the marking
  *   sheet of assignments they host demos for today or in the next 7 days, and the evaluate
  *   page of each student booked with them (demos within 14 days either side).
- * - Instructor: everything a TA has, plus the review queue (read only).
+ * - Instructor: the review queue and the student page of each mark waiting for their review
+ *   (read only; #181). Demo day and a course's Today page only if they host demos there:
+ *   otherwise they'd open empty. Marking sheets and booked students as a TA, for demos they host.
  * - Admin and platform accounts: nothing (they never join courses, ADR-016).
  *
  * Limits: active (not archived) courses, demos within 14 days, at most 150 pages, nearest
@@ -52,6 +54,8 @@ export interface OfflineCourse {
   timezone: string;
   /** Changes whenever anything shown on this course's pages changes (see the service). */
   fingerprint: string;
+  /** The account hosts demos in this course (slots of its own, not cancelled, not over). */
+  hosts?: boolean;
   assignments: {
     id: string;
     status: "DRAFT" | "PUBLISHED" | "CLOSED";
@@ -71,6 +75,8 @@ export interface OfflineInput {
   ownBookings: { courseId: string; assignmentId: string; startsAt: Date }[];
   /** Active bookings in slots the account hosts (as staff). */
   hostedBookings: { courseId: string; assignmentId: string; studentId: string; startsAt: Date }[];
+  /** Marks submitted and waiting for review, in courses where the account is an instructor (#181). */
+  awaitingReview?: { courseId: string; assignmentId: string; studentId: string; submittedAt: Date }[];
 }
 
 export interface OfflinePage {
@@ -119,7 +125,10 @@ export function offlinePages(input: OfflineInput): OfflinePage[] {
   const add = (url: string, v: string, rank: number, key = false) => out.push({ url, version: v, key, rank });
 
   const studies = input.courses.some((c) => c.role === "STUDENT");
-  const hosts = input.courses.some((c) => c.role !== "STUDENT");
+  // Demo day and a course's Today page are about hosting demos: every TA, and an instructor
+  // only where they host some (#181; otherwise those pages open empty).
+  const hostsIn = (c: OfflineCourse) => c.role === "TA" || (c.role === "INSTRUCTOR" && Boolean(c.hosts));
+  const hosts = input.courses.some(hostsIn);
 
   // Core pages: they show something from every course.
   add("/dashboard", version("dashboard", everything, input.userFingerprint), 0, true);
@@ -141,9 +150,21 @@ export function offlinePages(input: OfflineInput): OfflinePage[] {
         add(`/courses/${c.id}/assignments/${a.id}`, version("assignment", a.id, c.fingerprint, day(c)), 100 + distance(when) / DAY, soon && booked.length > 0);
       }
     } else {
-      add(`/courses/${c.id}/manage/today`, v("course-today"), 11, true);
-      if (c.role === "INSTRUCTOR") add(`/courses/${c.id}/manage/review`, v("review"), 12);
+      if (hostsIn(c)) add(`/courses/${c.id}/manage/today`, v("course-today"), 11, true);
+      if (c.role === "INSTRUCTOR") add(`/courses/${c.id}/manage/review`, v("review"), 12, !hostsIn(c));
     }
+  }
+
+  // Instructors: the student page of each mark waiting for their review (#181), newest first,
+  // ahead of demo pages: reading submissions is what an instructor does away from demos.
+  for (const r of input.awaitingReview ?? []) {
+    const c = courses.get(r.courseId);
+    if (c?.role !== "INSTRUCTOR") continue;
+    add(
+      `/courses/${c.id}/manage/assignments/${r.assignmentId}/evaluate/${r.studentId}`,
+      version("evaluate", r.assignmentId, r.studentId, c.fingerprint, day(c)),
+      60 + distance(r.submittedAt) / DAY,
+    );
   }
 
   // Staff: marking sheets and the students booked with them.

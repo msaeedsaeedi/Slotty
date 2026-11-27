@@ -1,4 +1,5 @@
 import Link from "@/components/app-link";
+import { courseFallbacks } from "@/lib/offline-urls";
 import { redirect } from "next/navigation";
 import { StatusBadge } from "@/components/status-badge";
 import { db } from "@/server/db";
@@ -57,7 +58,7 @@ export default async function ManageLayout({ children, params }: LayoutProps<"/c
         }
         slim={
           <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            <Link href={base} offlineFallback={`${base}/today`} className="hover:text-foreground hover:underline">
+            <Link href={base} offlineFallback={courseFallbacks(courseId)} className="hover:text-foreground hover:underline">
               {course.code} · {course.title}
             </Link>
             {badges}
