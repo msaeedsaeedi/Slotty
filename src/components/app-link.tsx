@@ -7,7 +7,9 @@
  * offline") and doesn't navigate, so nobody lands on the offline page by surprise.
  *
  * The saved pages come from the service worker (`saved-pages?`), asked once each time the
- * connection drops.
+ * connection drops. Which saved page an address opens is `savedPageKey` (src/lib/offline-urls.ts,
+ * #173), the worker's own rule: relative links (`?reschedule=1`) are resolved against the current
+ * page, and a query that changes the content (`?day=`, `?scope=`) is a page that isn't saved.
  */
 
 import NextLink from "next/link";
@@ -15,6 +17,7 @@ import { useEffect, useSyncExternalStore, type ComponentProps } from "react";
 import { CloudOff } from "lucide-react";
 import { toast } from "sonner";
 import { useConnectionStatus } from "@/components/connection";
+import { savedPageKey } from "@/lib/offline-urls";
 import { cn } from "@/lib/utils";
 
 const NOT_AVAILABLE = "Not available offline";
@@ -51,18 +54,38 @@ function useSavedPages(active: boolean) {
   return useSyncExternalStore(subscribe, () => saved, () => null);
 }
 
-function pathOf(href: ComponentProps<typeof NextLink>["href"]): string | null {
-  const raw = typeof href === "string" ? href : href.pathname ?? null;
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return null;
-  return raw.split(/[?#]/)[0] || "/";
+type Href = ComponentProps<typeof NextLink>["href"];
+
+/**
+ * Whether a link leads to a page that isn't on this device: false for other sites, for links
+ * to the page already open (`#section`, `?` with nothing), and when it's a saved page.
+ */
+function notSaved(href: Href, pages: ReadonlySet<string>): boolean {
+  const here = new URL(window.location.href);
+  let target: URL;
+  try {
+    if (typeof href === "string") target = new URL(href, here);
+    else {
+      target = new URL(href.pathname ?? here.pathname, here);
+      if (href.query && typeof href.query === "object") {
+        target.search = "";
+        for (const [k, v] of Object.entries(href.query)) for (const one of ([] as unknown[]).concat(v)) if (one != null) target.searchParams.append(k, String(one));
+      } else if (href.search) target.search = href.search;
+    }
+  } catch {
+    return false;
+  }
+  if (target.origin !== here.origin) return false;
+  if (target.pathname === here.pathname && target.search === here.search) return false;
+  const key = savedPageKey(target);
+  return key === null || !pages.has(key);
 }
 
 export default function Link({ className, onClick, children, href, ...props }: ComponentProps<typeof NextLink>) {
   const status = useConnectionStatus();
   const offline = status !== "online";
   const pages = useSavedPages(offline);
-  const path = pathOf(href);
-  const unavailable = offline && pages !== null && path !== null && !pages.has(path);
+  const unavailable = offline && pages !== null && notSaved(href, pages);
   return (
     <NextLink
       href={href}

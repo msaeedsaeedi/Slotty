@@ -4,7 +4,7 @@
   // and src/domain is checked here too, so it must work in both.
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "lib": ["webworker", "esnext"],
+    "lib": ["webworker", "webworker.iterable", "esnext"],
     "types": [],
     "noEmit": true
   },

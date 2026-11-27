@@ -292,7 +292,9 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
         at: Date.now(),
         state: "waiting",
         label: row.student.name,
-        href: `/courses/${assignment.courseId}/manage/assignments/${assignment.id}/mark?student=${row.student.id}`,
+        // The student's own page (it embeds this sheet for them): saved for the TA's booked
+        // students, so the header's list works offline (#173). `mark?student=` is never saved.
+        href: `/courses/${assignment.courseId}/manage/assignments/${assignment.id}/evaluate/${row.student.id}`,
       };
     },
     [rows, criteria, offlineOwner, assignment.id, assignment.courseId],
