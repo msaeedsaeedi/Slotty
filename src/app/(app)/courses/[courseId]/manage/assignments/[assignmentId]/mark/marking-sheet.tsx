@@ -992,17 +992,18 @@ function TopBar({ links, assignment, title }: { links: Props["links"]; assignmen
   return (
     <header className="flex flex-wrap items-center gap-x-3 gap-y-2">
       <Button asChild variant="ghost" size="icon-sm" aria-label="Back">
-        <Link href={links.back}>
+        {/* Offline, ways out land on the course's saved Today page instead of a dead end (#175). */}
+        <Link href={links.back} offlineFallback={`/courses/${assignment.courseId}/manage/today`}>
           <ChevronLeft />
         </Link>
       </Button>
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs text-muted-foreground">
-          <Link href={links.course} className="hover:underline">
+          <Link href={links.course} offlineFallback={`/courses/${assignment.courseId}/manage/today`} className="hover:underline">
             {assignment.courseCode}
           </Link>
           {" › "}
-          <Link href={links.assignment} className="hover:underline">
+          <Link href={links.assignment} offlineFallback={`/courses/${assignment.courseId}/manage/today`} className="hover:underline">
             {assignment.title}
           </Link>
         </p>

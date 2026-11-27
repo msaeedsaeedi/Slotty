@@ -89,7 +89,7 @@ export function DemoDayView({ data, now, basePath, scopeToggle }: ViewProps) {
     return qs ? `${basePath}?${qs}` : basePath;
   };
   const dayHref = (d: string) => href({ day: d });
-  const ctx: RowContext = { now, day, back: href({}), everyone: data.scope === "everyone" };
+  const ctx: RowContext = { now, day, back: href({}), everyone: data.scope === "everyone", isToday };
   const { stats } = timeline;
 
   // Consecutive slots of one assignment share a header (course › assignment, venue).
@@ -233,7 +233,16 @@ interface RowContext {
   /** Link back to this view (from the marking page). */
   back: string;
   everyone: boolean;
+  /**
+   * The day shown is today. Offline, a link to its marking sheet then falls back to the sheet
+   * saved on the device, which is today's own demos (#175); another day's never does (#173).
+   */
+  isToday: boolean;
 }
+
+/** The saved marking sheet a link may fall back to offline: today's, own demos only (#175). */
+const savedSheet = (a: { id: string; courseId: string }, ctx: RowContext, bookingId?: string) =>
+  ctx.isToday && !ctx.everyone ? `/courses/${a.courseId}/manage/assignments/${a.id}/mark${bookingId ? `?booking=${bookingId}` : ""}` : undefined;
 
 function Focus({ data, ctx, dayHref }: { data: DemoDay; ctx: RowContext; dayHref: (day: string) => string }) {
   const { focus, stats, idleNow } = data.timeline;
@@ -305,11 +314,12 @@ function FocusCard({ slot, ctx, label, live, children }: { slot: DemoDaySlot; ct
 function AssignmentLinks({ assignment: a }: { assignment: DemoDaySlot["assignment"] }) {
   return (
     <span className="min-w-0 truncate">
-      <Link href={`/courses/${a.courseId}/manage`} className="font-medium hover:underline">
+      {/* Manage pages are online-only; offline these go to the course's saved Today page (#175). */}
+      <Link href={`/courses/${a.courseId}/manage`} offlineFallback={`/courses/${a.courseId}/manage/today`} className="font-medium hover:underline">
         {a.course.code}
       </Link>
       {" › "}
-      <Link href={`/courses/${a.courseId}/manage/assignments/${a.id}`} className="hover:underline">
+      <Link href={`/courses/${a.courseId}/manage/assignments/${a.id}`} offlineFallback={`/courses/${a.courseId}/manage/today`} className="hover:underline">
         {a.title}
       </Link>
     </span>
@@ -336,7 +346,7 @@ function AssignmentGroup({ assignment, items, ctx }: { assignment: DemoDaySlot["
         {ctx.everyone && hosts.length === 1 && <span className="text-muted-foreground">Host: {hosts[0]}</span>}
         {firstBooking && (
           <Button asChild size="sm" variant="outline" className="ml-auto">
-            <Link href={markHref(assignment, { day: ctx.day, everyone: ctx.everyone, back: ctx.back })}>
+            <Link href={markHref(assignment, { day: ctx.day, everyone: ctx.everyone, back: ctx.back })} offlineFallback={savedSheet(assignment, ctx)}>
               <PenLine /> Marking sheet
             </Link>
           </Button>
@@ -447,7 +457,9 @@ function BookingActions({ booking: b, slot, ctx, started, prominent }: { booking
       )}
       {b.status === "COMPLETED" && (
         <Button asChild size="sm" variant={locked ? "ghost" : "outline"}>
-          <Link href={href}>{locked ? "View" : "Mark"}</Link>
+          <Link href={href} offlineFallback={savedSheet(slot.assignment, ctx, b.id)}>
+            {locked ? "View" : "Mark"}
+          </Link>
         </Button>
       )}
     </div>

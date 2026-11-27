@@ -57,7 +57,7 @@ export default async function ManageLayout({ children, params }: LayoutProps<"/c
         }
         slim={
           <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            <Link href={base} className="hover:text-foreground hover:underline">
+            <Link href={base} offlineFallback={`${base}/today`} className="hover:text-foreground hover:underline">
               {course.code} · {course.title}
             </Link>
             {badges}

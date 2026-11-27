@@ -572,4 +572,40 @@ test("offline, a demo that hasn't started can be marked: the reason is accepted 
   await expect(again.getByText("Marked before the demo: “Demoed early, offline”")).toBeVisible();
   await expect(again.getByLabel("Functionality")).toHaveValue("4");
   await expect(again.getByLabel("Feedback for the student")).toHaveValue("Typed slowly, offline");
+
+  // Offline, the TA gets from the dashboard to the student and back by clicking, never with the
+  // browser's Back button: links into manage pages (online-only) land on saved pages (#175).
+  const coursePath = `/courses/${courseId}/manage`;
+  const sheetPath = `${coursePath}/assignments/${assignmentId}/mark`;
+  const studentPath = await again.getByRole("link", { name: "Booking & details" }).first().getAttribute("href");
+  const savedPaths = () =>
+    again.evaluate(async () => {
+      const out: string[] = [];
+      for (const k of await caches.keys()) if (/-pages-/.test(k)) for (const r of await (await caches.open(k)).keys()) out.push(new URL(r.url).pathname);
+      return out;
+    });
+  await again.evaluate(() => navigator.serviceWorker.controller?.postMessage({ type: "sync-pages", force: true }));
+  // By now this TA may have many courses from earlier tests, so the forced sync has more to download.
+  const todayPath = `${coursePath}/today`;
+  await expect.poll(async () => { const saved = await savedPaths(); return [todayPath, studentPath!].filter((p) => !saved.includes(p)); }, { timeout: 120_000 }).toEqual([]);
+  // The sheet is saved only for demos in the next 7 days; this demo may be further off (the
+  // window starts about a week out). The way back goes to the sheet if it's saved, else to Today.
+  const backTo = (await savedPaths()).includes(sheetPath) ? sheetPath : todayPath;
+  await context.setOffline(true);
+  await again.goto("/dashboard");
+  const course = again.locator(`main a[href="${todayPath}"]`).first();
+  await expect(course).toBeVisible(); // the course's own link, pointing at its saved Today page
+  await course.click();
+  await expect(again).toHaveURL(new RegExp(`${todayPath}$`));
+  await again.goto(studentPath!);
+  const back = again.getByRole("link", { name: "Back" });
+  await expect(back).toHaveAttribute("href", backTo);
+  await back.click();
+  await expect(again).toHaveURL(new RegExp(`${backTo}$`));
+  await expect(again.getByRole("heading", { name: "You're offline" })).toHaveCount(0);
+  // From there the course is one click away, not a dead end.
+  const courseLink = again.locator(`a[href="${todayPath}"]`).first();
+  await expect(courseLink).toBeVisible();
+  await expect(courseLink).not.toHaveAttribute("data-offline", "unavailable");
+  await context.setOffline(false);
 });

@@ -10,6 +10,10 @@
  * connection drops. Which saved page an address opens is `savedPageKey` (src/lib/offline-urls.ts,
  * #173), the worker's own rule: relative links (`?reschedule=1`) are resolved against the current
  * page, and a query that changes the content (`?day=`, `?scope=`) is a page that isn't saved.
+ *
+ * `offlineFallback` (#175): pages to go to instead when this one isn't saved, first saved one
+ * wins. A TA's way back from a student, or into a course, then lands on a saved page (the
+ * marking sheet, the course's Today page) instead of a dead end. Online it changes nothing.
  */
 
 import NextLink from "next/link";
@@ -81,14 +85,20 @@ function notSaved(href: Href, pages: ReadonlySet<string>): boolean {
   return key === null || !pages.has(key);
 }
 
-export default function Link({ className, onClick, children, href, ...props }: ComponentProps<typeof NextLink>) {
+export default function Link({ className, onClick, children, href, offlineFallback, ...props }: ComponentProps<typeof NextLink> & { offlineFallback?: string | readonly string[] }) {
   const status = useConnectionStatus();
   const offline = status !== "online";
   const pages = useSavedPages(offline);
-  const unavailable = offline && pages !== null && notSaved(href, pages);
+  let target: Href = href;
+  let unavailable = false;
+  if (offline && pages !== null && notSaved(href, pages)) {
+    const alternative = ([] as string[]).concat(offlineFallback ?? []).find((f) => !notSaved(f, pages));
+    if (alternative) target = alternative;
+    else unavailable = true;
+  }
   return (
     <NextLink
-      href={href}
+      href={target}
       {...props}
       data-offline={unavailable ? "unavailable" : undefined}
       aria-disabled={unavailable || undefined}
