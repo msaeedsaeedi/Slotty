@@ -24,7 +24,8 @@ export default defineConfig({
   // A production build: dev mode's on-demand compiling and Fast Refresh make
   // multi-browser tests flaky, and service workers/offline need a real build.
   webServer: {
-    command: `bunx next build && bunx next start -p ${PORT}`,
+    // `bun run build` also builds the service worker (src/sw → public/sw.js, #188).
+    command: `bun run build && bunx next start -p ${PORT}`,
     url: `http://localhost:${PORT}/login`,
     reuseExistingServer: false,
     timeout: 600_000,

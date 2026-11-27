@@ -5,7 +5,7 @@
  *
  * - Only what hasn't reached the server yet: an entry is deleted as soon as the
  *   server confirms the save (`draft-sync.ts`; the service worker reads the same
- *   entries, public/sw.js).
+ *   entries, src/sw).
  * - Writes use strict durability, so a power cut doesn't lose the last ones.
  * - Bound to the signed-in account: entries carry the offline owner key. When another
  *   account signs in, `sealDrafts` seals the earlier account's entries: hidden, never
@@ -155,6 +155,12 @@ export async function draftsOf<D>(owner: string): Promise<StoredDraft<D>[]> {
   return all.filter((d) => d.owner === owner && !d.sealedAt);
 }
 
+/** Every account's drafts that aren't sealed (the service worker, which doesn't know who is signed in). */
+export async function openDrafts<D>(): Promise<StoredDraft<D>[]> {
+  const all = ((await withStore("readonly", (s) => s.getAll())) as StoredDraft<D>[] | null) ?? [];
+  return all.filter((d) => !d.sealedAt);
+}
+
 export async function draftsFor<D>(owner: string, assignmentId: string): Promise<StoredDraft<D>[]> {
   const all = ((await withStore("readonly", (s) => s.index("assignment").getAll([owner, assignmentId]))) as StoredDraft<D>[] | null) ?? [];
   return all.filter((d) => !d.sealedAt);
@@ -210,7 +216,8 @@ export async function sealDrafts(owner: string, now = Date.now()): Promise<void>
 export type DraftEvent = { type: "changed" } | { type: "syncing"; key: string; on: boolean };
 
 const CHANNEL = "uniflow-drafts";
-const local = typeof window !== "undefined" ? new EventTarget() : null;
+// In pages and in the service worker alike (#188): an EventTarget for this context's listeners.
+const local = typeof EventTarget !== "undefined" ? new EventTarget() : null;
 let channel: BroadcastChannel | null = null;
 function bus(): BroadcastChannel | null {
   if (channel || typeof BroadcastChannel === "undefined") return channel;

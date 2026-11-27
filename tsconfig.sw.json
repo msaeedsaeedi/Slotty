@@ -1,0 +1,13 @@
+{
+  // The service worker (src/sw, bundled to public/sw.js; #188) runs in a worker, not a page:
+  // checked against the worker's globals instead of the DOM's. Code it imports from src/lib
+  // and src/domain is checked here too, so it must work in both.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["webworker", "esnext"],
+    "types": [],
+    "noEmit": true
+  },
+  "include": ["src/sw/**/*.ts"],
+  "exclude": []
+}

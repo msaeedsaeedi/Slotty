@@ -1,4 +1,9 @@
+/// <reference lib="webworker" />
 /* Uniflow service worker: each account's key pages kept for offline use + push notifications.
+ *
+ * Written in TypeScript and bundled to public/sw.js by `bun run sw:build` (part of `build` and
+ * `dev`; #188), so it shares code with the app instead of copying it. public/sw.js is a build
+ * output: edit this file.
  *
  * Caching rules (see the system documentation, Business rules → PWA, ch. 7, and ADR-038;
  * agreed design: steps 1 and 2 on issue #160):
@@ -25,10 +30,41 @@
  *   owner wipes them; pages also ask the worker to forget them (`clear-pages`), and signing
  *   out wipes everything (Clear-Site-Data).
  * - Marking drafts kept on the device (IndexedDB) upload on Background Sync (`marking-drafts`),
- *   with Uniflow closed, through POST /api/marking/drafts (#163; see "Marking drafts" below).
- *   This is the only thing the worker ever POSTs, and only drafts: never a submit or release.
+ *   with Uniflow closed, through POST /api/marking/drafts (#163), with the same code as the
+ *   page (src/lib/draft-sync.ts). This is the only thing the worker ever POSTs, and only
+ *   drafts: never a submit or release.
  */
-// The version names the caches; the marking-draft sync (#163) needs no new caches, so it stays v6.
+import { DRAFT_SYNC_TAG, syncWaiting } from "@/lib/draft-sync";
+
+declare const self: ServiceWorkerGlobalScope;
+
+/** Events the TypeScript DOM library doesn't describe yet (Background Sync, Periodic Background Sync). */
+interface TaggedSyncEvent extends ExtendableEvent {
+  readonly tag: string;
+}
+declare global {
+  interface ServiceWorkerGlobalScopeEventMap {
+    sync: TaggedSyncEvent;
+    periodicsync: TaggedSyncEvent;
+  }
+  interface WorkerNavigator {
+    readonly connection?: { saveData?: boolean };
+  }
+}
+
+/** One page on the account's list (`offlinePages`, src/domain/offline-pages.ts). */
+interface ListedPage {
+  url: string;
+  version: string;
+  key?: boolean;
+}
+interface OfflineList {
+  owner: string;
+  pages: ListedPage[];
+  syncedAt: number;
+}
+
+// The version names the caches; it changes only when what they hold changes.
 const VERSION = "v6"; // v6: pages from the server's list, loaded ahead of time, pinned build files (#162)
 const STATIC_CACHE = `uniflow-static-${VERSION}`;
 const PAGE_CACHE = `uniflow-pages-${VERSION}`;
@@ -68,21 +104,21 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-function isRscRequest(request) {
+function isRscRequest(request: Request): boolean {
   return request.headers.get("RSC") === "1" || new URL(request.url).searchParams.has("_rsc");
 }
 
 // ─── The account's list ──────────────────────────────────────────────────────
 
-/** { owner, pages: [{url, version, key}], syncedAt } or null. Kept in memory too. */
-let list = null;
+/** Kept in memory too. */
+let list: OfflineList | null = null;
 let listLoaded = false;
 
-async function readList() {
+async function readList(): Promise<OfflineList | null> {
   if (listLoaded) return list;
   try {
     const res = await caches.match(LIST_KEY, { cacheName: PAGE_CACHE });
-    list = res ? await res.json() : null;
+    list = res ? ((await res.json()) as OfflineList) : null;
   } catch {
     list = null;
   }
@@ -90,30 +126,30 @@ async function readList() {
   return list;
 }
 
-async function writeList(next) {
+async function writeList(next: OfflineList): Promise<void> {
   list = next;
   listLoaded = true;
   const cache = await caches.open(PAGE_CACHE);
   await cache.put(LIST_KEY, new Response(JSON.stringify(next), { headers: { "Content-Type": "application/json" } }));
 }
 
-async function forgetPages() {
+async function forgetPages(): Promise<void> {
   list = null;
   listLoaded = true;
   await caches.delete(PAGE_CACHE);
 }
 
-const listed = (l, pathname) => Boolean(l && l.pages.some((p) => p.url === pathname));
+const listed = (l: OfflineList | null, pathname: string) => Boolean(l && l.pages.some((p) => p.url === pathname));
 
 // ─── Saved pages ─────────────────────────────────────────────────────────────
 
 /** Clients (tabs) whose current page came from a saved copy. Lost if the worker stops, which only hides the hint. */
-const savedCopyClients = new Set();
+const savedCopyClients = new Set<string>();
 
 const ASSET_RE = /\/_next\/static\/[^"'\s)\\<>]+/g;
 
 /** Cache a build file a saved page needs, if it isn't already. */
-async function keepAsset(cache, path) {
+async function keepAsset(cache: Cache, path: string): Promise<void> {
   if (await cache.match(path)) return;
   try {
     const res = await fetch(path, { credentials: "same-origin" });
@@ -127,7 +163,7 @@ async function keepAsset(cache, path) {
  * session ended is never kept). The copy records when it was saved, its version, and the
  * build files it needs, which are cached too and pinned while it's saved.
  */
-async function storePage(pathname, res, version) {
+async function storePage(pathname: string, res: Response, version: string): Promise<boolean> {
   const l = await readList();
   if (!listed(l, pathname)) return false;
   if (res.status !== 200 || res.redirected || res.headers.get("X-Uniflow-Offline") !== "store") return false;
@@ -144,13 +180,13 @@ async function storePage(pathname, res, version) {
   return true;
 }
 
-function expired(res) {
+function expired(res: Response): boolean {
   const at = Date.parse(res.headers.get("X-Uniflow-Saved-At") || "");
   return !at || Date.now() - at > EXPIRY_DAYS * DAY;
 }
 
 /** The saved copy of a page, unless it has expired (then it's deleted). */
-async function savedPage(pathname) {
+async function savedPage(pathname: string): Promise<Response | undefined> {
   const cache = await caches.open(PAGE_CACHE);
   const res = await cache.match(pathname);
   if (!res) return undefined;
@@ -162,13 +198,13 @@ async function savedPage(pathname) {
 }
 
 /** Saved page paths (for links that know what's on the device). */
-async function savedPaths() {
+async function savedPaths(): Promise<string[]> {
   const cache = await caches.open(PAGE_CACHE);
   return (await cache.keys()).map((r) => new URL(r.url).pathname).filter((p) => p !== LIST_KEY);
 }
 
 /** Drop the oldest build files beyond STATIC_MAX, never the pinned ones or those a saved page needs. */
-async function trimStatic(cache) {
+async function trimStatic(cache: Cache): Promise<void> {
   const keep = new Set(PINNED);
   try {
     const pages = await caches.open(PAGE_CACHE);
@@ -183,9 +219,9 @@ async function trimStatic(cache) {
 
 // ─── Loading pages ahead of time ─────────────────────────────────────────────
 
-let syncing = null;
+let syncing: Promise<void> | null = null;
 /** A forced sync asked for while another was running: it runs once that one ends. */
-let forcedNext = null;
+let forcedNext: Promise<void> | null = null;
 
 /**
  * Bring this device's saved pages in line with the account's list: wipe them if the owner
@@ -197,34 +233,36 @@ let forcedNext = null;
  * runs again after it, because the running one may have fetched the list before the change
  * that prompted it.
  */
-function syncPages({ force = false } = {}) {
+function syncPages({ force = false }: { force?: boolean } = {}): Promise<void> {
   if (syncing && force) {
-    forcedNext ??= syncing.catch(() => {}).then(() => {
-      forcedNext = null;
-      return syncPages({ force: true });
-    });
+    forcedNext ??= syncing
+      .catch(() => {})
+      .then(() => {
+        forcedNext = null;
+        return syncPages({ force: true });
+      });
     return forcedNext;
   }
   if (syncing) return syncing;
   syncing = (async () => {
     const before = await readList();
     if (!force && before?.syncedAt && Date.now() - before.syncedAt < SYNC_EVERY_MS) return;
-    let res;
+    let res: Response;
     try {
       res = await fetch("/api/offline/pages", { credentials: "same-origin", cache: "no-store" });
     } catch {
       return; // offline: try again at the next trigger
     }
     if (!res.ok) return;
-    const data = await res.json();
+    const data = (await res.json()) as { owner: string; pages: ListedPage[] };
     if (before && before.owner !== data.owner) await forgetPages();
-    const saveData = Boolean(self.navigator.connection && self.navigator.connection.saveData);
+    const saveData = Boolean(self.navigator.connection?.saveData);
     const pages = saveData ? data.pages.filter((p) => p.key) : data.pages;
     await writeList({ owner: data.owner, pages, syncedAt: Date.now() });
 
     const cache = await caches.open(PAGE_CACHE);
     const wanted = new Map(pages.map((p) => [p.url, p]));
-    const todo = [];
+    const todo: ListedPage[] = [];
     for (const req of await cache.keys()) {
       const path = new URL(req.url).pathname;
       if (path === LIST_KEY) continue;
@@ -238,7 +276,7 @@ function syncPages({ force = false } = {}) {
     const next = async () => {
       for (let p = todo.shift(); p; p = todo.shift()) {
         try {
-          const page = await fetch(p.url, { credentials: "same-origin", headers: { Accept: "text/html" }, priority: "low" });
+          const page = await fetch(p.url, { credentials: "same-origin", headers: { Accept: "text/html" }, priority: "low" } as RequestInit);
           await storePage(p.url, page, p.version);
         } catch {}
       }
@@ -276,15 +314,16 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode !== "navigate") return;
   event.respondWith(
-    (async () => {
+    (async (): Promise<Response> => {
+      const offlinePage = async () => (await caches.match(OFFLINE_URL)) ?? Response.error();
       const l = await readList();
-      const entry = l && l.pages.find((p) => p.url === url.pathname);
+      const entry = l?.pages.find((p) => p.url === url.pathname);
       const saved = await savedPage(url.pathname);
       if (!entry && !saved) {
         try {
           return await fetch(request);
         } catch {
-          return caches.match(OFFLINE_URL);
+          return offlinePage();
         }
       }
 
@@ -295,11 +334,11 @@ self.addEventListener("fetch", (event) => {
           .then((res) => (entry ? storePage(url.pathname, res.clone(), entry.version) : null))
           .catch(() => {}),
       );
-      let timer;
-      const timeout = new Promise((resolve) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<"timeout">((resolve) => {
         timer = setTimeout(() => resolve("timeout"), NETWORK_TIMEOUT_MS);
       });
-      const first = await Promise.race([network.catch(() => "failed"), timeout]);
+      const first = await Promise.race([network.catch(() => "failed" as const), timeout]);
       clearTimeout(timer);
       if (first instanceof Response && first.status < 500) return first;
       // Slow, failed or a server error: the saved copy if there is one.
@@ -314,7 +353,7 @@ self.addEventListener("fetch", (event) => {
           return await network;
         } catch {}
       }
-      return caches.match(OFFLINE_URL);
+      return offlinePage();
     })(),
   );
 });
@@ -325,15 +364,15 @@ self.addEventListener("message", (event) => {
   if (type === "clear-pages") event.waitUntil(forgetPages());
   // Load this account's pages ahead of time (`force` after sign-in).
   if (type === "sync-pages") event.waitUntil(syncPages({ force: Boolean(event.data.force) }));
+  const source = event.source as Client | null;
   // A page asks whether it was served from a saved copy (it labels itself).
-  if (type === "saved-copy?" && event.source) {
-    const savedCopy = savedCopyClients.has(event.source.id);
-    savedCopyClients.delete(event.source.id);
-    event.source.postMessage({ type: "uniflow:saved-copy", savedCopy });
+  if (type === "saved-copy?" && source) {
+    const savedCopy = savedCopyClients.has(source.id);
+    savedCopyClients.delete(source.id);
+    source.postMessage({ type: "uniflow:saved-copy", savedCopy });
   }
   // A page asks which paths are saved (links to pages not on the device show it offline).
-  if (type === "saved-pages?" && event.source) {
-    const source = event.source;
+  if (type === "saved-pages?" && source) {
     event.waitUntil(savedPaths().then((paths) => source.postMessage({ type: "uniflow:saved-pages", paths })));
   }
 });
@@ -345,157 +384,14 @@ self.addEventListener("periodicsync", (event) => {
 
 // ─── Marking drafts, uploaded with Uniflow closed (#163) ─────────────────────
 // The page asks for a Background Sync (tag `marking-drafts`) when an upload can't reach
-// Uniflow; Chrome fires it once there's a connection, with no Uniflow window open. This
-// mirrors src/lib/draft-sync.ts (`syncAllDrafts`, `applyReply`): keep the two in step.
-// - Same route and replies: saved → delete (unless edited meanwhile), conflict → keep with
-//   the server's marks, refused → Needs attention, signed out / another account → wait,
-//   network or server error → reject, so Chrome tries again later.
-// - Sealed drafts (another account signed in since) are never uploaded; the server also
-//   checks the account key against the signed-in account.
-// - Drafts of a marking sheet open in some tab are left to that sheet (Web Lock).
+// Uniflow; Chrome fires it once there's a connection, with no Uniflow window open. The upload
+// is the page's own code (`syncWaiting`, src/lib/draft-sync.ts): same route, same replies, one
+// uploader per draft (Web Locks), drafts of a sheet open in some tab left to that sheet, sealed
+// drafts never uploaded. If Uniflow couldn't be reached, the event fails so Chrome tries again.
 
-const DRAFT_DB = "uniflow-drafts";
-const DRAFT_STORE = "drafts";
-
-function draftDb() {
-  return new Promise((resolve) => {
-    try {
-      const req = indexedDB.open(DRAFT_DB, 1);
-      req.onupgradeneeded = () => {
-        const store = req.result.createObjectStore(DRAFT_STORE, { keyPath: "key" });
-        store.createIndex("assignment", ["owner", "assignmentId"]);
-      };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = req.onblocked = () => resolve(null);
-    } catch {
-      resolve(null);
-    }
-  });
-}
-
-async function allDrafts() {
-  const db = await draftDb();
-  if (!db) return [];
-  return new Promise((resolve) => {
-    try {
-      const req = db.transaction(DRAFT_STORE).objectStore(DRAFT_STORE).getAll();
-      req.onsuccess = () => {
-        db.close();
-        resolve(req.result || []);
-      };
-      req.onerror = () => {
-        db.close();
-        resolve([]);
-      };
-    } catch {
-      db.close();
-      resolve([]);
-    }
-  });
-}
-
-/** Read-modify-write one entry in one transaction; fn returns the new entry, null (delete) or undefined (leave). */
-async function updateDraftEntry(key, fn) {
-  const db = await draftDb();
-  if (!db) return;
-  await new Promise((resolve) => {
-    try {
-      const tx = db.transaction(DRAFT_STORE, "readwrite", { durability: "strict" });
-      const store = tx.objectStore(DRAFT_STORE);
-      const req = store.get(key);
-      req.onsuccess = () => {
-        const next = fn(req.result || null);
-        if (next === null) store.delete(key);
-        else if (next) store.put(next);
-      };
-      tx.oncomplete = tx.onerror = tx.onabort = () => {
-        db.close();
-        resolve();
-      };
-    } catch {
-      db.close();
-      resolve();
-    }
-  });
-}
-
-const retryDelay = (attempts) => Math.min(5000 * 2 ** Math.max(0, attempts - 1), 10 * 60_000);
-
-async function uploadDraftEntry(entry) {
-  let res;
-  try {
-    res = await fetch("/api/marking/drafts", {
-      method: "POST",
-      credentials: "same-origin",
-      cache: "no-store",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ owner: entry.owner, assignmentId: entry.assignmentId, studentId: entry.studentId, baseVersion: entry.version, changeId: entry.changeId, draft: entry.payload }),
-    });
-  } catch {
-    return { result: "network" };
-  }
-  const body = await res.json().catch(() => null);
-  if (res.ok && body && body.result === "saved") return body;
-  if (res.status === 409 && body && body.result === "conflict") return body;
-  if (res.status === 401) return { result: "signed-out" };
-  if (res.status === 403 && body && body.result === "other-account") return { result: "other-account" };
-  if ([400, 413, 422].includes(res.status) && body && body.result === "refused") return body;
-  return { result: "network" };
-}
-
-async function applyDraftReply(entry, reply) {
-  await updateDraftEntry(entry.key, (now) => {
-    if (!now) return undefined;
-    const edited = now.changeId !== entry.changeId;
-    if (reply.result === "saved") return edited ? { ...now, version: reply.version, state: "waiting", attempts: 0, nextTry: undefined } : null;
-    if (reply.result === "conflict") return { ...now, state: "conflict", server: { ...reply.server, version: reply.version }, message: undefined };
-    if (reply.result === "refused") return edited ? undefined : { ...now, state: "error", message: reply.message };
-    if (reply.result === "network") {
-      const attempts = (now.attempts || 0) + 1;
-      return { ...now, attempts, nextTry: Date.now() + retryDelay(attempts) };
-    }
-    return undefined;
-  });
-}
-
-function tellPages(event) {
-  try {
-    const ch = new BroadcastChannel("uniflow-drafts");
-    ch.postMessage(event);
-    ch.close();
-  } catch {}
-}
-
-const lockFor = (name, fn) => (self.navigator.locks ? self.navigator.locks.request(name, fn) : fn());
-
-/** Upload every waiting draft not owned by an open sheet. Rejects if any couldn't reach Uniflow. */
-async function syncDrafts() {
-  let openSheets = new Set();
-  try {
-    const held = (await self.navigator.locks?.query())?.held || [];
-    openSheets = new Set(held.map((l) => l.name));
-  } catch {}
-  let unreachable = false;
-  for (const entry of await allDrafts()) {
-    if (!entry.payload || !entry.version || !entry.changeId || entry.sealedAt) continue;
-    if ((entry.state || "waiting") !== "waiting") continue;
-    if (openSheets.has(`uniflow-sheet:${entry.owner}:${entry.assignmentId}`)) continue;
-    const reply = await lockFor(`uniflow-draft:${entry.key}`, async () => {
-      tellPages({ type: "syncing", key: entry.key, on: true });
-      const r = await uploadDraftEntry(entry);
-      await applyDraftReply(entry, r);
-      tellPages({ type: "syncing", key: entry.key, on: false });
-      return r;
-    });
-    if (reply.result === "network") {
-      unreachable = true;
-      break;
-    }
-    if (reply.result === "signed-out" || reply.result === "other-account") break;
-  }
-  tellPages({ type: "changed" });
+async function syncDrafts(): Promise<void> {
+  const { left, unreachable } = await syncWaiting({ force: true });
   // The installed app's icon shows how many marks are still on this device.
-  const left = (await allDrafts()).filter((d) => !d.sealedAt).length;
   try {
     if (left) await self.navigator.setAppBadge?.(left);
     else await self.navigator.clearAppBadge?.();
@@ -504,12 +400,14 @@ async function syncDrafts() {
 }
 
 self.addEventListener("sync", (event) => {
-  if (event.tag === "marking-drafts") event.waitUntil(syncDrafts());
+  if (event.tag === DRAFT_SYNC_TAG) event.waitUntil(syncDrafts());
 });
+
+// ─── Push ────────────────────────────────────────────────────────────────────
 
 self.addEventListener("push", (event) => {
   if (!event.data) return;
-  let data;
+  let data: { title?: string; body?: string; url?: string; tag?: string };
   try {
     data = event.data.json();
   } catch {
@@ -531,7 +429,7 @@ self.addEventListener("push", (event) => {
       // Refresh the page the notification opens (e.g. the demo's room, link and TA before a
       // reminder), so it's current if the device is offline when the student taps it.
       readList().then((l) => {
-        const entry = l && l.pages.find((p) => p.url === path);
+        const entry = l?.pages.find((p) => p.url === path);
         if (!entry) return null;
         return fetch(path, { credentials: "same-origin", headers: { Accept: "text/html" } })
           .then((res) => storePage(path, res, entry.version))
