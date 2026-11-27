@@ -1,15 +1,19 @@
-import Link from "next/link";
-import { BarChart3, CalendarClock, LogOut, Shield, UserRound } from "lucide-react";
+import Link from "@/components/app-link";
+import { BarChart3, CalendarClock, Shield, UserRound } from "lucide-react";
+import { SignOutButton } from "@/components/sign-out-button";
 import { UniflowMark } from "@/components/uniflow-mark";
 import { FeedbackButton } from "@/components/feedback-button";
 import { LiveBell } from "@/components/live-bell";
+import { ConnectionIndicator } from "@/components/connection-indicator";
+import { offlineOwner } from "@/server/offline-owner";
 import { Button } from "@/components/ui/button";
 import type { Actor } from "@/server/services/access";
-import { myRoleKinds } from "@/server/services/courses";
+import type { myRoleKinds } from "@/server/services/courses";
 import { unreadCount } from "@/server/services/inbox";
+import type { OfflineNeeds } from "@/domain/offline-pages";
 
-export async function AppHeader({ user }: { user: Actor }) {
-  const [unread, roles] = await Promise.all([unreadCount(user), myRoleKinds(user)]);
+export async function AppHeader({ user, roles, needs }: { user: Actor; roles: Awaited<ReturnType<typeof myRoleKinds>>; needs: OfflineNeeds }) {
+  const unread = await unreadCount(user);
   // Admins run the platform and never join courses, so the console is all they need.
   const admin = user.isAdmin;
   // The product team's dedicated account sees only its own area.
@@ -56,6 +60,7 @@ export async function AppHeader({ user }: { user: Actor }) {
           )}
         </nav>
         <div className="ml-auto flex items-center gap-1">
+          <ConnectionIndicator owner={offlineOwner(user.id)} renderedAt={new Date().toISOString()} marks={needs.marks} />
           {!outsideCourses && <FeedbackButton />}
           <LiveBell initial={unread} />
           <Link href="/account" className="hidden max-w-40 truncate text-sm text-muted-foreground hover:text-foreground sm:inline">
@@ -66,11 +71,7 @@ export async function AppHeader({ user }: { user: Actor }) {
               <UserRound />
             </Link>
           </Button>
-          <form action="/logout" method="post">
-            <Button type="submit" variant="ghost" size="icon" aria-label="Sign out">
-              <LogOut />
-            </Button>
-          </form>
+          <SignOutButton owner={offlineOwner(user.id)} />
         </div>
       </div>
     </header>

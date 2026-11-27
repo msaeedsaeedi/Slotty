@@ -69,3 +69,6 @@ infra/aws/**/*.secret.tfvars
 
 # Documentation build output (bun run docs:build)
 /docs/build/
+
+# Built from src/sw by `bun run sw:build` (part of build and dev; #188).
+/public/sw.js

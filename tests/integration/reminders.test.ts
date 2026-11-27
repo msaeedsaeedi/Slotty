@@ -82,6 +82,8 @@ describe("10-minute reminder", () => {
     const messages = await db.pushMessage.findMany({ where: { title: { startsWith: "Project demo demo in 10 minutes" } } });
     expect(messages).toHaveLength(1);
     expect(messages[0].body).toContain("https://meet.example.com/demo");
+    // Useless once the demo starts: it expires then, and goes out with high urgency.
+    expect(messages[0]).toMatchObject({ expiresAt: new Date("2027-01-12T14:00:00Z"), urgent: true });
     expect(await emails(ann, "Project demo demo in 10")).toBe(0);
     expect(await db.notification.count({ where: { userId: ann.id, title: { contains: "10 minutes" } } })).toBe(0);
   });
