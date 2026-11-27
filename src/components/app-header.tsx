@@ -8,11 +8,12 @@ import { ConnectionIndicator } from "@/components/connection-indicator";
 import { offlineOwner } from "@/server/offline-owner";
 import { Button } from "@/components/ui/button";
 import type { Actor } from "@/server/services/access";
-import { myRoleKinds } from "@/server/services/courses";
+import type { myRoleKinds } from "@/server/services/courses";
 import { unreadCount } from "@/server/services/inbox";
+import type { OfflineNeeds } from "@/domain/offline-pages";
 
-export async function AppHeader({ user }: { user: Actor }) {
-  const [unread, roles] = await Promise.all([unreadCount(user), myRoleKinds(user)]);
+export async function AppHeader({ user, roles, needs }: { user: Actor; roles: Awaited<ReturnType<typeof myRoleKinds>>; needs: OfflineNeeds }) {
+  const unread = await unreadCount(user);
   // Admins run the platform and never join courses, so the console is all they need.
   const admin = user.isAdmin;
   // The product team's dedicated account sees only its own area.
@@ -59,7 +60,7 @@ export async function AppHeader({ user }: { user: Actor }) {
           )}
         </nav>
         <div className="ml-auto flex items-center gap-1">
-          <ConnectionIndicator owner={offlineOwner(user.id)} renderedAt={new Date().toISOString()} />
+          <ConnectionIndicator owner={offlineOwner(user.id)} renderedAt={new Date().toISOString()} marks={needs.marks} />
           {!outsideCourses && <FeedbackButton />}
           <LiveBell initial={unread} />
           <Link href="/account" className="hidden max-w-40 truncate text-sm text-muted-foreground hover:text-foreground sm:inline">

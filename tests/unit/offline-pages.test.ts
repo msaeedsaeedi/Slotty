@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { OFFLINE_PAGE_CAP, offlinePages, type OfflineCourse, type OfflineInput } from "@/domain/offline-pages";
+import { OFFLINE_PAGE_CAP, offlineNeeds, offlinePages, type OfflineCourse, type OfflineInput } from "@/domain/offline-pages";
 
 const now = new Date("2026-12-01T09:00:00Z");
 const inDays = (d: number) => new Date(now.getTime() + d * 86_400_000);
@@ -102,5 +102,17 @@ describe("offlinePages (#162)", () => {
     // Notifications follow the account's own data, not the course's.
     expect(v({ ...base, courses: [course({ id: "c", role: "STUDENT", fingerprint: "f2" })] }, "/notifications")).toBe(v(base, "/notifications"));
     expect(v({ ...base, userFingerprint: "u2" }, "/notifications")).not.toBe(v(base, "/notifications"));
+  });
+});
+
+describe("offlineNeeds: what an account keeps on its device (#179)", () => {
+  it("gives admin and platform accounts nothing", () => {
+    expect(offlineNeeds({ outsideCourses: true, staff: false })).toEqual({ pages: false, marks: false });
+  });
+  it("gives a student saved pages but no marking drafts", () => {
+    expect(offlineNeeds({ outsideCourses: false, staff: false })).toEqual({ pages: true, marks: false });
+  });
+  it("gives staff both", () => {
+    expect(offlineNeeds({ outsideCourses: false, staff: true })).toEqual({ pages: true, marks: true });
   });
 });

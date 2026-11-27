@@ -64,12 +64,22 @@ export interface StoredDraft<D = unknown> {
 
 export type DraftState = "waiting" | "error" | "conflict";
 
-function openDb(): Promise<IDBDatabase | null> {
+/**
+ * Open the drafts database. Only writing a draft creates it (`create`): reading, sealing and
+ * syncing open it only if it already exists, so an account that never marks (a student, an
+ * admin) never gets one on its device (#179). Aborting the first upgrade discards the new,
+ * empty database.
+ */
+function openDb({ create = false }: { create?: boolean } = {}): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
     try {
       if (typeof indexedDB === "undefined") return resolve(null);
       const req = indexedDB.open(DRAFT_DB, 1);
-      req.onupgradeneeded = () => {
+      req.onupgradeneeded = (e) => {
+        if (!create && e.oldVersion === 0) {
+          req.transaction?.abort();
+          return;
+        }
         const store = req.result.createObjectStore(STORE, { keyPath: "key" });
         store.createIndex("assignment", ["owner", "assignmentId"]);
       };
@@ -82,8 +92,8 @@ function openDb(): Promise<IDBDatabase | null> {
   });
 }
 
-async function withStore<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore) => IDBRequest<T>): Promise<T | null> {
-  const db = await openDb();
+async function withStore<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore) => IDBRequest<T>, opts: { create?: boolean } = {}): Promise<T | null> {
+  const db = await openDb(opts);
   if (!db) return null;
   return new Promise((resolve) => {
     try {
@@ -109,7 +119,7 @@ async function withStore<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore
 export const draftKey = (owner: string, assignmentId: string, studentId: string) => `${owner}:${assignmentId}:${studentId}`;
 
 export function putDraft<D>(entry: Omit<StoredDraft<D>, "key">): Promise<unknown> {
-  return withStore("readwrite", (s) => s.put({ ...entry, key: draftKey(entry.owner, entry.assignmentId, entry.studentId) }));
+  return withStore("readwrite", (s) => s.put({ ...entry, key: draftKey(entry.owner, entry.assignmentId, entry.studentId) }), { create: true });
 }
 
 export function deleteDraft(owner: string, assignmentId: string, studentId: string): Promise<unknown> {

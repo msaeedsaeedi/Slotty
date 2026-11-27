@@ -8,6 +8,7 @@ import { subscribePushAction, unsubscribePushAction } from "@/app/actions/push";
 import { Button } from "@/components/ui/button";
 import { sealDrafts } from "@/lib/draft-store";
 import { syncAllDrafts } from "@/lib/draft-sync";
+import type { OfflineNeeds } from "@/domain/offline-pages";
 
 // ─── Saved data belongs to one account ───────────────────────────────────────
 
@@ -30,8 +31,12 @@ function clearSavedPageCaches() {
  * are sealed instead (#163): hidden, never uploaded under this account, deleted after 7 days.
  * Then this account's waiting drafts upload. `owner` is an opaque per-account key
  * (`offlineOwner`), never the user id.
+ *
+ * Only what the account's role uses is set up (#179, `offlineNeeds`): page syncing, persistent
+ * storage and periodic sync for accounts with saved pages; draft uploads for staff. Clearing
+ * another account's pages and sealing its drafts happen for everyone.
  */
-export function OfflineOwner({ owner }: { owner: string }) {
+export function OfflineOwner({ owner, needs }: { owner: string; needs: OfflineNeeds }) {
   useEffect(() => {
     let previous: string | null = null;
     try {
@@ -46,21 +51,22 @@ export function OfflineOwner({ owner }: { owner: string }) {
     }
     // Marking drafts kept on this device upload by themselves: now, when the app comes back to
     // the screen and when the connection returns (with Uniflow closed, Background Sync does it).
-    const drafts = sealDrafts(owner).then(() => syncAllDrafts(owner));
-    const uploadDrafts = () => void drafts.then(() => syncAllDrafts(owner));
+    const sealed = sealDrafts(owner);
+    const drafts = needs.marks ? sealed.then(() => syncAllDrafts(owner)) : sealed;
+    const uploadDrafts = () => needs.marks && void drafts.then(() => syncAllDrafts(owner));
     // Load this account's pages ahead of time (#162): now (forced after a sign-in, so the day
     // starts prepared), when the app comes back to the screen and when the connection
     // returns. The worker itself waits 5 minutes between syncs unless forced.
-    syncOfflinePages(changed);
+    if (needs.pages) syncOfflinePages(changed);
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
-      syncOfflinePages(false);
+      if (needs.pages) syncOfflinePages(false);
       uploadDrafts();
     };
     const onOnline = () => {
-      syncOfflinePages(false);
+      if (needs.pages) syncOfflinePages(false);
       // Straight away, not when the last try's gap is up.
-      void drafts.then(() => syncAllDrafts(owner, { force: true }));
+      if (needs.marks) void drafts.then(() => syncAllDrafts(owner, { force: true }));
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("online", onOnline);
@@ -68,7 +74,7 @@ export function OfflineOwner({ owner }: { owner: string }) {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", onOnline);
     };
-  }, [owner]);
+  }, [owner, needs.pages, needs.marks]);
   return null;
 }
 
