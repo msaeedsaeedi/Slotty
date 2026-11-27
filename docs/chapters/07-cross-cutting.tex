@@ -168,7 +168,7 @@ time (\code{syncPages}): it fetches the list, wipes everything if the owner key 
 pages no longer listed or expired, and downloads pages whose version changed, two at a time at
 low priority, storing each only if the response carries \code{X-Uniflow-Offline: store}. Pages are kept by path; which saved page an address opens is one rule, \code{savedPageKey}
 (\src{src/lib/offline-urls.ts}), used by both the worker and \code{AppLink}, so what a link shows
-as available is what the worker serves (\#173). Each
+as available is what the worker serves (\#173). A link can name saved pages to go to instead when its own isn't saved (\code{offlineFallback}), so offline paths through online-only pages don't dead-end (\#175). Each
 stored copy records when it was saved, its version and the build files it references, which are
 cached too and kept while the page is. Pages ask for a sync from \code{OfflineOwner} (forced after
 a sign-in) and when they come back to the screen or the connection returns; the worker waits

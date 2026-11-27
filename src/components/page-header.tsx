@@ -9,13 +9,14 @@ export function PageHeader({
 }: {
   title: React.ReactNode;
   description?: React.ReactNode;
-  back?: { href: string; label: string };
+  /** `offlineFallback`: saved pages to go back to instead, offline (#175; see `AppLink`). */
+  back?: { href: string; label: string; offlineFallback?: string | readonly string[] };
   actions?: React.ReactNode;
 }) {
   return (
     <div className="mb-6 space-y-2">
       {back && (
-        <Link href={back.href} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <Link href={back.href} offlineFallback={back.offlineFallback} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ChevronLeft className="size-4" />
           {back.label}
         </Link>

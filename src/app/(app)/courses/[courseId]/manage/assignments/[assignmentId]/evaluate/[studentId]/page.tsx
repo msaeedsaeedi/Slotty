@@ -36,6 +36,9 @@ export default async function StudentRecordPage({ params, searchParams }: PagePr
   const tz = assignment.course.timezone;
   const back = typeof returnTo === "string" && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : `/courses/${courseId}/manage/assignments/${assignmentId}?tab=students`;
   const editable = !ev || ev.status === "DRAFT" || ev.status === "RETURNED";
+  // Offline, the way back goes to a saved page: the marking sheet, else the course's Today page
+  // (agreed on #160 for #175; manage pages stay online-only).
+  const offlineBack = [`/courses/${courseId}/manage/assignments/${assignmentId}/mark`, `/courses/${courseId}/manage/today`];
   const canUnlock = ev?.status === "FINALIZED" && (rec.role === "INSTRUCTOR" || !rec.hasInstructor);
   const scoreBy = new Map(ev?.scores.map((s) => [s.criterionId, s]) ?? []);
   // Marks are entered right here, with the same editor as the marking sheet.
@@ -51,12 +54,12 @@ export default async function StudentRecordPage({ params, searchParams }: PagePr
           <>
             {student.email}
             {rec.section && ` · Section ${rec.section}`} ·{" "}
-            <Link className="underline" href={`/courses/${courseId}/manage/assignments/${assignmentId}`}>
+            <Link className="underline" href={`/courses/${courseId}/manage/assignments/${assignmentId}`} offlineFallback={offlineBack}>
               {assignment.title}
             </Link>
           </>
         }
-        back={{ href: back, label: "Back" }}
+        back={{ href: back, label: "Back", offlineFallback: offlineBack }}
         actions={ev ? <StatusBadge status={ev.status} /> : <StatusBadge status="NONE" label="Not marked" />}
       />
 
