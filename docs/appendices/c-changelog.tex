@@ -6,6 +6,7 @@ Newest first. One line per revision of this document; the pull request has the d
   \toprule
   \thead{Date} & \thead{Change}\\
   \midrule
+  2026-11-27 & The first download of an account's pages shows its progress in the header (``Preparing offline 4/11'', then ``Ready offline''), so nobody goes offline before the pages are there; later syncs stay silent (issue \#178, part of \#160). Ch.~4 and 5 updated.\\
   2026-11-27 & Offline, instructors get the marks waiting for their review (the review queue and each student's page) and no longer get an empty Demo day or course Today page where they host no demos; their links into a course fall back to its review queue (issue \#181, part of \#160). Ch.~4 updated.\\
   2026-11-27 & Each role gets only the offline storage and work it uses (\code{offlineNeeds}, issue \#179, part of \#160): students and admins no longer get the drafts database (it's created by the first draft), admin and platform accounts no longer sync pages, request persistent storage or register periodic sync, and only staff get draft uploads, the draft list and the app badge. The header no longer looks up roles a second time. Ch.~7 and 11 updated.\\
   2026-11-27 & Offline, a TA no longer gets stuck: links into online-only manage pages go to a saved page instead (a course to its Today page, the way back from a student to the marking sheet), through \code{offlineFallback} on links (issue \#175, part of \#160). Ch.~4 and 7 updated.\\

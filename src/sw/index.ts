@@ -267,9 +267,11 @@ function syncPages({ force = false }: { force?: boolean } = {}): Promise<void> {
     const cache = await caches.open(PAGE_CACHE);
     const wanted = new Map(pages.map((p) => [p.url, p]));
     const todo: ListedPage[] = [];
+    let hadPages = 0;
     for (const req of await cache.keys()) {
       const path = new URL(req.url).pathname;
       if (path === LIST_KEY) continue;
+      hadPages++;
       const res = await cache.match(req);
       if (!wanted.has(path) || !res || expired(res)) await cache.delete(req);
     }
@@ -277,20 +279,40 @@ function syncPages({ force = false }: { force?: boolean } = {}): Promise<void> {
       const saved = await cache.match(p.url);
       if (!saved || saved.headers.get("X-Uniflow-Version") !== p.version) todo.push(p);
     }
+    // The first download for this account on this device (nothing of theirs saved yet): open
+    // tabs show its progress, so nobody goes offline thinking the pages are there (#178). Later
+    // syncs stay quiet.
+    const firstTime = !before || before.owner !== data.owner || hadPages === 0;
+    const progress = firstTime && todo.length > 0 ? { done: 0, total: todo.length } : null;
+    if (progress) await tellProgress(progress, false);
     const next = async () => {
       for (let p = todo.shift(); p; p = todo.shift()) {
         try {
           const page = await fetch(p.url, { credentials: "same-origin", headers: { Accept: "text/html" }, priority: "low" } as RequestInit);
           await storePage(p.url, page, p.version);
         } catch {}
+        if (progress) {
+          progress.done++;
+          await tellProgress(progress, false);
+        }
       }
     };
     await Promise.all(Array.from({ length: CONCURRENCY }, next));
+    if (progress) await tellProgress(progress, true);
     await trimStatic(await caches.open(STATIC_CACHE));
   })().finally(() => {
     syncing = null;
   });
   return syncing;
+}
+
+/** Tell every open tab how the first download is going (`uniflow:pages-progress`, #178). */
+async function tellProgress(p: { done: number; total: number }, finished: boolean): Promise<void> {
+  try {
+    for (const w of await self.clients.matchAll({ type: "window", includeUncontrolled: true })) {
+      w.postMessage({ type: "uniflow:pages-progress", done: p.done, total: p.total, finished });
+    }
+  } catch {}
 }
 
 // ─── Requests ────────────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@
  * | Offline                         | crossed cloud + "Offline" (tooltip: "Updated …") |
  * | Uniflow unreachable             | crossed cloud + "Can't connect"                   |
  * | Drafts waiting or syncing       | "3 waiting" / a spinner                           |
+ * | First download of pages (#178)  | "Preparing offline 4/11", then a check for 2 s    |
  * | Conflict or needs attention     | warning colour + count                            |
  * | Back online and all synced      | a check for 2 s                                   |
  *
@@ -29,6 +30,32 @@ import { cn } from "@/lib/utils";
 const SYNCED_MS = 2000;
 
 type Entry = Pick<StoredDraft, "key" | "state" | "message" | "label" | "href" | "at">;
+
+type Progress = { done: number; total: number; finished: boolean };
+
+/**
+ * The first download of this account's pages, as the service worker reports it (#178): the
+ * counts while it runs, then `finished` for 2 s. Null otherwise (later syncs are silent).
+ */
+function useFirstDownload(): Progress | null {
+  const [progress, setProgress] = useState<Progress | null>(null);
+  useEffect(() => {
+    const sw = navigator.serviceWorker;
+    if (!sw) return;
+    const onMessage = (e: MessageEvent) => {
+      const d = e.data as { type?: string } & Partial<Progress>;
+      if (d?.type === "uniflow:pages-progress") setProgress({ done: d.done ?? 0, total: d.total ?? 0, finished: Boolean(d.finished) });
+    };
+    sw.addEventListener("message", onMessage);
+    return () => sw.removeEventListener("message", onMessage);
+  }, []);
+  useEffect(() => {
+    if (!progress?.finished) return;
+    const t = setTimeout(() => setProgress(null), SYNCED_MS);
+    return () => clearTimeout(t);
+  }, [progress]);
+  return progress;
+}
 
 /** This account's drafts on the device, kept current. Nothing is read or listened to unless it marks (#179). */
 function useDrafts(owner: string, marks: boolean) {
@@ -65,6 +92,7 @@ export function ConnectionIndicator({ owner, renderedAt, marks }: { owner: strin
   const status = useConnectionStatus();
   const router = useRouter();
   const { entries, syncing } = useDrafts(owner, marks);
+  const download = useFirstDownload();
 
   // Uniflow answers again: show the server's state rather than the saved copy.
   useEffect(() => {
@@ -107,10 +135,22 @@ export function ConnectionIndicator({ owner, renderedAt, marks }: { owner: strin
   const updated = new Date(renderedAt).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   const connection = status === "offline" ? "Offline" : status === "unreachable" ? "Can't connect" : null;
   const count = attention.length ? `${attention.length} need${attention.length === 1 ? "s" : ""} attention` : waiting.length ? `${waiting.length} waiting` : null;
-  const visible = Boolean(connection || count || busy || showSynced);
+  // The first download shows only when nothing more important does (offline, marks).
+  const quiet = !connection && !count && !busy && !showSynced;
+  const preparing = quiet && download !== null && !download.finished;
+  const ready = quiet && download?.finished === true;
+  const visible = Boolean(connection || count || busy || showSynced || preparing || ready);
 
-  // One sentence for screen readers per change.
-  const announcement = [connection && `${connection}, page updated ${updated}`, busy && status === "online" ? "Syncing marks" : count, showSynced ? "All marks saved" : null].filter(Boolean).join(", ");
+  // One sentence for screen readers per change (the download's count isn't read out each time).
+  const announcement = [
+    connection && `${connection}, page updated ${updated}`,
+    busy && status === "online" ? "Syncing marks" : count,
+    showSynced ? "All marks saved" : null,
+    preparing ? "Preparing pages for offline use" : null,
+    ready ? "Ready offline" : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   const face = (
     <span
@@ -118,13 +158,27 @@ export function ConnectionIndicator({ owner, renderedAt, marks }: { owner: strin
       data-sync={
         attention.some((e) => e.state === "conflict") ? "conflict" : attention.length ? "error" : busy ? "syncing" : waiting.length ? "saved-local" : showSynced ? "synced" : undefined
       }
-      title={connection ? `Updated ${updated}` : undefined}
+      data-prepare={preparing ? "running" : ready ? "done" : undefined}
+      title={connection ? `Updated ${updated}` : preparing ? `Saving ${download!.total} pages on this device so they open offline` : undefined}
       className={cn(
         "inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground",
         attention.length > 0 && "text-warning",
-        showSynced && "text-success",
+        (showSynced || ready) && "text-success",
       )}
     >
+      {preparing && (
+        <>
+          <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden />
+          <span className="tabular-nums">
+            Preparing offline {download!.done}/{download!.total}
+          </span>
+        </>
+      )}
+      {ready && (
+        <>
+          <Check className="size-3.5" aria-hidden /> Ready offline
+        </>
+      )}
       {connection && <CloudOff className="size-3.5" aria-hidden />}
       {connection}
       {connection && count && <span aria-hidden>·</span>}
