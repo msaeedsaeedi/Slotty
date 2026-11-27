@@ -121,8 +121,14 @@ interface RowState {
   evaluationId: string | null;
   evalStatus: NonNullable<SheetRow["evaluation"]>["status"] | null;
   totalMarks: number | null;
-  /** A reason is on record for marking this demo before it started. */
+  /**
+   * A reason for marking this demo before it started is on record, or given on this device and
+   * on its way with the marks (#176): the row unlocks without waiting for the server, which
+   * still checks the reason when the marks arrive.
+   */
   earlyOk: boolean;
+  /** The same for marking a student who has no booking. */
+  noBookingOk: boolean;
   save: SaveState;
   /** What's typed is written to this device (shown as "Saved on this device" only then). */
   onDevice: boolean;
@@ -205,6 +211,7 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
       evalStatus: r.evaluation?.status ?? null,
       totalMarks: r.evaluation?.totalMarks ?? null,
       earlyOk: Boolean(r.evaluation?.earlyMarkReason),
+      noBookingOk: Boolean(r.evaluation),
       save: { kind: "idle" },
       onDevice: false,
     })),
@@ -356,7 +363,12 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
             return;
           }
           if (r.result === "refused") {
-            patchState(i, { save: { kind: "error", message: r.message } });
+            // A refused reason asks again (it was accepted on the device only).
+            patchState(i, {
+              save: { kind: "error", message: r.message },
+              ...(r.field === "earlyMarkReason" ? { earlyOk: false } : {}),
+              ...(r.field === "noBookingReason" ? { noBookingOk: false } : {}),
+            });
             return;
           }
           version.current[i] = r.version;
@@ -367,6 +379,7 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
             totalMarks: r.totalMarks,
             bookingStatus: r.bookingStatus ?? stateRef.current[i].bookingStatus,
             earlyOk: stateRef.current[i].earlyOk || Boolean(entry.draft.earlyMarkReason.trim()),
+            noBookingOk: true,
             // More typing may already be waiting to save.
             save: timers.current.has(i) ? { kind: "dirty" } : { kind: "saved", at: r.savedAt },
           });
@@ -442,6 +455,9 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
   const restore = useCallback(
     (i: number, d: Draft, kind: "upload" | "hold" = "upload") => {
       setDrafts((ds) => ds.map((x, j) => (j === i ? d : x)));
+      // A reason kept with the draft was already given on this device (#176).
+      if (d.earlyMarkReason.trim()) patchState(i, { earlyOk: true });
+      if (d.noBookingReason.trim()) patchState(i, { noBookingOk: true });
       clearTimeout(timers.current.get(i));
       if (kind === "hold") return;
       patchState(i, { save: { kind: "dirty" } });
@@ -615,7 +631,7 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
   const d = drafts[current];
   const bad = problems(d, criteria, assignment.maxMarks);
   const phase = phaseOf(row);
-  const needsReason = !row.booking && !st.evaluationId;
+  const needsReason = !row.booking && !st.evaluationId && !st.noBookingOk;
   const needsEarlyReason = Boolean(row.booking) && phase === "future" && !st.earlyOk && !locked(current);
   const noShow = st.bookingStatus === "NO_SHOW";
   // A row changed elsewhere waits for the TA's choice before any more typing.
@@ -702,10 +718,16 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
             label="Reason for marking before the demo"
             value={d.earlyMarkReason}
             onChange={(v) => setDrafts((ds) => ds.map((x, j) => (j === current ? { ...x, earlyMarkReason: v } : x)))}
-            onStart={() => void save(current)}
+            onStart={() => {
+              // Accepted on this device, offline too; it uploads with the marks (#176).
+              patchState(current, { earlyOk: true });
+              void save(current);
+            }}
           />
         )}
-        {row.evaluation?.earlyMarkReason && <p className="text-xs text-muted-foreground">Marked before the demo: “{row.evaluation.earlyMarkReason}”</p>}
+        {(row.evaluation?.earlyMarkReason || (st.earlyOk && d.earlyMarkReason.trim())) && (
+          <p className="text-xs text-muted-foreground">Marked before the demo: “{row.evaluation?.earlyMarkReason || d.earlyMarkReason.trim()}”</p>
+        )}
 
         {row.booking ? (
           <Attendance
@@ -722,8 +744,11 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
             <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
             <div className="min-w-0 flex-1 space-y-2">
               <p className="font-medium">{row.student.name} has no demo booking.</p>
-              {st.evaluationId ? (
-                <p>Marked without a booking{row.evaluation?.noBookingReason ? `: “${row.evaluation.noBookingReason}”` : ""}. This is recorded in the audit log.</p>
+              {st.evaluationId || st.noBookingOk ? (
+                <p>
+                  Marked without a booking
+                  {(row.evaluation?.noBookingReason || d.noBookingReason.trim()) && `: “${row.evaluation?.noBookingReason || d.noBookingReason.trim()}”`}. This is recorded in the audit log.
+                </p>
               ) : (
                 <>
                   <p>Marking without a booking is unusual, so it&apos;s recorded with your reason in the audit log.</p>
@@ -732,7 +757,10 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
                     label="Reason for marking without a booking"
                     value={d.noBookingReason}
                     onChange={(v) => setDrafts((ds) => ds.map((x, j) => (j === current ? { ...x, noBookingReason: v } : x)))}
-                    onStart={() => void save(current)}
+                    onStart={() => {
+                      patchState(current, { noBookingOk: true });
+                      void save(current);
+                    }}
                   />
                 </>
               )}
