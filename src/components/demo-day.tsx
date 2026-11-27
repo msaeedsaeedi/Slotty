@@ -1,4 +1,5 @@
 import Link from "@/components/app-link";
+import { courseFallbacks } from "@/lib/offline-urls";
 import { CalendarClock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink, MapPin, PenLine } from "lucide-react";
 import { markAttendanceAction } from "@/app/actions/bookings";
 import { ActionForm, SubmitButton } from "@/components/action-form";
@@ -315,11 +316,11 @@ function AssignmentLinks({ assignment: a }: { assignment: DemoDaySlot["assignmen
   return (
     <span className="min-w-0 truncate">
       {/* Manage pages are online-only; offline these go to the course's saved Today page (#175). */}
-      <Link href={`/courses/${a.courseId}/manage`} offlineFallback={`/courses/${a.courseId}/manage/today`} className="font-medium hover:underline">
+      <Link href={`/courses/${a.courseId}/manage`} offlineFallback={courseFallbacks(a.courseId)} className="font-medium hover:underline">
         {a.course.code}
       </Link>
       {" › "}
-      <Link href={`/courses/${a.courseId}/manage/assignments/${a.id}`} offlineFallback={`/courses/${a.courseId}/manage/today`} className="hover:underline">
+      <Link href={`/courses/${a.courseId}/manage/assignments/${a.id}`} offlineFallback={courseFallbacks(a.courseId)} className="hover:underline">
         {a.title}
       </Link>
     </span>

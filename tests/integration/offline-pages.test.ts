@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/server/db";
 import { bookSlot } from "@/server/services/bookings";
 import { removeMember } from "@/server/services/courses";
+import { saveDraft, submitEvaluations } from "@/server/services/evaluations";
+import { addAvailability } from "@/server/services/slots";
 import { offlinePagesFor } from "@/server/services/offline";
-import { enroll, makeUser, resetDb, setupCourse } from "./helpers";
+import { enroll, inHours, makeUser, resetDb, setupCourse } from "./helpers";
 
 beforeEach(resetDb);
 
@@ -66,5 +68,27 @@ describe("offline pages per account (#162)", () => {
     expect(v2).not.toBe(v1);
     await db.slot.update({ where: { id: slots[1].id }, data: { status: "CANCELLED" } });
     expect(await version(ann, page)).not.toBe(v2);
+  });
+
+  it("gives an instructor the marks waiting for their review, and Demo day only once they host demos (#181)", async () => {
+    const { ta, ann, course, assignment, slots, venue } = await bookedCourse();
+    const prof = await makeUser("Prof");
+    await enroll(course.id, [prof], "INSTRUCTOR");
+    const criteria = await db.rubricCriterion.findMany({ where: { assignmentId: assignment.id } });
+    const during = inHours(0.1, slots[0].startsAt);
+    const draft = await saveDraft(ta, assignment.id, ann.id, { scores: criteria.map((c) => ({ criterionId: c.id, points: 1 })), totalMarks: null }, during);
+    await submitEvaluations(ta, [draft.evaluationId]);
+
+    const evaluate = `/courses/${course.id}/manage/assignments/${assignment.id}/evaluate/${ann.id}`;
+    const theirs = await urls(prof);
+    expect(theirs).toEqual(expect.arrayContaining(["/dashboard", `/courses/${course.id}/manage/review`, evaluate]));
+    expect(theirs).not.toContain("/today");
+    expect(theirs).not.toContain(`/courses/${course.id}/manage/today`);
+    // The TA who submitted keeps their own pages, not the review queue.
+    expect(await urls(ta)).not.toContain(`/courses/${course.id}/manage/review`);
+
+    // Once the instructor hosts demos of their own, Demo day and the course's Today page come back.
+    await addAvailability(prof, assignment.id, { taId: prof.id, venueId: venue.id, startsAt: inHours(72), endsAt: inHours(73) });
+    expect(await urls(prof)).toEqual(expect.arrayContaining(["/today", `/courses/${course.id}/manage/today`, evaluate]));
   });
 });

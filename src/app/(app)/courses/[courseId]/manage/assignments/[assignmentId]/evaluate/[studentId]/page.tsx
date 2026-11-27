@@ -1,6 +1,7 @@
 import { currentClock } from "@/lib/time";
 import { RELEASE_HOLD_HOURS } from "@/domain/evaluation";
 import Link from "@/components/app-link";
+import { courseFallbacks } from "@/lib/offline-urls";
 import { AlertTriangle } from "lucide-react";
 import { clearMarksAction, reviewAction, unlockAction, withdrawAction } from "@/app/actions/evaluations";
 import { ActionForm, SubmitButton } from "@/components/action-form";
@@ -36,9 +37,9 @@ export default async function StudentRecordPage({ params, searchParams }: PagePr
   const tz = assignment.course.timezone;
   const back = typeof returnTo === "string" && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : `/courses/${courseId}/manage/assignments/${assignmentId}?tab=students`;
   const editable = !ev || ev.status === "DRAFT" || ev.status === "RETURNED";
-  // Offline, the way back goes to a saved page: the marking sheet, else the course's Today page
-  // (agreed on #160 for #175; manage pages stay online-only).
-  const offlineBack = [`/courses/${courseId}/manage/assignments/${assignmentId}/mark`, `/courses/${courseId}/manage/today`];
+  // Offline, the way back goes to a saved page: the marking sheet, else the course's Today page,
+  // else the review queue (agreed on #160 for #175 and #181; manage pages stay online-only).
+  const offlineBack = [`/courses/${courseId}/manage/assignments/${assignmentId}/mark`, ...courseFallbacks(courseId)];
   const canUnlock = ev?.status === "FINALIZED" && (rec.role === "INSTRUCTOR" || !rec.hasInstructor);
   const scoreBy = new Map(ev?.scores.map((s) => [s.criterionId, s]) ?? []);
   // Marks are entered right here, with the same editor as the marking sheet.

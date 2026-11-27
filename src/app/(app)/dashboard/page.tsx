@@ -1,4 +1,5 @@
 import Link from "@/components/app-link";
+import { courseFallbacks } from "@/lib/offline-urls";
 import { redirect } from "next/navigation";
 import { CalendarClock, ExternalLink, GraduationCap, MapPin, Plus, Presentation, Users } from "lucide-react";
 import { AddToCalendar } from "@/components/add-to-calendar";
@@ -83,7 +84,7 @@ export default async function DashboardPage() {
           <ul className="mt-2 space-y-1">
             {home.archived.map((c) => (
               <li key={c.id}>
-                <Link className="hover:underline" href={c.role === "STUDENT" ? `/courses/${c.id}` : `/courses/${c.id}/manage`} offlineFallback={c.role === "STUDENT" ? undefined : `/courses/${c.id}/manage/today`}>
+                <Link className="hover:underline" href={c.role === "STUDENT" ? `/courses/${c.id}` : `/courses/${c.id}/manage`} offlineFallback={c.role === "STUDENT" ? undefined : courseFallbacks(c.id)}>
                   {c.code} — {c.title} ({c.term})
                 </Link>
               </li>
@@ -116,7 +117,7 @@ function CourseList({ courses, staff }: { courses: HomeCourse[]; staff?: boolean
   return (
     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
       {courses.map((c) => (
-        <Link key={c.id} href={staff ? `/courses/${c.id}/manage` : `/courses/${c.id}`} offlineFallback={staff ? `/courses/${c.id}/manage/today` : undefined}>
+        <Link key={c.id} href={staff ? `/courses/${c.id}/manage` : `/courses/${c.id}`} offlineFallback={staff ? courseFallbacks(c.id) : undefined}>
           <Card className="h-full gap-1 p-3 text-sm transition-colors hover:border-primary/40">
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs text-muted-foreground">

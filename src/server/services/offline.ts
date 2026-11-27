@@ -9,7 +9,8 @@ type Stamp = Date | null | undefined;
 const ms = (d: Stamp) => (d ? d.getTime() : 0);
 
 /**
- * The pages this account keeps on its device for offline use, with a version each (#162).
+ * The pages this account keeps on its device for offline use, with a version each (#162; for
+ * instructors, the marks waiting for their review and Demo day only where they host, #181).
  * The rule is `offlinePages` (src/domain); this gathers what it needs with a fixed number of
  * grouped queries, so the cost doesn't grow with the number of pages.
  *
@@ -35,8 +36,14 @@ export async function offlinePagesFor(actor: Actor, now = new Date()): Promise<{
   const from = new Date(now.getTime() - OFFLINE_WINDOW_DAYS * DAY);
   const to = new Date(now.getTime() + OFFLINE_WINDOW_DAYS * DAY);
 
-  const [slots, ownBookings, hostedBookings, slotStamps, bookingStamps, evaluationStamps, waitlistStamps, requestStamps, criterionStamps, allowanceStamps, policies, venueStamps, rosterStamps, inbox] =
+  const reviewing = new Set(enrollments.filter((e) => e.role === "INSTRUCTOR").map((e) => e.course.id));
+  const reviewIds = assignments.filter((a) => reviewing.has(a.courseId)).map((a) => a.id);
+  const [hostedSlots, awaitingReview, slots, ownBookings, hostedBookings, slotStamps, bookingStamps, evaluationStamps, waitlistStamps, requestStamps, criterionStamps, allowanceStamps, policies, venueStamps, rosterStamps, inbox] =
     await Promise.all([
+      // Where the account hosts demos (#181): Demo day and a course's Today page are about those.
+      db.slot.groupBy({ by: ["assignmentId"], where: { ...ids, taId: actor.id, status: { not: "CANCELLED" }, endsAt: { gt: now } } }),
+      // Marks waiting for this account's review, in courses it instructs (#181).
+      db.evaluation.findMany({ where: { assignmentId: { in: reviewIds }, status: "SUBMITTED" }, select: { assignmentId: true, studentId: true, submittedAt: true, updatedAt: true } }),
       db.slot.findMany({ where: { ...ids, status: "PUBLISHED", startsAt: { gte: now, lte: to } }, select: { assignmentId: true, startsAt: true } }),
       db.booking.findMany({
         where: { ...ids, studentId: actor.id, status: { in: ["BOOKED", "COMPLETED"] } },
@@ -77,6 +84,8 @@ export async function offlinePagesFor(actor: Actor, now = new Date()): Promise<{
   const venues = new Map(venueStamps.map((v) => [v.courseId, `${ms(v._max.updatedAt)},${v._count._all}`]));
   const roster = new Map(rosterStamps.map((r) => [r.courseId, `${ms(r._max.createdAt)},${r._count._all}`]));
 
+  const courseOf = new Map(assignments.map((a) => [a.id, a.courseId]));
+  const hostsIn = new Set(hostedSlots.map((h) => courseOf.get(h.assignmentId)));
   const courses = enrollments.map((e) => {
     const mine = assignments.filter((a) => a.courseId === e.course.id);
     const parts = [
@@ -90,10 +99,10 @@ export async function offlinePagesFor(actor: Actor, now = new Date()): Promise<{
       role: e.role as OfflineRole,
       timezone: e.course.timezone,
       fingerprint: shortHash(parts.join("|")),
+      hosts: hostsIn.has(e.course.id),
       assignments: mine.map((a) => ({ id: a.id, status: a.status, slotStarts: slots.filter((s) => s.assignmentId === a.id).map((s) => s.startsAt) })),
     };
   });
-  const courseOf = new Map(assignments.map((a) => [a.id, a.courseId]));
 
   const pages = offlinePages({
     now,
@@ -102,6 +111,8 @@ export async function offlinePagesFor(actor: Actor, now = new Date()): Promise<{
     courses,
     ownBookings: ownBookings.map((b) => ({ courseId: courseOf.get(b.assignmentId)!, assignmentId: b.assignmentId, startsAt: b.slot.startsAt })),
     hostedBookings: hostedBookings.map((b) => ({ courseId: courseOf.get(b.assignmentId)!, assignmentId: b.assignmentId, studentId: b.studentId, startsAt: b.slot.startsAt })),
+    // Submitted marks, newest first; one written before submitAt existed counts from its last change.
+    awaitingReview: awaitingReview.map((e) => ({ courseId: courseOf.get(e.assignmentId)!, assignmentId: e.assignmentId, studentId: e.studentId, submittedAt: e.submittedAt ?? e.updatedAt })),
   });
   return { pages, expiresAt };
 }

@@ -116,3 +116,37 @@ describe("offlineNeeds: what an account keeps on its device (#179)", () => {
     expect(offlineNeeds({ outsideCourses: false, staff: true })).toEqual({ pages: true, marks: true });
   });
 });
+
+describe("offlinePages for instructors (#181)", () => {
+  const review = [
+    { courseId: "c", assignmentId: "a", studentId: "s1", submittedAt: inDays(-1) },
+    { courseId: "c", assignmentId: "a", studentId: "s2", submittedAt: inDays(-5) },
+    // A course where the account is a TA: not theirs to review.
+    { courseId: "t", assignmentId: "b", studentId: "s3", submittedAt: inDays(-1) },
+  ];
+
+  it("gives an instructor who hosts nothing the review queue and its students, not an empty Demo day", () => {
+    const pages = offlinePages(input({ courses: [course({ id: "c", role: "INSTRUCTOR" })], awaitingReview: review }));
+    const all = pages.map((p) => p.url);
+    expect(all).toEqual(expect.arrayContaining(["/dashboard", "/notifications", "/courses/c/manage/review", "/courses/c/manage/assignments/a/evaluate/s1", "/courses/c/manage/assignments/a/evaluate/s2"]));
+    expect(all).not.toContain("/today");
+    expect(all).not.toContain("/courses/c/manage/today");
+    // The review queue is what they'd want with data saver on.
+    expect(pages.find((p) => p.url === "/courses/c/manage/review")?.key).toBe(true);
+    // Newest submission first.
+    expect(all.indexOf("/courses/c/manage/assignments/a/evaluate/s1")).toBeLessThan(all.indexOf("/courses/c/manage/assignments/a/evaluate/s2"));
+  });
+
+  it("gives an instructor who hosts demos Demo day and that course's Today page too", () => {
+    const all = urls(input({ courses: [course({ id: "c", role: "INSTRUCTOR", hosts: true }), course({ id: "d", role: "INSTRUCTOR" })], awaitingReview: review }));
+    expect(all).toEqual(expect.arrayContaining(["/today", "/courses/c/manage/today", "/courses/c/manage/review", "/courses/d/manage/review"]));
+    expect(all).not.toContain("/courses/d/manage/today");
+  });
+
+  it("never gives review pages in a course where the account is a TA", () => {
+    const all = urls(input({ courses: [course({ id: "t", role: "TA" })], awaitingReview: review }));
+    expect(all).toContain("/courses/t/manage/today");
+    expect(all.some((u) => u.includes("/evaluate/s3"))).toBe(false);
+    expect(all).not.toContain("/courses/t/manage/review");
+  });
+});
