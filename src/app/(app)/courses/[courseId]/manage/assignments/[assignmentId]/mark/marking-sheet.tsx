@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { AlertTriangle, Check, ChevronLeft, ChevronRight, CircleAlert, Loader2, MapPin, UserRound } from "lucide-react";
 import { sheetAttendanceAction, submitManyAction } from "@/app/actions/evaluations";
 import { ActionForm, SubmitButton } from "@/components/action-form";
-import { reportReachable, reportUnreachable, useConnection, useNetworkGuard } from "@/components/connection";
+import { connectionNow, reportReachable, reportUnreachable, useConnection, useNetworkGuard } from "@/components/connection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PrivateNotes, type VisibleNote } from "@/components/private-notes";
@@ -17,7 +17,7 @@ import { REASON_MAX_LENGTH } from "@/domain/text";
 import { cn } from "@/lib/utils";
 import { NEW_EVALUATION } from "@/domain/draft-upload";
 import { announceDrafts, deleteDraft, draftKey, draftsFor, putDraft, type StoredDraft } from "@/lib/draft-store";
-import { newChangeId, sheetLock, syncDraft, type StoredConflict } from "@/lib/draft-sync";
+import { newChangeId, requestBackgroundSync, sheetLock, syncDraft, type StoredConflict } from "@/lib/draft-sync";
 
 export interface SheetRow {
   student: { id: string; name: string; email: string };
@@ -100,8 +100,9 @@ interface Draft {
 }
 
 /**
- * One row's sync state (#161, #163): `dirty` typed, not yet uploaded (`onDevice` once it's
- * written to this device), `local` kept on this device because Uniflow couldn't be reached,
+ * One row's sync state (#161, #163): `dirty` typed, not yet uploaded (`onDevice` once a copy
+ * is written to this device; it stays while more typing is written, so the label doesn't
+ * blink on every keystroke, #177), `local` kept on this device because Uniflow couldn't be reached,
  * `saving` on its way, `saved` reached Uniflow, `conflict` changed elsewhere since (both
  * versions shown), `error` refused by Uniflow (needs attention; not retried by itself).
  */
@@ -317,7 +318,9 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
         local(() =>
           putDraft(entry).then(() => {
             announceDrafts({ type: "changed" });
-            if (JSON.stringify(draftsRef.current[i]) === change.current[i].content) patchState(i, { onDevice: true });
+            // A copy is on the device now, even if more has been typed since (that follows within
+            // DEVICE_WRITE_MS): the label stays instead of blinking with each keystroke (#177).
+            patchState(i, { onDevice: true });
             resolve(entry);
           }),
         ),
@@ -339,6 +342,14 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
           const d = draftsRef.current[i];
           if (Object.keys(problems(d, criteria, assignment.maxMarks)).length) {
             patchState(i, { save: { kind: "error", message: "Fix the highlighted marks to save." } });
+            return;
+          }
+          if (connectionNow() === "offline") {
+            // No network at all: don't try (and flash "Syncing" on every pause). The marks are
+            // on the device; Background Sync or the next reconnect uploads them (#177).
+            await writeDevice(i);
+            patchState(i, { save: { kind: "local" } });
+            requestBackgroundSync();
             return;
           }
           patchState(i, { save: { kind: "saving" } });
@@ -380,6 +391,8 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
             bookingStatus: r.bookingStatus ?? stateRef.current[i].bookingStatus,
             earlyOk: stateRef.current[i].earlyOk || Boolean(entry.draft.earlyMarkReason.trim()),
             noBookingOk: true,
+            // The device's copy is gone once Uniflow has it (unless more was typed meanwhile).
+            onDevice: timers.current.has(i) ? stateRef.current[i].onDevice : false,
             // More typing may already be waiting to save.
             save: timers.current.has(i) ? { kind: "dirty" } : { kind: "saved", at: r.savedAt },
           });
@@ -406,7 +419,7 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
 
   const edit = (i: number, patch: Partial<Draft> | ((d: Draft) => Partial<Draft>)) => {
     setDrafts((ds) => ds.map((d, j) => (j === i ? { ...d, ...(typeof patch === "function" ? patch(d) : patch) } : d)));
-    patchState(i, { save: { kind: "dirty" }, onDevice: false });
+    patchState(i, { save: { kind: "dirty" } });
     schedule(i);
   };
 
@@ -528,7 +541,7 @@ export function MarkingSheet({ offlineOwner, assignment, criteria, rows, finalOn
     change.current[c.i] = { id: "", content: JSON.stringify(d) };
     setConflicts((cs) => cs.filter((x) => x.i !== c.i));
     restore(c.i, d, "hold");
-    patchState(c.i, { save: { kind: "idle" }, evalStatus: c.server.status ?? stateRef.current[c.i].evalStatus, totalMarks: c.server.totalMarks });
+    patchState(c.i, { save: { kind: "idle" }, onDevice: false, evalStatus: c.server.status ?? stateRef.current[c.i].evalStatus, totalMarks: c.server.totalMarks });
     local(() => deleteDraft(offlineOwner, assignment.id, rows[c.i].student.id).then(() => announceDrafts({ type: "changed" })));
   };
 

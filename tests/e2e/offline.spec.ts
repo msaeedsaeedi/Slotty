@@ -547,6 +547,19 @@ test("offline, a demo that hasn't started can be marked: the reason is accepted 
   await ta.getByLabel("Functionality").fill("4");
   await expect(ta.getByText("Saved on this device", { exact: true })).toBeVisible();
   await expect.poll(() => draftCount(ta)).toBe(1);
+
+  // Typing on, offline, the label stays: it doesn't blink with each keystroke, and pauses don't
+  // flash "Syncing" (#177). Sample the row's indicator every 25 ms while typing and after.
+  await ta.evaluate(() => {
+    const w = window as unknown as { __sync: string[] };
+    w.__sync = [];
+    setInterval(() => w.__sync.push(document.querySelector('section[aria-label^="Marking"] [data-sync]')?.getAttribute("data-sync") ?? "none"), 25);
+  });
+  await ta.getByLabel("Feedback for the student").pressSequentially("Typed slowly, offline", { delay: 60 });
+  await ta.waitForTimeout(2000); // past the 800 ms autosave pause
+  const seen = await ta.evaluate(() => (window as unknown as { __sync: string[] }).__sync);
+  expect(seen.length).toBeGreaterThan(40);
+  expect([...new Set(seen)]).toEqual(["saved-local"]);
   await ta.close();
 
   // Back online, the draft saves with the reason; the server has both.
@@ -558,4 +571,5 @@ test("offline, a demo that hasn't started can be marked: the reason is accepted 
   await again.reload();
   await expect(again.getByText("Marked before the demo: “Demoed early, offline”")).toBeVisible();
   await expect(again.getByLabel("Functionality")).toHaveValue("4");
+  await expect(again.getByLabel("Feedback for the student")).toHaveValue("Typed slowly, offline");
 });

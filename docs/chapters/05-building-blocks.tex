@@ -83,7 +83,7 @@ Both clear on the first request that gets an answer (an \code{online} event, or 
   \midrule
   \endhead
   Offline & \code{network} controls & Full shape, muted (\code{--offline}), dashed edge, small crossed cloud; \textbf{not} faded to 50\,\% & Tooltip and accessible name: ``Needs a connection''; a tap shows it as a toast\\
-  Saved on device & \code{local} rows & Neutral dot & ``Saved on this device''\\
+  Saved on device & \code{local} rows & Neutral dot & ``Saved on this device''; shown from the first write to the device and kept while more typing is written, without blinking per keystroke or flashing Syncing while offline (\#177)\\
   Syncing & \code{local} rows & Small spinner (still under reduced motion) & ``Syncing''\\
   Synced & \code{local} rows & \code{--success}, for 2\,s, then nothing & ``Saved''\\
   Conflict & \code{local} rows & \code{--warning}; offers both versions & ``Changed elsewhere''\\
