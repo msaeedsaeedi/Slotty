@@ -519,3 +519,43 @@ test("offline, a notification opens the saved page it's about, not the offline p
   await expect(ria.getByRole("heading", { name: "You're offline" })).toHaveCount(0);
   await context.setOffline(false);
 });
+
+test("offline, a demo that hasn't started can be marked: the reason is accepted on the device and saves with the marks (#176)", async ({ browser }) => {
+  test.setTimeout(400_000);
+  const ta = await login(browser, "ta@e2e.test");
+  const courseId = await createCourse(ta, "E176");
+  await importRoster(ta, "email,role\nsam@e2e.test,student");
+  // An hour no other spec gives this TA.
+  const assignmentId = await createPublishedAssignment(ta, courseId, "Early demo", { from: "19:00", to: "20:00" });
+  const sam = await login(browser, "sam@e2e.test");
+  await open(sam, `/courses/${courseId}/assignments/${assignmentId}`);
+  await sam.getByRole("button", { name: "Book" }).first().click();
+  await expect(sam.getByText("Your demo", { exact: true })).toBeVisible();
+
+  await open(ta, `/courses/${courseId}/manage/assignments/${assignmentId}?tab=students`);
+  await ta.getByRole("link", { name: "Mark", exact: true }).click();
+  await expect(ta.getByLabel("Reason for marking before the demo")).toBeVisible();
+  await controlled(ta);
+  const markUrl = new URL(ta.url()).pathname + new URL(ta.url()).search;
+  const context = ta.context();
+
+  // Offline: the reason unlocks the row at once, and the marks are kept on this device.
+  await context.setOffline(true);
+  await ta.getByLabel("Reason for marking before the demo").fill("Demoed early, offline");
+  await ta.getByRole("button", { name: "Start marking" }).click();
+  await expect(ta.getByLabel("Reason for marking before the demo")).toHaveCount(0);
+  await ta.getByLabel("Functionality").fill("4");
+  await expect(ta.getByText("Saved on this device", { exact: true })).toBeVisible();
+  await expect.poll(() => draftCount(ta)).toBe(1);
+  await ta.close();
+
+  // Back online, the draft saves with the reason; the server has both.
+  await context.setOffline(false);
+  const again = await context.newPage();
+  await open(again, markUrl);
+  await expect(again.getByText("Saved", { exact: true })).toBeVisible();
+  await expect.poll(() => draftCount(again)).toBe(0);
+  await again.reload();
+  await expect(again.getByText("Marked before the demo: “Demoed early, offline”")).toBeVisible();
+  await expect(again.getByLabel("Functionality")).toHaveValue("4");
+});

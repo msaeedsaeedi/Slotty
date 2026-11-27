@@ -6,6 +6,7 @@ Newest first. One line per revision of this document; the pull request has the d
   \toprule
   \thead{Date} & \thead{Change}\\
   \midrule
+  2026-11-27 & Offline, a demo that hasn't started (or a student without a booking) can be marked: the reason is accepted on the device and saves with the marks; a reason the server refuses is asked for again (issue \#176, part of \#160). Ch.~4 updated.\\
   2026-11-27 & Offline, a notification opens the saved page it's about instead of the offline page (\code{NotificationLink}, issue \#174, part of \#160); online it still marks the item read on the way. Ch.~4 updated.\\
   2026-11-27 & Offline, an address whose query changes the page (\code{?day=}, \code{?scope=}, \code{?student=}, \code{?reschedule=1}) is never served today's saved copy, and links to it show Unavailable offline; one rule for worker and links (\code{savedPageKey}, issue \#173, part of \#160). The header's list of waiting marks links to the student's page, which is saved. Ch.~4 and 7 updated.\\
   2026-11-27 & The service worker is written in TypeScript (\src{src/sw}) and bundled to \src{public/sw.js} at build time (issue \#188, part of \#160): the marking-draft upload has one implementation for page and worker (\code{syncWaiting}, \code{readReply}, \code{afterReply}, unit-tested), and the worker is type-checked against worker globals (\src{tsconfig.sw.json}). Behaviour is unchanged. Ch.~3, 4, 7, 9, 10, 11 and 14 updated.\\
