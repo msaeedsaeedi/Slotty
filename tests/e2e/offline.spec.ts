@@ -648,3 +648,40 @@ test("each role gets only the offline storage it uses: no drafts database withou
   expect(await pageCount(admin)).toBe(0);
   expect(await databases(admin)).not.toContain("uniflow-drafts");
 });
+
+test("the first download of an account's pages shows its progress, and later syncs stay quiet (#178)", async ({ browser }) => {
+  test.setTimeout(300_000);
+  // A fresh browser: nothing of this account's is on the device yet.
+  const context = await browser.newContext();
+  // Sample the header's download state from the very first page, since the download can be quick.
+  await context.addInitScript(() => {
+    const w = window as unknown as { __prepare: string[] };
+    w.__prepare = [];
+    setInterval(() => {
+      const el = document.querySelector("[data-prepare]");
+      if (el) w.__prepare.push(`${el.getAttribute("data-prepare")}:${el.textContent?.trim()}`);
+    }, 20);
+  });
+  const sam = await context.newPage();
+  await sam.goto("/login");
+  await sam.waitForLoadState("networkidle");
+  await sam.getByLabel("Email").fill("sam@e2e.test");
+  await sam.getByLabel("Password").fill("password123");
+  await sam.getByRole("button", { name: "Sign in" }).click();
+  await expect(sam).toHaveURL(/dashboard/);
+
+  // It finishes with "Ready offline" for a moment, having counted the pages up while it ran.
+  await expect(sam.locator('[data-prepare="done"]')).toContainText("Ready offline", { timeout: 60_000 });
+  const seen = await sam.evaluate(() => (window as unknown as { __prepare: string[] }).__prepare);
+  expect(seen.some((s) => /^running:Preparing offline \d+\/\d+$/.test(s))).toBe(true);
+  await expect(sam.locator("[data-prepare]")).toHaveCount(0, { timeout: 10_000 });
+
+  // Every later sync is silent: the pages are already on the device.
+  await sam.evaluate(() => {
+    (window as unknown as { __prepare: string[] }).__prepare = [];
+    return navigator.serviceWorker.ready.then((r) => r.active?.postMessage({ type: "sync-pages", force: true }));
+  });
+  await sam.waitForTimeout(4000);
+  expect(await sam.evaluate(() => (window as unknown as { __prepare: string[] }).__prepare)).toEqual([]);
+  await context.close();
+});

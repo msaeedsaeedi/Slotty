@@ -108,7 +108,7 @@ error because the change may already have happened; calling it one invites a sec
 (\src{src/components/connection-indicator.tsx}), next to the notification bell, replaces any banner:
 hidden while online with nothing waiting; ``Offline'' or ``Can't connect'' with a crossed cloud
 (tooltip: when the page was made); ``3 waiting'' or a spinner while marks sync; warning colour and a
-count when marks need attention or changed elsewhere; a check for 2\,s once all are saved. Tapping
+count when marks need attention or changed elsewhere; a check for 2\,s once all are saved. During the first download of an account's pages on a device (nothing of theirs saved yet), and only when nothing more important shows, it reads ``Preparing offline 4/11'' with a spinner, then ``Ready offline'' with a check for 2\,s; screen readers hear each once, not every count; later syncs are silent (\#178). Tapping
 it lists what's waiting, each linking to the student's row. One polite announcement per change.
 Counts come from the drafts kept on the device (\src{src/lib/draft-store.ts}), shared across tabs
 with a \code{BroadcastChannel}.
