@@ -201,6 +201,26 @@ on the device is keyed by \code{offlineOwner} (\src{src/server/offline-owner.ts}
 are dropped when the account changes and marking drafts sealed (ADR-039). Bump \code{VERSION} in \src{src/sw/index.ts} when the caching rules
 change: the new worker deletes the old caches on activation.
 
+\subsection*{What each role keeps on the device}
+Only what an account's role uses is set up on its device (\#179): \code{offlineNeeds}
+(\src{src/domain/offline-pages.ts}) turns the account's roles into \code{pages} and \code{marks},
+worked out once per request in the app layout and passed to \code{OfflineOwner} and the header.
+The drafts database is created by the first draft written, never by reading, sealing or syncing.
+
+{\tablefont
+\begin{xltabular}{\linewidth}{@{}L P{20mm} P{20mm} P{22mm}@{}}
+  \toprule
+  \thead{Resource} & \thead{Student} & \thead{TA, instructor} & \thead{Admin, platform}\\
+  \midrule
+  \endhead
+  Service worker (push, offline page, wiping on sign-in) & Yes & Yes & Yes\\
+  Saved pages, their syncs, persistent storage, periodic sync & Yes & Yes & No\\
+  Drafts database \code{uniflow-drafts} & No & From the first draft & No\\
+  Draft uploads, the header's draft list, its change channel, the app badge & No & Yes & No\\
+  Sealing another account's drafts (if the database exists) & Yes & Yes & Yes\\
+  \bottomrule
+\end{xltabular}}
+
 \begin{todo}
   \begin{itemize}
     \item Authentication and sessions in detail: password hashing (Argon2), session cookies and

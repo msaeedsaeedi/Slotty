@@ -16,6 +16,27 @@
  * downloads pages that changed. Pure: no I/O.
  */
 
+/**
+ * What an account keeps on its device for offline use (#179), so nothing is set up that its
+ * role never uses:
+ * - `pages`: saved pages, with the work that keeps them fresh (the list, background and
+ *   periodic syncs, persistent storage). Every account in courses; admin and platform accounts
+ *   get no pages (`offlinePages`), so they get none of that.
+ * - `marks`: offline marking drafts and their upload, list, change channel and app badge.
+ *   Only staff mark.
+ * Sealing another account's drafts doesn't depend on this: anyone signing in on a device must
+ * hide the previous account's drafts.
+ */
+export interface OfflineNeeds {
+  pages: boolean;
+  marks: boolean;
+}
+
+export function offlineNeeds(account: { outsideCourses: boolean; staff: boolean }): OfflineNeeds {
+  if (account.outsideCourses) return { pages: false, marks: false };
+  return { pages: true, marks: account.staff };
+}
+
 export const OFFLINE_WINDOW_DAYS = 14;
 export const MARKING_WINDOW_DAYS = 7;
 export const OFFLINE_PAGE_CAP = 150;

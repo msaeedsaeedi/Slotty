@@ -609,3 +609,42 @@ test("offline, a demo that hasn't started can be marked: the reason is accepted 
   await expect(courseLink).not.toHaveAttribute("data-offline", "unavailable");
   await context.setOffline(false);
 });
+
+test("each role gets only the offline storage it uses: no drafts database without a draft, nothing for admins (#179)", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const databases = (page: Page) => page.evaluate(async () => (await indexedDB.databases()).map((d) => d.name));
+  const pageCount = (page: Page) =>
+    page.evaluate(async () => {
+      let n = 0;
+      for (const k of await caches.keys()) if (/-pages-/.test(k)) n += (await (await caches.open(k)).keys()).length;
+      return n;
+    });
+
+  // A student: saved pages, but never the drafts database (students don't mark).
+  const sam = await login(browser, "sam@e2e.test");
+  await open(sam, "/dashboard");
+  await controlled(sam);
+  await sam.evaluate(() => navigator.serviceWorker.controller?.postMessage({ type: "sync-pages", force: true }));
+  await expect.poll(() => pageCount(sam), { timeout: 30_000 }).toBeGreaterThan(0);
+  await open(sam, "/notifications");
+  expect(await databases(sam)).not.toContain("uniflow-drafts");
+
+  // A TA who only looks around (no marks typed): no drafts database either; it comes with the first draft.
+  const ta = await login(browser, "ta@e2e.test");
+  await open(ta, "/dashboard");
+  await controlled(ta);
+  await open(ta, "/today");
+  expect(await databases(ta)).not.toContain("uniflow-drafts");
+
+  // An admin: no saved pages and no syncing at all; it never even asks for the list.
+  const admin = await login(browser, "admin@e2e.test");
+  const listRequests: string[] = [];
+  admin.context().on("request", (r) => r.url().includes("/api/offline/pages") && listRequests.push(r.url()));
+  await open(admin, "/admin");
+  await controlled(admin);
+  await open(admin, "/admin/users");
+  await admin.waitForTimeout(3000);
+  expect(listRequests).toEqual([]);
+  expect(await pageCount(admin)).toBe(0);
+  expect(await databases(admin)).not.toContain("uniflow-drafts");
+});

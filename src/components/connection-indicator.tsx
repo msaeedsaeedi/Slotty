@@ -30,10 +30,12 @@ const SYNCED_MS = 2000;
 
 type Entry = Pick<StoredDraft, "key" | "state" | "message" | "label" | "href" | "at">;
 
-function useDrafts(owner: string) {
+/** This account's drafts on the device, kept current. Nothing is read or listened to unless it marks (#179). */
+function useDrafts(owner: string, marks: boolean) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [syncing, setSyncing] = useState<ReadonlySet<string>>(new Set());
   useEffect(() => {
+    if (!marks) return;
     let alive = true;
     const load = () =>
       void draftsOf(owner).then((all) => {
@@ -54,14 +56,15 @@ function useDrafts(owner: string) {
       alive = false;
       stop();
     };
-  }, [owner]);
+  }, [owner, marks]);
   return { entries, syncing };
 }
 
-export function ConnectionIndicator({ owner, renderedAt }: { owner: string; renderedAt: string }) {
+/** `marks`: the account marks (staff), so its offline drafts are counted and badged (#179). */
+export function ConnectionIndicator({ owner, renderedAt, marks }: { owner: string; renderedAt: string; marks: boolean }) {
   const status = useConnectionStatus();
   const router = useRouter();
-  const { entries, syncing } = useDrafts(owner);
+  const { entries, syncing } = useDrafts(owner, marks);
 
   // Uniflow answers again: show the server's state rather than the saved copy.
   useEffect(() => {
@@ -76,9 +79,10 @@ export function ConnectionIndicator({ owner, renderedAt }: { owner: string; rend
   // The installed app's icon counts the marks still on this device (Badging API; #163).
   const onDevice = entries.length;
   useEffect(() => {
+    if (!marks) return; // nothing to count for an account that doesn't mark (#179)
     const nav = navigator as Navigator & { setAppBadge?: (n: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
     void (onDevice ? nav.setAppBadge?.(onDevice) : nav.clearAppBadge?.())?.catch(() => {});
-  }, [onDevice]);
+  }, [onDevice, marks]);
 
   // A check for 2 s once everything that was waiting has reached Uniflow.
   const [synced, setSynced] = useState(false);
